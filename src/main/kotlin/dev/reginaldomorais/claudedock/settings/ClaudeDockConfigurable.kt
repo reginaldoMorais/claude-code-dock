@@ -1,15 +1,13 @@
 package dev.reginaldomorais.claudedock.settings
 
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
-import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.TextFieldWithBrowseButton
-import com.intellij.ui.JBIntSpinner
-import com.intellij.ui.components.JBLabel
-import com.intellij.util.ui.FormBuilder
-import com.intellij.util.ui.UIUtil
-import javax.swing.JComponent
-import javax.swing.JPanel
+import com.intellij.openapi.ui.DialogPanel
+import com.intellij.ui.dsl.builder.AlignX
+import com.intellij.ui.dsl.builder.bindIntValue
+import com.intellij.ui.dsl.builder.bindText
+import com.intellij.ui.dsl.builder.panel
 
 /**
  * Tela em Settings > Tools > Claude Code Dock (RF-10, RF-19).
@@ -17,96 +15,64 @@ import javax.swing.JPanel
  * É `projectConfigurable` porque o `CLAUDE_CONFIG_DIR` vale por projeto — em IDEs JetBrains,
  * uma janela aberta é um projeto. O caminho do executável continua sendo de aplicação:
  * o mesmo binário serve a todos os projetos.
+ *
+ * `BoundConfigurable` com o Kotlin UI DSL entrega os títulos de seção, os separadores e o
+ * alinhamento dos campos prontos, e dispensa `isModified`/`apply`/`reset` escritos à mão —
+ * as ligações abaixo é que definem o que é lido e gravado.
  */
-class ClaudeDockConfigurable(private val project: Project) : Configurable {
+class ClaudeDockConfigurable(private val project: Project) :
+    BoundConfigurable("Claude Code Dock") {
 
-    private var executableField: TextFieldWithBrowseButton? = null
-    private var configDirField: TextFieldWithBrowseButton? = null
-    private var paddingSpinner: JBIntSpinner? = null
-
-    override fun getDisplayName(): String = "Claude Code Dock"
-
-    override fun createComponent(): JComponent {
-        val executableDescriptor = FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
-            .withTitle("Executável do Claude Code")
-            .withDescription("Selecione o binário do Claude Code")
-
-        val executable = TextFieldWithBrowseButton().apply {
-            addBrowseFolderListener(null, executableDescriptor)
-        }
-        executableField = executable
-
-        val configDirDescriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor()
-            .withTitle("Diretório de configuração do Claude Code")
-            .withDescription("Selecione o diretório usado como CLAUDE_CONFIG_DIR")
-
-        val configDir = TextFieldWithBrowseButton().apply {
-            addBrowseFolderListener(null, configDirDescriptor)
-        }
-        configDirField = configDir
-
-        val padding = JBIntSpinner(
-            ClaudeDockSettings.getInstance().effectivePadding(),
-            ClaudeDockSettings.MIN_PADDING,
-            ClaudeDockSettings.MAX_PADDING,
-        )
-        paddingSpinner = padding
-
-        return FormBuilder.createFormBuilder()
-            .addLabeledComponent("Executável do Claude Code:", executable, true)
-            .addComponentToRightColumn(
-                JBLabel(
-                    "Vale para todos os projetos. Deixe \"claude\" para resolver pelo PATH.",
-                    UIUtil.ComponentStyle.SMALL,
-                ),
-            )
-            .addLabeledComponent("CLAUDE_CONFIG_DIR:", configDir, true)
-            .addComponentToRightColumn(
-                JBLabel(
-                    "Somente este projeto. Vazio usa o padrão do CLI (~/.claude). " +
-                        "Aplica-se às próximas sessões abertas.",
-                    UIUtil.ComponentStyle.SMALL,
-                ),
-            )
-            .addLabeledComponent("Respiro nas bordas (px):", padding, true)
-            .addComponentToRightColumn(
-                JBLabel(
-                    "Vale para todos os projetos. Distância entre o conteúdo da sessão e as " +
-                        "bordas da janela. Aplica-se às próximas sessões abertas.",
-                    UIUtil.ComponentStyle.SMALL,
-                ),
-            )
-            .addComponentFillVertically(JPanel(), 0)
-            .panel
-    }
-
-    override fun isModified(): Boolean =
-        executableField?.text?.trim() != ClaudeDockSettings.getInstance().claudeExecutable ||
-            configDirField?.text?.trim() != projectSettings().claudeConfigDir ||
-            paddingSpinner?.number != ClaudeDockSettings.getInstance().effectivePadding()
-
-    override fun apply() {
-        val executable = executableField?.text?.trim().orEmpty()
+    override fun createPanel(): DialogPanel {
         val settings = ClaudeDockSettings.getInstance()
-        settings.claudeExecutable = executable.ifEmpty { ClaudeDockSettings.DEFAULT_EXECUTABLE }
-        paddingSpinner?.let { settings.sessionPadding = it.number }
+        val projectSettings = ClaudeDockProjectSettings.getInstance(project)
 
-        projectSettings().claudeConfigDir = configDirField?.text?.trim().orEmpty()
-        reset()
+        return panel {
+            group("Executável") {
+                row("Comando do Claude Code:") {
+                    textFieldWithBrowseButton(
+                        FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
+                            .withTitle("Executável do Claude Code")
+                            .withDescription("Selecione o binário do Claude Code"),
+                        project,
+                    )
+                        .align(AlignX.FILL)
+                        .bindText(settings::claudeExecutable)
+                        .comment(
+                            "Vale para todos os projetos. " +
+                                "Deixe \"claude\" para resolver pelo PATH.",
+                        )
+                }
+            }
+
+            group("Configuração do CLI") {
+                row("CLAUDE_CONFIG_DIR:") {
+                    textFieldWithBrowseButton(
+                        FileChooserDescriptorFactory.createSingleFolderDescriptor()
+                            .withTitle("Diretório de configuração do Claude Code")
+                            .withDescription("Selecione o diretório usado como CLAUDE_CONFIG_DIR"),
+                        project,
+                    )
+                        .align(AlignX.FILL)
+                        .bindText(projectSettings::claudeConfigDir)
+                        .comment(
+                            "Somente este projeto. Vazio usa o padrão do CLI (~/.claude). " +
+                                "Aplica-se às próximas sessões abertas.",
+                        )
+                }
+            }
+
+            group("Aparência") {
+                row("Respiro nas bordas:") {
+                    spinner(ClaudeDockSettings.MIN_PADDING..ClaudeDockSettings.MAX_PADDING)
+                        .bindIntValue(settings::sessionPadding)
+                        .comment(
+                            "Em pixels. Vale para todos os projetos. Distância entre o conteúdo " +
+                                "da sessão e as bordas da janela. " +
+                                "Aplica-se às próximas sessões abertas.",
+                        )
+                }
+            }
+        }
     }
-
-    override fun reset() {
-        executableField?.text = ClaudeDockSettings.getInstance().claudeExecutable
-        configDirField?.text = projectSettings().claudeConfigDir
-        paddingSpinner?.number = ClaudeDockSettings.getInstance().effectivePadding()
-    }
-
-    override fun disposeUIResources() {
-        executableField = null
-        configDirField = null
-        paddingSpinner = null
-    }
-
-    private fun projectSettings(): ClaudeDockProjectSettings =
-        ClaudeDockProjectSettings.getInstance(project)
 }
