@@ -1,0 +1,163 @@
+# Claude Code Plugin para Jetbrains
+
+## Contexto
+
+Hoje o plugin oficial da JetBrains para o Claude Code abre um novo terminal simples e roda o comando `claude` para nós. Eu gostaria que ele funcionasse mais como o plugin do VS Code, que abre uma janela separada mas ainda dentro do IDE, e que possamos interagir com o Claude Code de forma mais integrada. Pensei em criar meu próprio um plugin para JetBrains, mas que rodarei localmente, sem precisar publicar na JetBrains Marketplace. A ideia é que ele abra uma janela separada dentro do IDE, onde possamos interagir com o Claude Code de forma mais fluida, com cópia de texto, histórico de conversas, e talvez até integração com o código do projeto. sei que a Anthropic inviabilisa plugins de terceiros rodarem o claude code. Dai pensei em uma abordagem de casca, onde meu plugin abra uma janela separada do terminal tradicional, dentro do IDE, mas ainda sim abrindo um terminal que roda o comando `claude`. Dessa forma, o plugin não estaria diretamente interagindo com o Claude Code, mas sim abrindo um terminal que já faz isso, sem estar atrelado ao terminal tradicional do IDE. A ideia é que o terminal aberto pelo plugin seja mais integrado, com histórico de conversas, cópia de texto, e talvez até integração com o código do projeto.
+
+Acha que conseguimos fazer? Se sim, vamos trabalhar com SDD, crie um documento de especificação de design de software (SDD) com subpasta `plans/sdd/SPEC.md` e descreva a arquitetura, componentes, fluxos de dados, e quaisquer dependências necessárias para implementar o plugin. Crie também um arquvio HANDOUT.md marcando a progressão do projeto, para que sirva como um registro de progresso e memória entre seções de trabalho. O HANDOUT.md deve ser atualizado regularmente com notas sobre o progresso, desafios enfrentados, decisões de design, e quaisquer mudanças no escopo do projeto.
+
+Vamos começar com o SDD. Aqui está um esboço inicial para o documento de especificação de design de software (SDD)
+
+## SDD
+
+Sua primeira responsabilidade NÃO é implementar.
+
+Você deve seguir um processo de Spec-Driven Development (SDD).
+
+### Fase 1 - Descoberta
+
+Leia a issue, o código existente, testes relacionados, documentação, ADRs, arquivos de configuração e quaisquer partes relevantes do sistema.
+
+Construa uma compreensão completa de:
+
+- O problema que precisa ser resolvido
+- O objetivo de negócio
+- O comportamento atual do sistema
+- Restrições técnicas
+- Dependências
+- Riscos
+- Casos de borda (edge cases)
+
+Caso informações estejam faltando, identifique claramente as lacunas e faça suposições explícitas.
+
+### Fase 2 - Especificação
+
+Crie um documento chamado `SPEC.md`.
+
+O documento deve conter obrigatoriamente:
+
+#### Problema
+
+Descreva claramente o problema atual.
+
+#### Objetivos
+
+Liste os resultados esperados da solução.
+
+#### Fora de Escopo
+
+Defina explicitamente o que NÃO será resolvido nesta tarefa.
+
+#### Análise do Estado Atual
+
+Explique como o sistema funciona hoje.
+
+#### Solução Proposta
+
+Descreva a solução detalhadamente.
+
+#### Requisitos Funcionais
+
+Liste todos os requisitos funcionais numerados.
+
+#### Requisitos Não Funcionais
+
+Inclua requisitos relacionados a:
+
+- Performance
+- Segurança
+- Confiabilidade
+- Observabilidade
+- Manutenibilidade
+- Escalabilidade
+
+#### Fluxos
+
+Descreva:
+
+- Fluxo principal
+- Fluxos alternativos
+- Fluxos de erro
+
+#### Design Técnico
+
+Detalhe:
+
+- Alterações arquiteturais
+- Alterações em banco de dados
+- Mudanças de schema
+- Mudanças de API
+- Mudanças GraphQL
+- Background jobs
+- Integrações externas
+- Migrações de dados
+- Feature flags
+- Logs, métricas e monitoramento
+
+#### Casos de Borda
+
+Liste todos os edge cases identificados.
+
+#### Riscos
+
+Liste riscos técnicos e estratégias de mitigação.
+
+#### Estratégia de Testes
+
+Defina:
+
+- Testes unitários
+- Testes de integração
+- Testes end-to-end
+- Testes de regressão
+
+#### Critérios de Aceitação
+
+Escreva os critérios utilizando o formato:
+
+Given
+When
+Then
+
+#### Plano de Rollout
+
+Explique:
+
+- Estratégia de deploy
+- Estratégia de rollback
+- Monitoramento pós-deploy
+
+#### Perguntas em Aberto
+
+Liste ambiguidades, premissas e informações faltantes.
+
+### Fase 3 - Revisão Crítica
+
+Após concluir a especificação, faça uma revisão crítica da própria solução.
+
+Procure por:
+
+- Requisitos faltantes
+- Premissas ocultas
+- Problemas de compatibilidade retroativa
+- Cenários de falha
+- Gargalos de performance
+- Problemas de segurança
+- Problemas operacionais
+- Complexidade desnecessária
+
+Atualize o `SPEC.md` com os achados.
+
+### Regras
+
+NÃO implemente nada.
+NÃO modifique código de produção.
+NÃO crie migrations.
+NÃO escreva testes.
+NÃO faça commits.
+NÃO altere arquivos além do `SPEC.md`.
+NÃO avance para implementação.
+
+Seu único entregável nesta etapa é o documento `SPEC.md` completo.
+
+Após finalizar o `SPEC.md`, aguarde aprovação explícita antes de iniciar qualquer implementação.

@@ -1,0 +1,34 @@
+<idea-plugin>
+    <id>dev.reginaldomorais.claudedock</id>
+    <name>Claude Code Dock</name>
+    <vendor>Reginaldo Morais</vendor>
+
+    <description><![CDATA[
+        <p>Abre o <b>Claude Code</b> em uma tool window dedicada, separada da tool window
+        "Terminal" do IDE — como no VS Code.</p>
+
+        <p><b>Requer</b> o <a href="https://code.claude.com/docs/en/overview">Claude Code</a>
+        instalado. Mantenha o plugin oficial da Anthropic instalado: é ele que fornece
+        visualização de diff, compartilhamento de seleção e diagnostics, que continuam
+        funcionando dentro desta janela.</p>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <!-- Opcional: em IDEs sem terminal o plugin carrega sem registrar a tool window (RF-15). -->
+    <depends optional="true" config-file="plugin-terminal.xml">org.jetbrains.plugins.terminal</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="dev.reginaldomorais.claudedock.settings.ClaudeDockSettings"/>
+
+        <!-- Project-level: CLAUDE_CONFIG_DIR vale por projeto/janela (RF-19). -->
+        <projectConfigurable
+                instance="dev.reginaldomorais.claudedock.settings.ClaudeDockConfigurable"
+                id="dev.reginaldomorais.claudedock.settings"
+                displayName="Claude Code Dock"
+                parentId="tools"
+                dynamic="true"/>
+
+        <!-- Grupo próprio, silenciável independentemente do plugin oficial (RNF-13). -->
+        <notificationGroup id="ClaudeCodeDock" displayType="BALLOON"/>
+    </extensions>
+</idea-plugin>

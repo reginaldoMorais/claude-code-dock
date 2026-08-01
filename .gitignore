@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+
+# IntelliJ Platform Gradle Plugin (sandbox, IDE downloads, caches)
+.intellijPlatform/
+
+# Kotlin
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# code-review-graph
+.code-review-graph/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local / secrets
+.env
+.env.*
+local.properties
+*.local
