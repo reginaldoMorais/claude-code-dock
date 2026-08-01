@@ -4,8 +4,10 @@ import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
+import com.intellij.terminal.JBTerminalWidget
 import com.intellij.terminal.ui.TerminalWidget
 import dev.reginaldomorais.claudedock.settings.ClaudeDockProjectSettings
+import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
 import org.jetbrains.plugins.terminal.LocalTerminalDirectRunner
 import org.jetbrains.plugins.terminal.ShellStartupOptions
 import java.io.File
@@ -43,6 +45,12 @@ object ClaudeTerminalSessionFactory {
         ClaudeEscapeForwarder.install(widget)
         // Cópia por seleção com o mouse (RF-26); some junto com a aba.
         ClaudeSelectionCopyButton.install(widget, parent)
+        // Respiro entre o conteúdo e as bordas da janela; o JediTerm só reserva 4px à esquerda.
+        ClaudeSessionPadding.apply(
+            widget.component,
+            JBTerminalWidget.asJediTermWidget(widget)?.terminalPanel?.background,
+            ClaudeDockSettings.getInstance().effectivePadding(),
+        )
         widget.sendCommandToExecute(command)
         return widget
     }

@@ -23,6 +23,9 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
     /** Acrescenta `--ax-screen-reader` às novas sessões: saída plana, sem bordas nem animação. */
     var flatOutput: Boolean = false
 
+    /** Respiro entre o conteúdo da sessão e as bordas da janela, em pixels lógicos. */
+    var sessionPadding: Int = DEFAULT_PADDING
+
     override fun getState(): ClaudeDockSettings = this
 
     override fun loadState(state: ClaudeDockSettings) {
@@ -33,8 +36,19 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
     fun effectiveExecutable(): String =
         claudeExecutable.trim().ifEmpty { DEFAULT_EXECUTABLE }
 
+    /**
+     * Respiro efetivo, limitado à faixa aceita.
+     *
+     * O spinner da tela já limita, mas o XML é editável à mão: um valor absurdo aqui comeria
+     * as colunas do terminal.
+     */
+    fun effectivePadding(): Int = sessionPadding.coerceIn(MIN_PADDING, MAX_PADDING)
+
     companion object {
         const val DEFAULT_EXECUTABLE = "claude"
+        const val DEFAULT_PADDING = 20
+        const val MIN_PADDING = 0
+        const val MAX_PADDING = 48
 
         fun getInstance(): ClaudeDockSettings =
             ApplicationManager.getApplication().getService(ClaudeDockSettings::class.java)

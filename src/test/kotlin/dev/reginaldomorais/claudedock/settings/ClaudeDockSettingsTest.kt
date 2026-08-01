@@ -46,4 +46,29 @@ class ClaudeDockSettingsTest {
 
         assertTrue(target.flatOutput)
     }
+
+    @Test
+    fun `respiro nasce no padrao e persiste`() {
+        assertEquals(ClaudeDockSettings.DEFAULT_PADDING, ClaudeDockSettings().sessionPadding)
+
+        val source = ClaudeDockSettings().apply { sessionPadding = 32 }
+        val target = ClaudeDockSettings()
+
+        target.loadState(source.state)
+
+        assertEquals(32, target.effectivePadding())
+    }
+
+    /** O XML é editável à mão: valor fora da faixa não pode comer as colunas do terminal. */
+    @Test
+    fun `respiro fora da faixa e limitado`() {
+        assertEquals(
+            ClaudeDockSettings.MAX_PADDING,
+            ClaudeDockSettings().apply { sessionPadding = 9999 }.effectivePadding(),
+        )
+        assertEquals(
+            ClaudeDockSettings.MIN_PADDING,
+            ClaudeDockSettings().apply { sessionPadding = -10 }.effectivePadding(),
+        )
+    }
 }

@@ -4,6 +4,7 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.TextFieldWithBrowseButton
+import com.intellij.ui.JBIntSpinner
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.FormBuilder
@@ -23,6 +24,7 @@ class ClaudeDockConfigurable(private val project: Project) : Configurable {
     private var executableField: TextFieldWithBrowseButton? = null
     private var configDirField: TextFieldWithBrowseButton? = null
     private var flatOutputCheckBox: JBCheckBox? = null
+    private var paddingSpinner: JBIntSpinner? = null
 
     override fun getDisplayName(): String = "Claude Code Dock"
 
@@ -47,6 +49,13 @@ class ClaudeDockConfigurable(private val project: Project) : Configurable {
 
         val flatOutput = JBCheckBox("Saída plana (--ax-screen-reader)")
         flatOutputCheckBox = flatOutput
+
+        val padding = JBIntSpinner(
+            ClaudeDockSettings.getInstance().effectivePadding(),
+            ClaudeDockSettings.MIN_PADDING,
+            ClaudeDockSettings.MAX_PADDING,
+        )
+        paddingSpinner = padding
 
         return FormBuilder.createFormBuilder()
             .addLabeledComponent("Executável do Claude Code:", executable, true)
@@ -73,6 +82,14 @@ class ClaudeDockConfigurable(private val project: Project) : Configurable {
                     UIUtil.ComponentStyle.SMALL,
                 ),
             )
+            .addLabeledComponent("Respiro nas bordas (px):", padding, true)
+            .addComponentToRightColumn(
+                JBLabel(
+                    "Vale para todos os projetos. Distância entre o conteúdo da sessão e as " +
+                        "bordas da janela. Aplica-se às próximas sessões abertas.",
+                    UIUtil.ComponentStyle.SMALL,
+                ),
+            )
             .addComponentFillVertically(JPanel(), 0)
             .panel
     }
@@ -80,13 +97,15 @@ class ClaudeDockConfigurable(private val project: Project) : Configurable {
     override fun isModified(): Boolean =
         executableField?.text?.trim() != ClaudeDockSettings.getInstance().claudeExecutable ||
             configDirField?.text?.trim() != projectSettings().claudeConfigDir ||
-            flatOutputCheckBox?.isSelected != ClaudeDockSettings.getInstance().flatOutput
+            flatOutputCheckBox?.isSelected != ClaudeDockSettings.getInstance().flatOutput ||
+            paddingSpinner?.number != ClaudeDockSettings.getInstance().effectivePadding()
 
     override fun apply() {
         val executable = executableField?.text?.trim().orEmpty()
         val settings = ClaudeDockSettings.getInstance()
         settings.claudeExecutable = executable.ifEmpty { ClaudeDockSettings.DEFAULT_EXECUTABLE }
         settings.flatOutput = flatOutputCheckBox?.isSelected == true
+        paddingSpinner?.let { settings.sessionPadding = it.number }
 
         projectSettings().claudeConfigDir = configDirField?.text?.trim().orEmpty()
         reset()
@@ -96,12 +115,14 @@ class ClaudeDockConfigurable(private val project: Project) : Configurable {
         executableField?.text = ClaudeDockSettings.getInstance().claudeExecutable
         configDirField?.text = projectSettings().claudeConfigDir
         flatOutputCheckBox?.isSelected = ClaudeDockSettings.getInstance().flatOutput
+        paddingSpinner?.number = ClaudeDockSettings.getInstance().effectivePadding()
     }
 
     override fun disposeUIResources() {
         executableField = null
         configDirField = null
         flatOutputCheckBox = null
+        paddingSpinner = null
     }
 
     private fun projectSettings(): ClaudeDockProjectSettings =
