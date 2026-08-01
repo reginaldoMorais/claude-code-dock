@@ -1,8 +1,8 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.1
+- **Versão:** 1.3
 - **Data:** 2026-08-01
-- **Status:** Aprovado — v1.1 incorpora três ajustes vindos do primeiro teste no IDE real
+- **Status:** Aprovado — v1.3 corrige a cópia duplicada e especifica a cópia por seleção
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -11,6 +11,8 @@
 > | ------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
 > | 1.0    | 2026-08-01 | Especificação inicial (Fases 1–3 do SDD)                                                                                     |
 > | 1.1    | 2026-08-01 | RF-17 (Esc devolvido ao shell), RF-18 (estado vazio utilizável) e RF-19 (`CLAUDE_CONFIG_DIR` por projeto), após teste manual |
+> | 1.2    | 2026-08-01 | RF-21 (copiar o conteúdo da sessão) e RF-22 (exportar a conversa via `/export`), após T-3.1/T-3.2 aprovados                  |
+> | 1.3    | 2026-08-01 | DEF-01 (cópia duplicada) diagnosticado; RF-21 **revisto** para passar pelo `/export` (RF-24/RF-25); RF-26 (cópia flutuante por seleção); Q-14 (UI de markdown) analisada e recusada |
 
 ---
 
@@ -49,6 +51,9 @@ na JetBrains Marketplace**.
    quem alterna entre contas ou perfis distintos do Claude Code entre janelas do IDE.
 9. _(v1.1)_ Entregar **paridade de teclado com o terminal nativo**: o Claude Code usa `Esc` para
    sair de comandos interativos, e isso precisa funcionar dentro da janela dedicada.
+10. _(v1.2)_ Permitir **tirar o conteúdo da sessão de dentro da janela** em um clique — como o
+    ícone de cópia da extensão de VS Code —, tanto na forma bruta (o que está na tela) quanto na
+    forma de transcrição (via o `/export` do próprio CLI).
 
 ---
 
@@ -65,6 +70,36 @@ Explicitamente **não** serão construídos nesta tarefa:
   busca interna de sessões passadas. O CLI já resolve isso.
 - **Renderização customizada de UI de chat.** Não haverá bolhas de mensagem, markdown renderizado
   ou editor de prompt próprio. A UI é o terminal.
+
+  > **Reavaliado em v1.3, a pedido do usuário** ("renderizar como o VS Code faz, markdown viewer,
+  > código em boxes"). A pergunta era _"é possível?"_ — e a resposta honesta é **sim, e mesmo
+  > assim não vale**.
+  >
+  > **É possível.** O CLI expõe `--print --output-format stream-json --input-format stream-json
+  > --include-partial-messages` (verificado em `claude --help` v2.1.220). Dá para dirigir o
+  > Claude Code por JSON e desenhar a conversa numa UI própria; a plataforma tem com o que
+  > renderizar markdown.
+  >
+  > **Mas não é um incremento — é outro plugin.** O terminal não some só como aparência: ele é
+  > quem hoje trata, de graça, tudo o que passaríamos a ter de implementar — aprovação de
+  > ferramentas, plan mode, slash commands, `--resume`, seletores interativos, colagem de
+  > imagem, entrada multilinha. Cada um desses vira UI e estado nossos.
+  >
+  > **E o custo real não é o desenho, é a manutenção.** O formato `stream-json` não tem contrato
+  > público de estabilidade. Cada versão do CLI que mudar um campo quebra a janela — e o CLI
+  > atualiza sozinho. É exatamente o acoplamento que D-01 recusou para o protocolo MCP, pela
+  > mesma razão, agora com muito mais superfície.
+  >
+  > **Ordem de grandeza:** o plugin inteiro tem hoje ~450 linhas de Kotlin e uma classe acoplada
+  > à plataforma. Isso seria milhares de linhas e um segundo produto para manter — para ganhar
+  > apresentação, não capacidade. **Recomendação: não seguir.** Registrado em Q-14, com o
+  > caminho técnico documentado, para que a decisão possa ser revista com dados e não do zero.
+  >
+  > _Se o incômodo for legibilidade e não arquitetura_, há bem mais barato a tentar antes:
+  > a flag `--ax-screen-reader` do CLI ("flat text, no decorative borders or animations") e a
+  > fonte/tema do terminal do IDE. **Implementado como RF-27** — uma caixa de seleção nas
+  > configurações, para medir quanto do incômodo era só a moldura do TUI antes de considerar
+  > qualquer coisa maior.
 - **Publicação na JetBrains Marketplace.**
 - **Suporte a Remote Development, split mode (frontend/backend) e WSL.** O alvo é execução local
   monolítica. Ver [Riscos](#riscos).
@@ -196,6 +231,127 @@ Um pre-handler que escreva `\u001b` no `TtyConnector` e consuma o evento produz 
 comportamento do terminal nativo — sem alterar keymap do usuário nem o `TerminalOptionsProvider`,
 o que violaria RF-13. É a implementação adotada em RF-17.
 
+### A ausência de "copiar tudo" no engine CLASSIC _(descoberta em v1.2)_
+
+Copiar o conteúdo da janela parecia resolvido pela plataforma. Não é — e a assimetria é a mesma
+família do problema do `Esc`: **o comportamento depende do engine, não do widget.**
+
+- `Terminal.SelectAll` está referenciada **apenas** em `Terminal.ReworkedTerminalContextMenu`, e
+  sua implementação (`TerminalSelectAllAction`) só habilita quando
+  `TerminalDataContextUtils.isReworkedTerminalEditor(editor)` é verdadeiro.
+- `Terminal.CopySelectedText` idem: opera sobre o `Editor` do terminal reformulado.
+- No JediTerm clássico — o engine da nossa janela — o menu de contexto oferece copiar-seleção e
+  colar. **Nenhuma ação do IDE seleciona o buffer inteiro**; para o usuário, resta arrastar o
+  mouse.
+  > ⚠️ **Precisão corrigida em v1.3:** `com.jediterm.terminal.ui.TerminalPanel.selectAll()` é
+  > público e existe. O que não existe é uma **ação registrada** que o alcance no CLASSIC. A
+  > redação original da v1.2 dava a entender que a capacidade não existia na plataforma; existe,
+  > só não está exposta. Isso não muda o desenho — `getText()` continua mais direto que
+  > selecionar-para-copiar —, mas a afirmação precisava ficar exata.
+
+Em compensação, o próprio `TerminalWidget` já sabe se ler por inteiro:
+
+```java
+// JBTerminalWidget.getText(TerminalPanel), via javap -c
+TerminalSelection sel = new TerminalSelection(
+    new Point(0, -buffer.getHistoryLinesCount()),                 // topo do scrollback
+    new Point(buffer.getWidth(), buffer.getScreenLinesCount()-1)  // fim da tela
+);
+return SelectionUtil.getSelectionText(..., buffer);               // sob buffer.lock()
+```
+
+`JBTerminalWidget$TerminalWidgetBridge.getText()` delega a esse método, então a chamada sai de
+graça pela interface que a factory já devolve. Fora do CLASSIC, o `default` da interface devolve
+string vazia — degradação graciosa, sem exceção (CB-26).
+
+**Para o `/export`, o caminho é outro.** `ShellTerminalWidget.executeCommand` — atrás de
+`sendCommandToExecute`, que usamos para lançar o `claude` — começa checando
+`getTypedShellCommand().isEmpty()` e **lança `IOException`** se houver texto digitado no prompt.
+Com um TUI vivo na frente, essa é a regra, não a exceção. Falar com o Claude Code em execução
+exige escrever direto no `TtyConnector`, o mesmo canal do `ClaudeEscapeForwarder`.
+
+### DEF-01 — por que a cópia do buffer sai duplicada _(descoberto em v1.3)_
+
+O primeiro uso real de RF-21 revelou que uma conversa com várias trocas é copiada **duas ou mais
+vezes**, cada cópia precedida do banner do CLI e seguida da caixa de input e da barra de status.
+
+**Não é defeito do nosso código.** `getText()` devolve fielmente o que está no buffer — e o
+buffer realmente contém a conversa mais de uma vez.
+
+**Causa.** O TUI do Claude Code é Ink (React para terminal). A cada **repintura de frame
+completo** ele reemite a região estática inteira, e o que estava na tela rola para o scrollback.
+Uma tool window é redimensionada o tempo todo — e cada resize dispara uma repintura total.
+
+A evidência está na própria amostra colada pelo usuário: o rodapé do primeiro bloco marca
+`⧉ In README.md` e o do segundo, `⧉ In a.txt`. **São dois frames de instantes diferentes**, não
+uma cópia acidental. O buffer acumula um frame por repintura, e a cópia é fiel a isso.
+
+**Por que não se conserta por heurística.** A tentação é cortar do último banner em diante — um
+frame completo, limpo. Mas isso só funciona enquanto a conversa **cabe na tela**: passando disso,
+o topo do último frame já rolou para fora e o corte **trunca em silêncio**, que é pior que
+duplicar. Deduplicar blocos repetidos tem o mesmo problema pelo outro lado: duas respostas
+legitimamente iguais seriam fundidas.
+
+**A saída já estava especificada.** O `/export` do CLI produz exatamente o que se quer, e isso
+foi **verificado no arquivo gerado em 2026-08-01 16:23**: a conversa aparece **uma única vez**,
+sem caixa de input, sem barra de status, sem repetição. Ou seja, Q-12 — que a v1.2 deixou em
+aberto — tem resposta: a cópia deve passar pelo `/export`. Daí RF-24.
+
+#### Como o `/export` trata o argumento (lido no binário, não suposto)
+
+R-13 era o bloqueio de RF-24. Como `/export` é `local-jsx` e exige TUI, não dá para exercitá-lo
+por `-p`; a resposta veio da implementação embutida no binário `claude` 2.1.220:
+
+```js
+async function azb(e, t, r) {                 // r = argumento do slash command
+  let n = await lZo(t.messages, ...);          // conversa renderizada
+  let o = r.trim();
+  if (o) { let l = await u0n(o, n); e(`Conversation exported to: ${l}`); return null; }
+  ...                                          // sem argumento: mostra o seletor arquivo/clipboard
+}
+function Y5b(e) { let t = extname(e) === "" ? `${e}.txt` : e; return Mi(t, ...); }
+async function u0n(e, t) {
+  let r = Y5b(e);
+  await mkdir(dirname(r), { recursive: true });
+  await writeFile(r, t, { encoding: "utf-8", flush: true });
+  return r;
+}
+```
+
+Quatro consequências diretas para o desenho:
+
+| O que o código mostra                              | Efeito em RF-24                                                                    |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Com argumento, `return null` **sem UI**            | O caminho é não-interativo: escreve e pronto. Não há seletor para o plugin driblar |
+| `writeFile` comum                                  | **Sobrescreve** arquivo existente, sem perguntar                                   |
+| `mkdir(dirname, { recursive: true })`              | Cria a árvore de diretórios; o temporário não precisa existir antes                |
+| `extname(e) === "" ? e + ".txt" : e`               | **Sem extensão, o CLI grava em outro caminho.** O destino precisa terminar em `.md` |
+
+E o mais importante: **o argumento é `r.trim()` cru**. Aspas POSIX não seriam removidas — virariam
+parte do nome do arquivo. É o oposto de RNF-08, que protege o caminho do executável contra o
+**shell**; aqui quem lê a string é o CLI, e proteger contra shell **quebraria** a chamada. Ver
+T-1.13.
+
+**O que se perde.** A cópia deixa de ser instantânea e passa a depender do CLI vivo: escreve um
+arquivo temporário, espera, lê, apaga. É mais peça do que `getText()`, mas é a diferença entre
+um recurso que serve e um que não serve.
+
+### Renderizar como o VS Code: o que o CLI oferece _(analisado em v1.3)_
+
+O CLI expõe, verificado em `claude --help` v2.1.220:
+
+```text
+-p, --print                     Print response and exit
+--output-format <format>        "text" | "json" | "stream-json"   (só com --print)
+--input-format <format>         "text" | "stream-json"            (só com --print)
+--include-partial-messages      chunks parciais (só com --print e --output-format=stream-json)
+```
+
+Ou seja: **é tecnicamente possível** dirigir o Claude Code por JSON e desenhar a conversa numa UI
+própria, com markdown e blocos de código. O caminho existe. Ver a avaliação em
+[Fora de Escopo](#fora-de-escopo) e Q-14 — a conclusão é **não seguir por ele**, e o motivo não
+é viabilidade.
+
 ### API de terminal disponível na build 262
 
 | Símbolo                                                                                                 | Situação                                       |
@@ -269,6 +425,13 @@ reimplementação frágil.**
 | **RF-18** | _(v1.1)_ Com a tool window sem nenhuma aba, o estado vazio DEVE oferecer caminho visível para abrir uma nova sessão ou retomar uma anterior.               |
 | **RF-19** | _(v1.1)_ O plugin DEVE permitir configurar `CLAUDE_CONFIG_DIR` **por projeto** (= por janela do IDE), injetando-o no ambiente das sessões daquele projeto. |
 | **RF-20** | _(v1.1)_ `CLAUDE_CONFIG_DIR` vazio DEVE significar "não injetar", preservando o padrão do CLI (`~/.claude`).                                               |
+| ~~**RF-21**~~ | ~~_(v1.2)_ O plugin DEVE oferecer a ação "Copiar Sessão", que coloca o conteúdo do buffer da aba selecionada (scrollback + tela) na área de transferência.~~ **Substituído por RF-24 em v1.3** — o buffer contém a conversa repetida (DEF-01). |
+| **RF-22** | _(v1.2)_ O plugin DEVE oferecer a ação "Exportar Conversa", que aciona o slash command `/export` do CLI na aba selecionada.                                |
+| **RF-23** | _(v1.2)_ Sem aba selecionada, ou sem conteúdo a copiar, as ações de RF-21 e RF-22 DEVEM notificar o usuário — nunca lançar exceção nem agir em silêncio.   |
+| **RF-24** | _(v1.3)_ "Copiar Conversa" DEVE obter o texto pelo `/export` do CLI, para arquivo temporário, e colocar **só a conversa** na área de transferência — sem banner repetido, sem caixa de input e sem barra de status (DEF-01). |
+| **RF-25** | _(v1.3)_ O arquivo temporário de RF-24 DEVE ser criado com permissão exclusiva do usuário e **apagado logo após a leitura**, com ou sem sucesso.           |
+| **RF-26** | _(v1.3)_ Ao selecionar texto com o mouse na sessão, o plugin DEVE oferecer um botão flutuante que copia **apenas o trecho selecionado**; ele DEVE sumir quando a seleção é desfeita. |
+| **RF-27** | _(v1.3)_ O plugin DEVE oferecer opção de aplicar `--ax-screen-reader` às novas sessões, para saída plana sem bordas nem animações; padrão **desligado**, valendo para todos os projetos. |
 
 ---
 
@@ -305,6 +468,15 @@ reimplementação frágil.**
   > Usar argv substituiria o shell e destruiria esse fallback de diagnóstico. O objetivo real do
   > requisito (um caminho com espaços ou metacaracteres não pode virar comando extra) é atendido
   > pelo escapamento, com testes dedicados em T-1.6.
+
+- **RNF-19** _(v1.2, revisado em v1.3)_ — O conteúdo da sessão pode conter código-fonte e
+  segredos do projeto (mesmo motivo de RNF-06). A cópia DEVE ser sempre **iniciada pelo
+  usuário**, ir **apenas** para a área de transferência local, e NÃO DEVE ser registrada em log
+  nem enviada a lugar algum.
+  > ⚠️ **Exceção introduzida por RF-24:** o `/export` escreve em disco, então o texto passa por
+  > um arquivo temporário. Isso é uma concessão consciente, não um descuido — a alternativa
+  > (ler o buffer) não entrega o recurso (DEF-01). Mitigação obrigatória em RF-25: permissão
+  > exclusiva do usuário e remoção em `finally`. Ver R-14.
 
 ### Confiabilidade
 
@@ -388,6 +560,37 @@ reimplementação frágil.**
 3. O CLI inicia em modo autônomo, sem integração com o IDE.
 4. A janela e o terminal permanecem plenamente funcionais (RNF-11).
 
+### Fluxo alternativo G — copiar a conversa _(revisto em v1.3, RF-24)_
+
+> A v1.2 lia o buffer direto. Isso produzia a conversa repetida (DEF-01); o caminho passa a ser
+> o mesmo do Fluxo H, mudando só o destino.
+
+1. O usuário aciona "Copiar Conversa" no cabeçalho da tool window.
+2. `ClaudeDockSessions` recupera o widget da aba selecionada (guardado no `Content` por `Key`).
+3. O plugin cria um arquivo temporário vazio, com permissão exclusiva do usuário (RF-25).
+4. `ClaudeTerminalSessionFactory.sendInput` escreve `/export <caminho>\r` no PTY.
+5. O plugin espera o arquivo ganhar conteúdo, com prazo limite; estourado o prazo, notifica e
+   desiste (CB-29).
+6. Lido o arquivo, o texto vai para a área de transferência via
+   `CopyPasteManager.copyTextToClipboard` e **o arquivo é apagado** — sucesso ou falha (RF-25).
+
+### Fluxo alternativo I — copiar um trecho selecionado _(v1.3, RF-26)_
+
+1. O usuário seleciona texto com o mouse dentro da sessão.
+2. O `TerminalSelectionChangesListener` registrado no painel dispara com a seleção não vazia.
+3. Um botão flutuante aparece perto do ponteiro, com o ícone de cópia.
+4. Clicado, ele copia `JBTerminalWidget.getSelectedText()` e some.
+5. Desfeita a seleção, o listener dispara com seleção vazia e o botão some sem ação (CB-30).
+
+### Fluxo alternativo H — exportar a conversa _(v1.2, RF-22)_
+
+1. O usuário aciona "Exportar Conversa".
+2. Passos 2 do fluxo G se repetem.
+3. `ClaudeTerminalSessionFactory.sendInput` escreve `"/export\r"` no `TtyConnector` — o
+   equivalente a digitar e pressionar Enter.
+4. O CLI abre o seu próprio seletor de destino dentro da sessão; o usuário escolhe.
+5. Sem PTY ainda (RNF-02) ou com falha de escrita, a ação notifica e nada acontece na sessão.
+
 ### Fluxo de erro D — executável não encontrado
 
 1. O terminal inicia, mas o shell responde `command not found: claude`.
@@ -431,6 +634,9 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
 ├── ClaudeEscapeForwarder.kt        # devolve o Esc ao PTY fora da tool window "Terminal" (RF-17)
 ├── ClaudeEnvironment.kt            # puro: config dir -> variáveis de ambiente (RF-19)
 ├── ClaudeCommand.kt                # puro: montagem e escapamento do comando
+├── ClaudeSessionText.kt            # puro: normaliza o texto copiado (RF-21; revisto em RF-24)
+├── ClaudeSessionExport.kt          # (v1.3) puro-ish: destino, comando e espera do /export (RF-24, RF-25)
+├── ClaudeSelectionCopyButton.kt    # (v1.3) botão flutuante na seleção (RF-26)
 ├── ClaudeTabTitle.kt               # puro: títulos distinguíveis de aba
 ├── ClaudeWorkingDirectory.kt       # puro: resolução do diretório de trabalho
 ├── settings/
@@ -440,6 +646,8 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
 └── actions/
     ├── NewSessionAction.kt
     ├── ResumeSessionAction.kt
+    ├── CopySessionAction.kt         # (v1.2) RF-21
+    ├── ExportSessionAction.kt       # (v1.2) RF-22
     └── OpenClaudeDockAction.kt
 src/main/resources/META-INF/
 ├── plugin.xml
@@ -457,7 +665,13 @@ src/test/kotlin/dev/reginaldomorais/claudedock/
 | `ClaudeDockProjectSettings`    | persistir e prover configuração de projeto (RF-19)           | UI, terminal e ambiente            |
 | `ClaudeEnvironment`            | traduzir configuração em variáveis de ambiente               | `Project`, UI e terminal           |
 | `ClaudeEscapeForwarder`        | corrigir a entrega do `Esc` ao PTY (RF-17)                   | tool windows, abas, configuração   |
+| `ClaudeSessionText`            | normalizar o buffer para a área de transferência (RF-21)     | terminal, clipboard, UI            |
 | Ações                          | traduzir intenção do usuário em chamadas às duas primeiras   | detalhes de implementação de ambas |
+
+_(v1.2)_ Ler o buffer e escrever no PTY entram como `readText` e `sendInput` **dentro de**
+`ClaudeTerminalSessionFactory`, e não nas ações: RNF-15 exige que o contato com a API de
+terminal continue num arquivo só. As ações falam apenas com `ClaudeDockSessions`, que é quem
+sabe qual aba está selecionada.
 
 `ClaudeTerminalSessionFactory` concentra **todo** o acoplamento à API de terminal da plataforma
 (RNF-15): é o único arquivo a auditar em cada upgrade de IDE.
@@ -571,6 +785,15 @@ Registrados por exigência do roteiro de SDD:
 | **CB-21** | _(v1.1)_ `CLAUDE_CONFIG_DIR` informado com `~`                                   | Expandido no plugin: variável de ambiente não passa por expansão do shell                                        |
 | **CB-22** | _(v1.1)_ `CLAUDE_CONFIG_DIR` aponta para diretório inexistente                   | Repassado como está; a criação é responsabilidade do CLI. Sem validação própria para não divergir do CLI         |
 | **CB-23** | _(v1.1)_ `CLAUDE_CONFIG_DIR` alterado com sessões abertas                        | Como CB-14: sessões vivas não mudam; vale para as próximas abas                                                  |
+| **CB-24** | _(v1.2)_ Copiar/exportar sem nenhuma aba aberta (estado vazio de RF-18)          | Notificação "Nenhuma sessão aberta"; nada acontece (RF-23)                                                       |
+| **CB-25** | _(v1.2)_ Conversa maior que o scrollback                                         | A cópia traz só o que restou no buffer, truncada no topo. O limite é do usuário (`terminal.buffer.max.lines.count`) e o plugin não o altera (RF-13); para a conversa inteira existe o `/export` |
+| **CB-26** | _(v1.2)_ Engine sem JediTerm (`REWORKED`)                                        | `getText()` cai no `default` da interface e devolve vazio: notificação "sem conteúdo", nunca exceção. Ligado a Q-04 |
+| **CB-27** | _(v1.2)_ "Exportar Conversa" com o processo `claude` já encerrado (RF-11)        | O texto cai no shell e vira `command not found`. Inofensivo; distinguir TUI vivo de shell exigiria heurística frágil |
+| **CB-28** | _(v1.2)_ "Exportar Conversa" antes de o PTY existir (sessão adiada, RNF-02)      | `ttyConnector` nulo: `sendInput` devolve `false` e a ação notifica (mesma raiz de CB-19)                          |
+| **CB-29** | _(v1.3)_ O `/export` de RF-24 não produz o arquivo (CLI ocupado, encerrado, ou comando removido) | Prazo limite; estourado, notifica "não foi possível obter a conversa" e apaga o temporário. Sem espera indefinida |
+| **CB-30** | _(v1.3)_ Seleção desfeita ou vazia com o botão flutuante na tela                 | O listener dispara com seleção vazia e o botão some sem copiar nada                                              |
+| **CB-31** | _(v1.3)_ Seleção feita numa aba e clique no botão depois de trocar de aba        | O botão é por painel e some junto com a aba; não há caminho para copiar seleção de outra aba                     |
+| **CB-32** | _(v1.3)_ Cópia acionada duas vezes seguidas antes de a primeira terminar         | Um `/export` por vez, por aba: a segunda é ignorada enquanto a primeira está em curso                            |
 
 ---
 
@@ -588,6 +811,11 @@ Registrados por exigência do roteiro de SDD:
 | **R-08** | Sem `until-build`, uma versão futura incompatível do IDE pode causar exceções em runtime                                                                                                                             | Médio       | Média | Aceito conscientemente em troca de não travar a cada upgrade; mitigado por R-01 e pelo tratamento de erro do Fluxo E                                                                                                                                                                                                                                             |
 | **R-09** | _(v1.1)_ A correção do `Esc` (RF-17) depende de `JBTerminalPanel.addPreKeyEventHandler` e de `JBTerminalWidget.asJediTermWidget` — API pública, mas sem garantia de estabilidade, e específica do engine **CLASSIC** | Médio       | Média | Falha degrada, não quebra: `asJediTermWidget` nulo faz o `install` retornar sem efeito, e o pior caso é voltar ao bug atual (`Esc` move o foco), nunca uma exceção. Coberto por T-3.7. Se a plataforma migrar a janela para o engine REWORKED, reavaliar contra `TerminalEscapeHandler` (EP `org.jetbrains.plugins.terminal.escapeHandler`, já existente em 262) |
 | **R-10** | _(v1.1)_ A JetBrains pode corrigir a assimetria do `TerminalEscapeKeyListener` e passar a entregar o `Esc` também fora da tool window "Terminal", tornando o pre-handler redundante — ou duplicando o envio          | Baixo       | Baixa | O pre-handler consome o evento antes do listener, então mesmo com a correção upstream o caminho continua único: nós enviamos, a plataforma não reenvia. Revalidar em T-5.3 a cada upgrade                                                                                                                                                                        |
+| **R-11** | _(v1.2)_ O `/export` (RF-22) depende de um slash command do CLI, que a Anthropic pode renomear ou remover sem aviso                                                                                                 | Baixo       | Média | Falha visível e inofensiva: o texto aparece na sessão e o CLI responde que não conhece o comando. A cópia de RF-21 não depende do CLI e continua atendendo o caso principal                                                                                                                                                                                      |
+| **R-12** | ~~_(v1.2)_ Escrever `"/export\r"` no PTY é digitação simulada~~ ✅ **FECHADO em 2026-08-01** — T-3.11 aprovado: o `/export` executou e gerou o arquivo | ~~Baixo~~ | — | Validado no IDE real: o `\r` é aceito como Enter e o autocomplete não interfere. Como RF-24 passa a depender disso em todo uso, revalidar a cada upgrade do CLI |
+| **R-13** | ~~_(v1.3)_ O argumento `[filename]` do `/export` não foi verificado~~ ✅ **FECHADO em 2026-08-01** — lido na implementação embutida no binário `claude` 2.1.220 | ~~Alto~~ | — | Grava direto e sem UI, sobrescreve, cria diretórios, e acrescenta `.txt` se faltar extensão. O destino de RF-24 termina em `.md` por causa disso. Revalidar a cada upgrade do CLI, junto de R-11 |
+| **R-14** | _(v1.3)_ RF-24 grava a conversa em arquivo temporário — código-fonte e possíveis segredos passam por disco, ainda que por segundos | Médio | Alta | Arquivo com permissão exclusiva do usuário e apagado em `finally` (RF-25). Liability real, aceita porque a alternativa (buffer) não entrega o recurso. Registrada em RNF-19 |
+| **R-15** | _(v1.3)_ O botão flutuante (RF-26) depende de `TerminalPanel.addSelectionListener`, específico do engine CLASSIC — mesma exposição de R-09 | Baixo | Média | Degrada igual: sem `asJediTermWidget` o botão não é instalado, e `Ctrl+C`/`Ctrl+Shift+C` seguem copiando a seleção. Perde-se conveniência, não capacidade |
 
 ---
 
@@ -610,6 +838,12 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.9**  | `ClaudeEnvironment`               | _(v1.1)_ Caminho vira `CLAUDE_CONFIG_DIR`, com trim e expansão de `~` (RF-19, CB-21)                                                        |
 | **T-1.10** | `ClaudeDockProjectSettings`       | _(v1.1)_ Padrão vazio, persistência via `loadState`, caminho efetivo com trim                                                               |
 | **T-1.11** | `ClaudeEscapeForwarder`           | _(v1.1)_ Só `Esc` puro em `KEY_PRESSED` é encaminhado; modificador, outras teclas e evento já consumido são ignorados (RF-17, CB-18, CB-19) |
+| **T-1.12** | `ClaudeSessionText`               | _(v1.2)_ Buffer nulo/vazio/só espaços não produz texto; espaços à direita e linhas vazias do fim são removidos; indentação e linhas em branco internas ficam intactas (RF-21, CB-26) |
+| **T-1.13** | Comando de export                 | _(v1.3)_ O caminho vai **cru** para o `/export`, sem aspas — o CLI faz `argumento.trim()` e aspas virariam parte do nome do arquivo. Oposto de T-1.6, que protege contra o **shell** (RF-24) |
+| **T-1.14** | Leitura do export                 | _(v1.3)_ Arquivo ausente ou vazio dentro do prazo produz falha tratada; arquivo com conteúdo produz o texto; o temporário é removido nos dois casos (RF-25, CB-29) |
+| **T-1.15** | Destino do export                 | _(v1.3)_ O temporário termina em `.md` (senão o CLI grava em outro caminho) e nasce com permissão exclusiva do dono (RF-25) |
+| **T-1.16** | `ClaudeCommand`                   | _(v1.3)_ `--ax-screen-reader` entra só quando ligado, antes dos demais argumentos, e convive com caminho citado (RF-27) |
+| **T-1.17** | `ClaudeDockSettings`              | _(v1.3)_ `flatOutput` nasce desligado e sobrevive a `loadState` (RF-27) |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
 executada após cada implementação.
@@ -669,6 +903,14 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.7** | _(v1.1)_ Na janela dedicada, rodar `/usage` e sair com `Esc`; conferir que o foco **não** vai para o editor (RF-17)                                                                  |
 | **T-3.8** | _(v1.1)_ Fechar a última aba e confirmar que os links "Nova sessão"/"Retomar sessão" aparecem e funcionam (RF-18, CB-20)                                                             |
 | **T-3.9** | _(v1.1)_ Definir `CLAUDE_CONFIG_DIR` em Settings, abrir nova sessão e conferir `echo $CLAUDE_CONFIG_DIR` no terminal; confirmar que `CLAUDE_CODE_SSE_PORT` continua presente (RF-19) |
+| **T-3.10** | _(v1.2)_ Conversar, acionar "Copiar Sessão" e colar num editor: o texto traz a conversa do buffer, sem bloco de linhas vazias no fim nem espaços à direita (RF-21) |
+| **T-3.11** | _(v1.2)_ Acionar "Exportar Conversa" com o `claude` rodando: o seletor do `/export` aparece dentro da sessão e produz a transcrição. Nesta máquina o destino precisa ser arquivo — o clipboard do CLI exige `wl-copy`/`xclip`/`xsel`, ausentes (RF-22, R-12) |
+| **T-3.12** | _(v1.2)_ Com a última aba fechada, acionar as duas ações novas: cada uma notifica "Nenhuma sessão aberta" e nada quebra (RF-23, CB-24) |
+| **T-3.13** | ~~_(v1.3)_ Verificar à mão se `/export <caminho>` aceita caminho absoluto~~ ✅ **Dispensado** — respondido por leitura do binário (R-13), com mais precisão do que o teste manual daria |
+| **T-3.14** | _(v1.3)_ Conversa longa, com a janela redimensionada no meio: "Copiar Conversa" traz a conversa **uma única vez**, sem banner repetido nem barra de status; o temporário não fica em `/tmp` (RF-24, RF-25, DEF-01) |
+| **T-3.15** | _(v1.3)_ Selecionar um trecho com o mouse: o botão flutuante aparece, copia só o trecho e some ao desfazer a seleção (RF-26, CB-30) |
+| **T-3.16** | _(v1.3)_ Com o botão flutuante na tela, digitar na sessão: o foco **não** foi roubado pelo popup (RF-26) |
+| **T-3.17** | _(v1.3)_ Ligar "Saída plana" em Settings, abrir nova sessão e comparar com uma sessão sem a opção — decide se Q-14 continua valendo a pena (RF-27) |
 
 ### Testes de regressão
 
@@ -767,6 +1009,24 @@ abre no visualizador do IDE de ponta a ponta.
 - **When** o usuário abre uma sessão em cada janela
 - **Then** a primeira roda o `claude` com o config dir informado e a segunda usa o padrão do CLI, sem que nenhuma delas perca a integração com o plugin oficial
 
+**CA-15 — Copiar a conversa** _(revisto em v1.3, RF-24)_
+
+- **Given** uma sessão com várias trocas de mensagem, e a janela redimensionada durante a conversa
+- **When** o usuário aciona "Copiar Conversa" no cabeçalho da janela
+- **Then** a área de transferência contém a conversa **uma única vez** — sem banner repetido, sem caixa de input, sem barra de status — e o arquivo temporário usado no caminho não permanece em disco
+
+**CA-17 — Copiar só um trecho** _(v1.3, RF-26)_
+
+- **Given** uma sessão com texto na tela
+- **When** o usuário seleciona um trecho com o mouse
+- **Then** aparece um botão flutuante que, clicado, copia **apenas o trecho selecionado**; desfeita a seleção, o botão some sem copiar nada
+
+**CA-16 — Exportar a conversa** _(v1.2, RF-22)_
+
+- **Given** uma sessão com o `claude` em execução
+- **When** o usuário aciona "Exportar Conversa"
+- **Then** o `/export` é executado dentro da própria sessão e o CLI apresenta seu seletor de destino, sem que o plugin interprete ou armazene a transcrição
+
 ---
 
 ## Plano de Rollout
@@ -826,6 +1086,10 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-09** | _(v1.1)_ Vale permitir `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto?                                                 | Adiado. Em IDEs JetBrains uma janela é um projeto, então o escopo atual já atende o pedido. Por aba exigiria diálogo a cada "Nova sessão" — reavaliar se houver demanda  |
 | **Q-10** | _(v1.1)_ O `TerminalEscapeKeyListener` se comporta igual no engine `REWORKED`?                                                | Em aberto. Lá o `Esc` passa por `Terminal.Escape` + EP `escapeHandler`, caminho diferente do pre-handler adotado. Ligado a Q-04 e R-09                                   |
 | **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável (`.idea/`) em vez de ficar no workspace?                                 | Decidido pelo workspace (RNF-05). Reavaliar só se surgir caso de config dir relativo ao repositório, compartilhável pelo time                                            |
+| **Q-12** | ~~_(v1.2)_ Vale passar `[filename]` ao `/export`?~~                                                                           | ✅ **RESOLVIDO em v1.3.** Sim, e deixou de ser conveniência: é a única forma de entregar a cópia sem duplicação (DEF-01). Virou RF-24, com R-13 a verificar primeiro |
+| **Q-14** | _(v1.3)_ Reimplementar a UI como visualizador de markdown, dirigindo o CLI por `stream-json`?                                 | **Analisado e recusado.** Viável tecnicamente, mas é outro produto: descarta o terminal e todo o comportamento interativo que ele dá de graça, e acopla a um formato JSON sem contrato de estabilidade. Ver [Fora de Escopo](#fora-de-escopo) e Achado 17 |
+| **Q-15** | _(v1.3)_ Qual prazo limite para o `/export` de RF-24 responder?                                                              | Em aberto. Depende do tempo real observado em T-3.13. Curto demais falha em conversa longa; longo demais trava a percepção de resposta do botão                     |
+| **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver uma, em vez de sempre copiar tudo?                        | Adiado. `Ctrl+C`/`Ctrl+Shift+C` já cobrem a seleção; o botão existe justamente para o caso que o CLASSIC não resolve. `JBTerminalWidget.getSelectedText()` existe se mudarmos de ideia |
 
 ---
 
@@ -936,6 +1200,69 @@ plugin existe para eliminar. Daí a separação em `ClaudeDockSettings` (aplica�
 `ClaudeDockProjectSettings` (projeto), com uma única tela `projectConfigurable` mostrando os
 dois e rotulando o escopo de cada campo.
 
+### Achado 14 — O comportamento condicionado ao engine é a mesma armadilha do Achado 11 _(v1.2)_
+
+A lição do `Esc` era "auditar o que a plataforma decide por **identidade do host**". A cópia
+mostrou a irmã dela: **decisão por engine**. `Terminal.SelectAll` e `Terminal.CopySelectedText`
+existem, aparecem na lista de ações do IDE e não funcionam para nós — não por bug, mas porque
+seus `update()` exigem um `Editor` de terminal reformulado, que o JediTerm clássico não tem.
+
+Presumir que "a ação existe, logo o recurso existe" teria produzido um botão morto. O que
+salvou foi ler o `update()` antes de reusar a ação.
+
+**Lição registrada:** ao reaproveitar uma ação da plataforma, ler o `update()` dela é parte da
+verificação, não detalhe. Uma ação registrada não é uma capacidade disponível.
+
+### Achado 15 — Um botão não cobria os dois usos _(v1.2)_
+
+O pedido original era "um ícone que copia o conteúdo da janela". A primeira leitura levaria a
+um botão só. Mas as duas coisas que o usuário pode querer têm naturezas opostas: o **render
+literal** (rápido, fiel ao que está na tela, com bordas de TUI e quebras na largura da janela) e
+a **transcrição** (limpa, completa, mas produzida pelo CLI, não por nós).
+
+Nenhum dos dois substitui o outro: a cópia bruta não vira transcrição, e o `/export` não copia
+o que está na tela agora. Dois botões pequenos custaram menos que um botão tentando adivinhar
+qual dos dois o usuário queria.
+
+**Achado colateral verificado:** o destino "clipboard" do `/export` depende de
+`wl-copy`/`xclip`/`xsel`, ausentes nesta máquina (sessão Wayland). Ou seja, delegar tudo ao CLI
+teria deixado o caso principal — copiar — sem solução. A cópia pelo `CopyPasteManager` do IDE
+não tem essa dependência.
+
+### Achado 16 — A cópia do buffer respondia a pergunta errada _(v1.3)_
+
+A v1.2 perguntou "como copiar o conteúdo da janela?" e respondeu bem: `getText()`, uma chamada,
+sem dependência externa. O usuário, porém, queria **copiar a conversa** — e a janela não é a
+conversa. É a última renderização dela, empilhada sobre as anteriores.
+
+A distinção parecia cosmética e não era: por ser um TUI Ink, cada repintura deixa **mais uma
+cópia inteira** no scrollback. O defeito não apareceu na especificação nem nos testes unitários
+porque ambos mediam a normalização do texto, não a **fidelidade do texto ao conceito**.
+
+O trade-off nº 1 da v1.2 chegou a dizer, com todas as letras, "a cópia é o render, não a
+conversa" — e ainda assim o recurso foi entregue como se render bastasse. **Nomear um
+trade-off não é o mesmo que aceitá-lo em nome do usuário.** Aqui ele não era aceitável, e o
+sinal disso já estava escrito.
+
+**Lição registrada:** quando um trade-off documentado diz que a entrega é uma aproximação do que
+foi pedido, ele é um item a validar com o usuário — não uma ressalva que se registra e segue.
+
+### Achado 17 — "É possível?" quase nunca é a pergunta que decide _(v1.3)_
+
+Os três pedidos desta rodada eram tecnicamente viáveis, e isso não os tornou equivalentes:
+
+| Pedido                     | Viável? | Decisão | O que de fato decidiu                                                                    |
+| -------------------------- | ------- | ------- | ---------------------------------------------------------------------------------------- |
+| Copiar só o conteúdo       | sim     | fazer   | conserta um recurso que não serve como está                                              |
+| Botão flutuante na seleção | sim     | fazer   | barato, e a alternativa (`Ctrl+C`) é invisível para quem usa mouse                       |
+| Renderizar markdown        | sim     | **não** | custo de manutenção contínua contra formato sem contrato — ganha apresentação, não poder |
+
+O terceiro é o que importa registrar: recusá-lo **não** é dizer que é difícil. É que o plugin
+existe justamente por não reimplementar o que o CLI e a plataforma já fazem (D-01, D-04), e uma
+UI própria inverteria essa premissa inteira para ganhar aparência. Se um dia essa decisão for
+revista, que seja com esse custo à vista — e não pela pergunta "dá pra fazer?", cuja resposta
+sempre foi sim.
+
 ---
 
 ## Anexo — Rastreabilidade das evidências
@@ -961,8 +1288,32 @@ Toda afirmação técnica sobre o estado atual remonta a uma verificação diret
 | _(v1.1)_ 2026.2 distribui `Terminal.SwitchFocusToEditor` sem atalho padrão                                                            | ausência de `keyboard-shortcut` no `META-INF/plugin.xml` do terminal + chaves `escape.behavior.change.notification.*` em `TerminalBundle.properties` |
 | _(v1.1)_ `CLAUDE_CONFIG_DIR` é variável reconhecida pelo CLI                                                                          | literal encontrado no jar do plugin oficial (já registrado no `HANDOUT.md`)                                                                          |
 | _(v1.1)_ `ToolWindowEx.emptyText`, `ShellStartupOptions.Builder.envVariables`, `JBTerminalPanel.addPreKeyEventHandler` existem em 262 | compilação bem-sucedida contra `intellijIdea("2026.2")`                                                                                              |
+| _(v1.2)_ `TerminalWidget.getText()` devolve scrollback + tela no CLASSIC, e string vazia fora dele | `javap -c` de `JBTerminalWidget.getText(TerminalPanel)`, de `JBTerminalWidget$TerminalWidgetBridge.getText` e do `default` da interface |
+| _(v1.2)_ Não há "copiar tudo" no engine CLASSIC | `Terminal.SelectAll` só é referenciada em `Terminal.ReworkedTerminalContextMenu` (plugin.xml do terminal); `TerminalSelectAllAction.update` exige `isReworkedTerminalEditor` |
+| _(v1.2)_ `sendCommandToExecute` não serve para falar com um TUI vivo | `javap -c` de `ShellTerminalWidget.executeCommand`: lança `IOException` quando `getTypedShellCommand()` não está vazio |
+| _(v1.2)_ O CLI tem o slash command `/export` | string no binário `claude` 2.1.220: `{type:"local-jsx", name:"export", description:"Export the current conversation to a file or clipboard", argumentHint:"[filename]"}` |
+| _(v1.2)_ O destino "clipboard" do `/export` depende de utilitário externo ausente nesta máquina | `grep` por `wl-copy`/`xclip`/`xsel`/`pbcopy` no binário + `command -v` (nenhum instalado; `XDG_SESSION_TYPE=wayland`) |
+| _(v1.2)_ Limite do scrollback vem de `terminal.buffer.max.lines.count` | `javap -c` de `JBTerminalSystemSettingsProviderBase.getBufferMaxLinesCount` |
+| _(v1.2)_ `CopyPasteManager.copyTextToClipboard` existe e `Content` é `UserDataHolder` | `javap` de `intellij.platform.editor.ui.jar` e de `com.intellij.ui.content.Content` |
+| _(v1.3)_ **O `/export` produz saída limpa**: conversa uma única vez, sem caixa de input nem barra de status | leitura do arquivo real gerado em 2026-08-01 16:23, `2026-08-01-162241-*.md`, 45 linhas |
+| _(v1.3)_ O buffer contém a conversa repetida, um frame por repintura | amostra colada pelo usuário: rodapé do 1º bloco marca `⧉ In README.md` e o do 2º, `⧉ In a.txt` — instantes diferentes |
+| _(v1.3)_ `TerminalPanel.selectAll()` é **público** — o que falta é ação registrada, não a capacidade | `javap` de `com.jediterm.terminal.ui.TerminalPanel` (corrige a redação da v1.2) |
+| _(v1.3)_ Existe listener de seleção público: `addSelectionListener(TerminalSelectionChangesListener)`, com `selectionChanged(TerminalSelection)` | `javap` de `TerminalPanel` e de `TerminalSelectionChangesListener` |
+| _(v1.3)_ Não há conversão célula→pixel pública (`myCharSize` é `protected`); posicionar o botão flutuante exige a posição do mouse | `javap -p` de `TerminalPanel` |
+| _(v1.3)_ O CLI suporta `--print --output-format stream-json --input-format stream-json --include-partial-messages` | `claude --help` v2.1.220 |
+| _(v1.3)_ `/export <arquivo>` grava **sem UI**, sobrescreve, cria diretórios e acrescenta `.txt` se faltar extensão; o argumento é usado cru (`r.trim()`) | implementação extraída do binário `claude` 2.1.220 (funções `azb`, `Y5b`, `u0n`) |
+| _(v1.3)_ `--ax-screen-reader` não tem restrição a `--print`, então vale em sessão interativa | `claude --help`: a descrição não traz a ressalva "(only works with --print)" presente em outras flags |
+| _(v1.3)_ `JBPopupFactory.createComponentPopupBuilder` + `setRequestFocus/setCancelOnClickOutside/setResizable/setMovable` e `JBPopup.show(RelativePoint)` existem em 262 | `javap` de `intellij.platform.ide.jar` e `intellij.platform.ide.core.jar` |
 
 **Não verificado (declarado como suposição):** semântica de
 `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` (Q-03); comportamento de builds anteriores a `262`
 (Q-08); alcance efetivo do customizer em widget customizado (Q-01 / T-4); comportamento do `Esc`
-sob o engine `REWORKED` (Q-10).
+sob o engine `REWORKED` (Q-10); ~~_(v1.2)_ comportamento do `/export` acionado por digitação
+simulada~~ ✅ verificado em T-3.11.
+
+~~_(v1.3)_ **Não verificado e bloqueante:** o argumento `[filename]` do `/export`~~ ✅ resolvido
+por leitura do binário — ver [Como o `/export` trata o argumento](#como-o-export-trata-o-argumento-lido-no-binário-não-suposto).
+
+_(v1.3)_ **Não verificado:** se o popup de RF-26 se comporta bem sob arraste rápido e troca de
+aba (T-3.15, T-3.16); e quanto o `--ax-screen-reader` de fato melhora a leitura no uso diário,
+que é o dado que faltava para decidir Q-14 (T-3.17).

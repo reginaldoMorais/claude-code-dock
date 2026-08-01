@@ -1,6 +1,8 @@
 package dev.reginaldomorais.claudedock.settings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** T-1.1 e T-1.2: valor padrão, persistência e caminho efetivo. */
@@ -31,5 +33,17 @@ class ClaudeDockSettingsTest {
     fun `espacos ao redor sao removidos`() {
         val settings = ClaudeDockSettings().apply { claudeExecutable = "  /opt/claude  " }
         assertEquals("/opt/claude", settings.effectiveExecutable())
+    }
+
+    @Test
+    fun `saida plana vem desligada e persiste ligada`() {
+        assertFalse(ClaudeDockSettings().flatOutput)
+
+        val source = ClaudeDockSettings().apply { flatOutput = true }
+        val target = ClaudeDockSettings()
+
+        target.loadState(source.state)
+
+        assertTrue(target.flatOutput)
     }
 }

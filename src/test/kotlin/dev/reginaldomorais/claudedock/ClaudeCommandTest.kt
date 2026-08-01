@@ -53,4 +53,27 @@ class ClaudeCommandTest {
     fun `valor vazio vira string vazia citada`() {
         assertEquals("''", ClaudeCommand.quote(""))
     }
+
+    @Test
+    fun `saida plana acrescenta a flag antes dos demais argumentos`() {
+        assertEquals("claude --ax-screen-reader", ClaudeCommand.newSession("claude", flatOutput = true))
+        assertEquals(
+            "claude --ax-screen-reader --resume",
+            ClaudeCommand.resumeSession("claude", flatOutput = true),
+        )
+    }
+
+    @Test
+    fun `saida plana desligada e o padrao`() {
+        assertEquals("claude", ClaudeCommand.newSession("claude"))
+        assertEquals("claude --resume", ClaudeCommand.resumeSession("claude"))
+    }
+
+    @Test
+    fun `saida plana convive com caminho citado`() {
+        assertEquals(
+            "'/opt/my tools/claude' --ax-screen-reader --resume",
+            ClaudeCommand.resumeSession("/opt/my tools/claude", flatOutput = true),
+        )
+    }
 }

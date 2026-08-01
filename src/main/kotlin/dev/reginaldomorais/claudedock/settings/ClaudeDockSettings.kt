@@ -20,6 +20,9 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
     /** Caminho do CLI. O padrão resolve pelo PATH. */
     var claudeExecutable: String = DEFAULT_EXECUTABLE
 
+    /** Acrescenta `--ax-screen-reader` às novas sessões: saída plana, sem bordas nem animação. */
+    var flatOutput: Boolean = false
+
     override fun getState(): ClaudeDockSettings = this
 
     override fun loadState(state: ClaudeDockSettings) {

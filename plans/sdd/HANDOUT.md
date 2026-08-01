@@ -10,22 +10,27 @@
 
 ## Estado atual
 
-**Fase: primeiro teste no IDE real feito. Três correções implementadas (SPEC v1.1). Falta revalidar.**
+**Fase: DEF-01 corrigido, RF-24/26/27 implementados (SPEC v1.3). Falta a validação manual.**
 
 | Artefato                                                         | Estado                                                   |
 | ---------------------------------------------------------------- | -------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)             |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.1 — RF-17, RF-18 e RF-19 incorporados               |
+| [SPEC.md](SPEC.md)                                               | ✅ v1.3 — DEF-01, RF-24/25/26 e Q-14 incorporados         |
 | `HANDOUT.md`                                                     | ✅ Este arquivo                                           |
-| Código do plugin                                                 | ✅ Implementado — compila, **34 testes passando**         |
+| Código do plugin                                                 | ✅ Implementado — compila, **51 testes passando**         |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente |
-| Primeiro teste manual no IDE                                     | ✅ Feito — janela abre e funciona; 2 defeitos achados     |
-| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados e testados unitariamente                 |
-| Revalidação manual (T-3.7, T-3.8, T-3.9)                         | ⏳ Pendente — exige rebuild, reinstalação e uso           |
-| Roteiros T-3.1 a T-3.6 completos                                 | ⏳ Parcial — falta a prova ponta a ponta do diff (T-3.2)  |
+| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)   |
+| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona    |
+| RF-22 (`/export`) — T-3.11                                       | ✅ **APROVADO** — saída limpa, verificada no arquivo gerado |
+| RF-21 (copiar buffer) — DEF-01                                   | ⚰️ **Substituído** por RF-24; buffer não é mais lido       |
+| RF-24 (cópia via `/export`), RF-26 (botão), RF-27 (saída plana) | ✅ Implementados e testados unitariamente                  |
+| R-13 (bloqueante de RF-24)                                       | ✅ **FECHADO** por leitura do binário, sem teste manual    |
+| Validação manual T-3.14 a T-3.17                                 | ⏳ Pendente — reinstalar o ZIP de 16:54                    |
+| Roteiros T-3.3 a T-3.6                                           | ⏳ Pendente                                               |
 
-**Próximo passo imediato:** `./gradlew buildPlugin`, reinstalar e rodar T-3.7/T-3.8/T-3.9
-(ver [Próximos passos](#próximos-passos)).
+**Próximo passo imediato:** reinstalar `build/distributions/claude-code-dock-0.1.0.zip` e rodar
+T-3.14 (cópia sem duplicação), T-3.15/T-3.16 (botão flutuante) e T-3.17 (saída plana — é o dado
+que decide se Q-14 continua de pé).
 
 ---
 
@@ -147,6 +152,25 @@ if (!e.isConsumed()) super.handleKeyEvent(e);
 | Nomear nossa tool window de `"Terminal"`                                  | Colide com a nativa                                                                                    |
 | Migrar para o engine `REWORKED`                                           | Caminho diferente (`Terminal.Escape` + EP `escapeHandler`); mudança grande, não investigada (Q-10)     |
 
+### Copiar e exportar: o que a plataforma dá e o que não dá (2026-08-01, tarde/3)
+
+> Mesma família de armadilha do `Esc`: **o comportamento depende do engine, não do widget.**
+
+| Fato                                                                                                                                                          | Como foi descoberto                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **`TerminalWidget.getText()` já devolve scrollback + tela** no CLASSIC — a seleção vai de `(0, -historyLinesCount)` a `(width, screenLinesCount-1)`, sob `buffer.lock()` | `javap -c` de `JBTerminalWidget.getText(TerminalPanel)` e do `TerminalWidgetBridge` |
+| Fora do CLASSIC o `default` da interface devolve **string vazia** — degrada, não lança                                                                        | `javap -c` da interface: `ldc ""` / `areturn`                             |
+| **Em Kotlin é `widget.getText()`, não `widget.text`** — ao contrário de `ttyConnector`, não é property                                                        | erro de compilação `Unresolved reference 'text'`                          |
+| **Não existe "copiar tudo" no CLASSIC.** `Terminal.SelectAll` só está no `Terminal.ReworkedTerminalContextMenu`, e seu `update()` exige `isReworkedTerminalEditor` | `plugin.xml` do terminal + `javap -c` de `TerminalSelectAllAction`         |
+| `sendCommandToExecute` **não serve** para falar com um TUI vivo: `ShellTerminalWidget.executeCommand` lança `IOException` se já houver texto digitado no prompt | `javap -c` de `executeCommand`                                            |
+| O CLI tem `/export`: `{type:"local-jsx", name:"export", description:"Export the current conversation to a file or clipboard", argumentHint:"[filename]"}`      | string extraída do binário `claude` 2.1.220                               |
+| **O destino "clipboard" do `/export` depende de `wl-copy`/`xclip`/`xsel` — nenhum instalado aqui** (Wayland). Delegar tudo ao CLI teria deixado o caso principal sem solução | `grep` no binário + `command -v`                                          |
+| Limite do scrollback vem do advanced setting `terminal.buffer.max.lines.count`                                                                                 | `javap -c` de `JBTerminalSystemSettingsProviderBase.getBufferMaxLinesCount` |
+| `CopyPasteManager.copyTextToClipboard` é estático; `Content` é `UserDataHolder` (dá para pendurar o widget na aba, sem mapa próprio)                          | `javap` de `intellij.platform.editor.ui.jar` e de `Content`               |
+
+**Lição:** uma ação registrada no IDE **não é** uma capacidade disponível. Ler o `update()` dela
+faz parte da verificação — senão o resultado é um botão morto.
+
 ### API de terminal disponível na build 262
 
 `AbstractTerminalRunner.startShellTerminalWidget` · `LocalTerminalDirectRunner.createTerminalRunner`
@@ -175,6 +199,10 @@ if (!e.isConsumed()) super.handleKeyEvent(e);
 | **D-13** | _(v1.1)_ O estado vazio usa `ToolWindowEx.emptyText` com links, e **não** recria sessão automaticamente ao reabrir a janela                  | Nativo, três linhas, e mantém a escolha com o usuário. Recriar sozinho exigiria listener de tool window e reabriria o debate de "quando é demais" — sem demanda comprovada                                                                                                                                                      |
 | **D-14** | _(v1.1)_ `CLAUDE_CONFIG_DIR` é **por projeto** e vive no arquivo de workspace; o executável continua por aplicação                           | Em IDEs JetBrains uma janela é um projeto, então projeto já entrega a granularidade pedida. Workspace e não `.idea/` versionado porque é caminho local de máquina e aponta para diretório com credenciais do CLI                                                                                                                |
 | **D-15** | _(v1.1)_ Uma única tela `projectConfigurable` mostra os dois campos, rotulando o escopo de cada um                                           | Duas telas para duas configurações seria burocracia. O rótulo ("Vale para todos os projetos" / "Somente este projeto") resolve a ambiguidade — mesmo padrão da tela de Terminal do IDE                                                                                                                                          |
+| **D-16** | _(v1.2)_ O `/export` é enviado por **escrita direta no `TtyConnector`**, não por `sendCommandToExecute`                                      | `sendCommandToExecute` cai em `ShellTerminalWidget.executeCommand`, que lança `IOException` quando já há texto digitado no prompt — a regra, e não a exceção, com um TUI vivo na frente. A escrita direta é o mesmo canal que o `ClaudeEscapeForwarder` já usa em produção                                                       |
+| **D-17** | _(v1.2)_ **Dois botões**, não um: copiar o buffer e disparar o `/export`                                                                     | São naturezas opostas e nenhuma substitui a outra. A cópia é o render literal (rápido, fiel à tela, com bordas de TUI); o `/export` é a transcrição limpa, produzida pelo CLI. Delegar tudo ao CLI não era opção: o destino "clipboard" dele exige `wl-copy`/`xclip`/`xsel`, ausentes nesta máquina                              |
+| **D-18** | _(v1.2)_ O widget fica pendurado no `Content` da aba por um `Key`, em vez de um mapa no serviço                                              | A referência morre junto com a aba, sem código de limpeza e sem risco de vazar widget de aba fechada                                                                                                                                                                                                                              |
+| **D-19** | _(v1.2)_ `readText`/`sendInput` moram em `ClaudeTerminalSessionFactory`, não nas ações                                                       | RNF-15 exige o contato com a API de terminal num arquivo só. As ações falam com `ClaudeDockSessions`, que sabe qual aba está selecionada                                                                                                                                                                                          |
 
 ### Correção registrada
 
@@ -200,43 +228,142 @@ não tocar no protocolo, e não porque executar o CLI fosse proibido.
 | **Q-09** | _(v1.1)_ `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto? Exigiria diálogo a cada "Nova sessão"                                            | 🟢 Baixo     |
 | **Q-10** | _(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`? Lá o caminho é `Terminal.Escape` + EP `escapeHandler`, não o pre-handler. Ligado a Q-04 | 🟡 Médio     |
 | **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável em `.idea/` em vez de ficar no workspace?                                                   | 🟢 Baixo     |
+| **Q-12** | _(v1.2)_ Vale passar `[filename]` ao `/export` e abrir o arquivo no editor? Economiza cliques, mas exige adivinhar a semântica do argumento     | 🟢 Baixo     |
+| **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos | 🟢 Baixo     |
 
 ---
 
 ## Próximos passos
 
 Concluído: ~~aprovação do SPEC~~ · ~~T-4~~ · ~~esqueleto Gradle~~ · ~~componentes + testes T-1.\*~~ ·
-~~`buildPlugin`~~ · ~~primeiro teste no IDE real~~ · ~~RF-17/RF-18/RF-19~~
+~~`buildPlugin`~~ · ~~primeiro teste no IDE real~~ · ~~RF-17/RF-18/RF-19~~ ·
+~~T-3.1/T-3.2 (diff ponta a ponta)~~ · ~~T-3.7/T-3.8/T-3.9~~ · ~~RF-21/RF-22~~
 
 **Pendente:**
 
-1. **Revalidar no IDE real** — rebuild e reinstalação, agora com os três ajustes:
+1. **Validar no IDE real** — o ZIP já está construído (16:54):
 
    ```sh
-   ./gradlew buildPlugin
    # Settings → Plugins → ⚙ → Install Plugin from Disk…
    #   build/distributions/claude-code-dock-0.1.0.zip
    ```
 
    Roteiro mínimo, com o plugin oficial ainda instalado:
-   - **T-3.7** — rodar `/usage` e sair com `Esc`; o foco tem de **ficar** no terminal;
-   - **T-3.8** — fechar a última aba e usar os links do estado vazio;
-   - **T-3.9** — definir `CLAUDE_CONFIG_DIR` em Settings → Tools → Claude Code Dock, abrir nova
-     sessão e conferir `echo $CLAUDE_CONFIG_DIR` **e** `echo $CLAUDE_CODE_SSE_PORT` — os dois
-     precisam estar presentes;
-   - **T-3.2** (ainda em aberto) — pedir uma edição de arquivo e confirmar que o **diff abre no
-     visualizador do IDE**. É a prova de ponta a ponta que falta;
-   - **T-5.2 / T-5.4** — `Ctrl+Esc` do oficial e `Shift+Esc` do IDE seguem funcionando.
+   - **T-3.14** — conversa longa, janela redimensionada no meio, "Copiar Conversa": tem de vir
+     **uma vez só**. E conferir que não sobra `claude-dock-export-*.md` em `/tmp`;
+   - **T-3.15 / T-3.16** — selecionar com o mouse: o botão aparece, copia só o trecho, some ao
+     desfazer — e digitar em seguida ainda vai para a sessão (foco não roubado);
+   - **T-3.17** — ligar "Saída plana" em Settings e comparar. **É o dado que decide Q-14**;
+   - **T-3.12** — com a última aba fechada, acionar os botões: notificam, não quebram;
+   - **regressão T-3.7** — `/usage` + `Esc`: agora três caminhos escrevem no mesmo
+     `TtyConnector` (Esc, `/export` e o comando inicial).
 
 2. **Testes de integração T-2.\*** — tool window registrada, isolamento de abas, liberação de
-   PTY ao fechar aba, e o comportamento com `TerminalEngine.REWORKED` vs `CLASSIC` (Q-04, Q-10).
+   PTY ao fechar aba, e o comportamento com `TerminalEngine.REWORKED` vs `CLASSIC` (Q-04, Q-10,
+   CB-26 — no REWORKED a cópia devolve vazio).
 3. **Q-02** — investigar a ambiguidade de sessão dupla durante o uso real.
-4. Repetir a instalação nos demais IDEs (T-3.5).
+4. Repetir a instalação nos demais IDEs (T-3.5); T-3.3, T-3.4 e T-3.6 seguem em aberto.
 5. Registrar achados neste arquivo.
 
 ---
 
 ## Log
+
+### 2026-08-01 (noite) — RF-24, RF-26 e RF-27 implementados
+
+- **R-13 fechado sem teste manual.** `/export` é `local-jsx` e exige TUI, então não dá para
+  exercitá-lo por `-p`. Em vez de chutar, extraí a implementação do binário `claude` 2.1.220
+  (funções `azb`, `Y5b`, `u0n`). Quatro respostas que definiram o código:
+  - **com argumento não há UI nenhuma** (`return null` logo após gravar);
+  - `writeFile` comum → **sobrescreve** sem perguntar;
+  - `mkdir(dirname, {recursive:true})` → cria a árvore;
+  - **sem extensão o CLI acrescenta `.txt`** → o destino tem de terminar em `.md`, senão o
+    arquivo aparece em outro caminho e nós esperaríamos para sempre pelo caminho errado.
+- **A pegadinha que quase virou bug:** o argumento é `r.trim()` **cru**. Se eu tivesse reusado
+  `ClaudeCommand.quote` — como o T-1.13 que eu mesmo escrevi no SPEC v1.3 mandava —, o CLI teria
+  criado um arquivo chamado `'/tmp/....md'`, **com aspas no nome**. É o inverso de RNF-08: lá o
+  perigo é o shell, aqui quem lê a string é o CLI e proteger contra shell quebra a chamada. O
+  T-1.13 foi corrigido antes de virar código.
+- **RF-24:** `ClaudeSessionExport` cria o temporário (`createTempFile` já nasce `rw-------` em
+  POSIX, e o CLI grava por cima sem mudar o modo — é o que satisfaz RF-25), envia
+  `/export <caminho>\r`, sonda o arquivo até deixar de estar vazio e apaga em `finally`.
+  Sondagem simples em vez de `WatchService`, marcada com `ponytail:`.
+- **RF-26:** botão flutuante em `mouseReleased`, não em `selectionChanged` — durante o arraste a
+  seleção muda a cada pixel e o popup piscaria. O `selectionChanged` ficou só para **esconder**.
+  `setRequestFocus(false)` para não roubar o foco da sessão.
+- **RF-27:** caixa "Saída plana (`--ax-screen-reader`)" nas configurações, desligada por padrão.
+  É a alternativa barata a Q-14: mede quanto do incômodo era só a moldura do TUI antes de
+  cogitar reescrever a UI. **Efeito colateral a observar:** menos animação pode significar menos
+  repintura — e portanto menos DEF-01 no buffer.
+- Resultado: **51 testes, 0 falhas**, sem warnings. ZIP de 50 KB às 16:54.
+- **Ainda não validado:** T-3.14 a T-3.17. Em especial, se o popup se comporta sob arraste
+  rápido e troca de aba.
+
+### 2026-08-01 (tarde/4) — DEF-01 e SPEC v1.3
+
+Primeiro uso real dos dois botões. **O `/export` passou** — o arquivo gerado às 16:23 tem a
+conversa uma única vez, sem rodapé. **A cópia do buffer falhou**: traz a conversa duas vezes,
+cada uma com banner e barra de status.
+
+- **Causa (DEF-01):** o TUI é Ink e repinta o frame **inteiro** a cada resize da tool window.
+  Cada repintura empurra mais uma cópia da conversa para o scrollback. `getText()` está certo —
+  o buffer é que tem a conversa repetida. A prova está na própria amostra: o rodapé do primeiro
+  bloco marca `⧉ In README.md` e o do segundo, `⧉ In a.txt`. **Dois frames, instantes
+  diferentes.**
+- **Por que não dá para consertar por heurística:** cortar do último banner em diante só
+  funciona enquanto a conversa cabe na tela — passando disso, trunca em silêncio, que é pior.
+- **Correção especificada (RF-24):** a cópia passa a usar o `/export` para arquivo temporário,
+  lê, joga no clipboard e apaga. Isso responde Q-12, que a v1.2 tinha deixado em aberto.
+  **Bloqueado por R-13/T-3.13:** não sei se o argumento `[filename]` aceita caminho absoluto.
+  Testar à mão antes de escrever qualquer linha.
+- **Botão flutuante na seleção (RF-26):** viável e barato. `TerminalPanel.addSelectionListener`
+  é público, `getSelectedText()` já existe. Não há célula→pixel público (`myCharSize` é
+  `protected`), então o botão se posiciona pela posição do mouse.
+- **Markdown viewer (Q-14): analisado e recusado.** É possível — o CLI tem
+  `--print --output-format stream-json --input-format stream-json`. Mas descarta o terminal e
+  tudo que ele dá de graça (aprovação de ferramentas, plan mode, slash commands, `--resume`), e
+  acopla a um formato JSON sem contrato de estabilidade. Seria outro produto, para ganhar
+  apresentação e não capacidade.
+- **Correção de fato registrada:** a v1.2 afirmou que não havia como selecionar o buffer inteiro
+  no CLASSIC. `TerminalPanel.selectAll()` **é público**. O que não existe é ação registrada que
+  o alcance. A redação foi corrigida no SPEC.
+- **Lição (Achado 16):** o trade-off nº 1 da v1.2 já dizia "a cópia é o render, não a conversa".
+  Nomear o trade-off não é aceitá-lo pelo usuário — quando a entrega é uma aproximação do que
+  foi pedido, isso é item de validação, não ressalva.
+- Nada foi implementado nesta rodada: só diagnóstico e especificação.
+
+### 2026-08-01 (tarde/3) — Cópia e exportação da sessão (SPEC v1.2)
+
+T-3.1 e T-3.2 aprovados pelo usuário: **a janela funciona e o diff abre no IDE de ponta a
+ponta.** Com a premissa central provada na prática, a sessão virou para ergonomia: a extensão
+de VS Code tem um ícone que copia o conteúdo da janela, e aqui não havia equivalente.
+
+- **A investigação começou certa desta vez.** Em vez de varrer a plataforma atrás de "como
+  copiar", parti do que a nossa factory já devolve: `TerminalWidget`. A interface **já tem**
+  `getText()`, e no CLASSIC ela lê scrollback + tela inteira. A funcionalidade custou uma
+  chamada. (Contraste com a metodologia do `Esc` na tarde/2 — a lição pegou.)
+- **Mas o reuso óbvio era um botão morto.** `Terminal.SelectAll` e `Terminal.CopySelectedText`
+  existem no IDE e **não funcionam para nós**: o `update()` das duas exige um `Editor` de
+  terminal reformulado, que o JediTerm clássico não tem. Ler o `update()` antes de referenciar
+  a ação foi o que evitou entregar um ícone que não faz nada. Virou o Achado 14 do SPEC.
+- **RF-21 — "Copiar Sessão".** `readText` → `ClaudeSessionText.normalize` → `CopyPasteManager`.
+  A normalização apara espaços à direita e o bloco de linhas vazias abaixo do prompt; sem ela,
+  colar traz dezenas de linhas em branco.
+- **RF-22 — "Exportar Conversa".** O CLI já tem `/export` ("to a file or clipboard"). O botão
+  escreve `"/export\r"` **direto no `TtyConnector`** — `sendCommandToExecute` não serve, porque
+  `ShellTerminalWidget.executeCommand` lança `IOException` se já houver texto digitado no
+  prompt, que é a regra com um TUI vivo (D-16).
+- **Por que dois botões e não um** (D-17): a cópia é o render literal, o `/export` é a
+  transcrição limpa, e nenhum substitui o outro. Delegar tudo ao CLI **não era opção**: o
+  destino "clipboard" do `/export` depende de `wl-copy`/`xclip`/`xsel`, e **nenhum está
+  instalado** nesta máquina (Wayland). Ou seja, o caso principal ficaria sem solução.
+- Um tropeço de compilação que vale registrar: **`widget.text` não resolve em Kotlin** —
+  `getText()` não é property nesta interface, ao contrário de `ttyConnector`. Chamar como
+  função resolve.
+- Resultado: **39 testes, 0 falhas** (eram 34). ZIP de 40 KB gerado às 16:12.
+- **Ainda não validado:** nada disso foi exercitado no IDE. T-3.10, T-3.11 e T-3.12 são a
+  próxima ação, e R-12 (o autocomplete de slash command reagindo ao `\r`) é o ponto de dúvida
+  real.
 
 ### 2026-08-01 (tarde/2) — Primeiro teste no IDE real e SPEC v1.1
 

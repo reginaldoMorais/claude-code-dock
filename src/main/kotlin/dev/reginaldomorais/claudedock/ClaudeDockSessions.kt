@@ -7,16 +7,21 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.terminal.ui.TerminalWidget
 import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.content.ContentManager
 import dev.reginaldomorais.claudedock.settings.ClaudeDockConfigurable
 import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
+import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Gerencia as abas de sessão dentro da tool window dedicada.
@@ -27,13 +32,18 @@ import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
 @Service(Service.Level.PROJECT)
 class ClaudeDockSessions(private val project: Project) {
 
+    /** Guarda contra dois `/export` simultâneos na mesma janela (CB-32). */
+    private val exportInProgress = AtomicBoolean(false)
+
     /** Sessão nova (RF-07). Único ponto que monta o comando, para não duplicar a regra. */
-    fun openNewSession() =
-        openSession(ClaudeCommand.newSession(ClaudeDockSettings.getInstance().effectiveExecutable()))
+    fun openNewSession() = ClaudeDockSettings.getInstance().let {
+        openSession(ClaudeCommand.newSession(it.effectiveExecutable(), it.flatOutput))
+    }
 
     /** Retomada de conversa anterior (RF-08). */
-    fun openResumeSession() =
-        openSession(ClaudeCommand.resumeSession(ClaudeDockSettings.getInstance().effectiveExecutable()))
+    fun openResumeSession() = ClaudeDockSettings.getInstance().let {
+        openSession(ClaudeCommand.resumeSession(it.effectiveExecutable(), it.flatOutput))
+    }
 
     /**
      * Abre uma sessão em nova aba, ativando a tool window.
@@ -84,6 +94,8 @@ class ClaudeDockSessions(private val project: Project) {
         content.isCloseable = true
         content.setDisposer(sessionDisposable)
         content.preferredFocusableComponent = widget.component
+        // A referência vive junto com a aba: fechar a aba a leva embora, sem mapa para limpar.
+        content.putUserData(SESSION_WIDGET, widget)
 
         contentManager.addContent(content)
         contentManager.setSelectedContent(content)
@@ -97,6 +109,77 @@ class ClaudeDockSessions(private val project: Project) {
             }
         }, sessionDisposable)
     }
+
+    /**
+     * Copia a conversa da aba selecionada para a área de transferência (RF-24).
+     *
+     * Passa pelo `/export` do CLI, e não pelo buffer do terminal: o buffer traz a conversa
+     * repetida, uma cópia por repintura do TUI (DEF-01). Silencioso no sucesso, como qualquer
+     * botão de copiar do IDE.
+     */
+    fun copySelectedSession() {
+        val widget = selectedWidget()
+            ?: return notify("Nenhuma sessão aberta para copiar.", NotificationType.WARNING)
+
+        // Um /export por vez: dois em paralelo disputariam a mesma sessão (CB-32).
+        if (!exportInProgress.compareAndSet(false, true)) {
+            return notify("Já há uma cópia em andamento.", NotificationType.INFORMATION)
+        }
+
+        val target = try {
+            ClaudeSessionExport.createTarget()
+        } catch (e: IOException) {
+            exportInProgress.set(false)
+            LOG.warn("Não foi possível criar o arquivo temporário do export", e)
+            return notify("Não foi possível preparar a cópia: ${e.message}", NotificationType.ERROR)
+        }
+
+        if (!ClaudeTerminalSessionFactory.sendInput(widget, ClaudeSessionExport.command(target))) {
+            ClaudeSessionExport.delete(target)
+            exportInProgress.set(false)
+            return notify("A sessão ainda não iniciou; tente de novo em instantes.", NotificationType.WARNING)
+        }
+
+        // A espera é por disco: nunca na EDT (RNF-03).
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val text = ClaudeSessionExport.awaitContent(target)
+
+                ApplicationManager.getApplication().invokeLater {
+                    if (project.isDisposed) return@invokeLater
+                    if (text == null) {
+                        notify(
+                            "Não foi possível obter a conversa. A sessão está respondendo?",
+                            NotificationType.WARNING,
+                        )
+                    } else {
+                        CopyPasteManager.copyTextToClipboard(text)
+                    }
+                }
+            } finally {
+                // O arquivo carrega a conversa: some com ou sem sucesso (RF-25, R-14).
+                ClaudeSessionExport.delete(target)
+                exportInProgress.set(false)
+            }
+        }
+    }
+
+    /**
+     * Pede ao próprio CLI a transcrição da conversa, via slash command `/export` (RF-22).
+     *
+     * O CR final equivale ao Enter: quem apresenta as opções de destino é o Claude Code.
+     */
+    fun exportSelectedSession() {
+        val widget = selectedWidget()
+            ?: return notify("Nenhuma sessão aberta para exportar.", NotificationType.WARNING)
+
+        if (!ClaudeTerminalSessionFactory.sendInput(widget, EXPORT_COMMAND)) {
+            notify("A sessão ainda não iniciou; tente de novo em instantes.", NotificationType.WARNING)
+        }
+    }
+
+    private fun selectedWidget(): TerminalWidget? =
+        findToolWindow()?.contentManager?.selectedContent?.getUserData(SESSION_WIDGET)
 
     private fun findToolWindow(): ToolWindow? =
         ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID)
@@ -132,6 +215,12 @@ class ClaudeDockSessions(private val project: Project) {
     companion object {
         const val TOOL_WINDOW_ID = "Claude Code Dock"
         const val NOTIFICATION_GROUP = "ClaudeCodeDock"
+
+        /** Slash command do CLI, seguido de CR — o mesmo que digitar e pressionar Enter. */
+        private const val EXPORT_COMMAND = "/export\r"
+
+        /** Liga a aba ao seu widget, para as ações que operam sobre a sessão selecionada. */
+        private val SESSION_WIDGET = Key.create<TerminalWidget>("ClaudeDockSessionWidget")
 
         private val LOG = Logger.getInstance(ClaudeDockSessions::class.java)
 

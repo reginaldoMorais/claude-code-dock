@@ -2,6 +2,7 @@ package dev.reginaldomorais.claudedock
 
 import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.terminal.ui.TerminalWidget
 import dev.reginaldomorais.claudedock.settings.ClaudeDockProjectSettings
@@ -21,6 +22,8 @@ import java.io.File
  */
 object ClaudeTerminalSessionFactory {
 
+    private val LOG = Logger.getInstance(ClaudeTerminalSessionFactory::class.java)
+
     /**
      * Cria uma sessão de terminal na raiz do projeto e executa [command] nela.
      *
@@ -38,8 +41,40 @@ object ClaudeTerminalSessionFactory {
         val widget = runner.startShellTerminalWidget(parent, options, true)
         // Fora da tool window "Terminal" a plataforma engole o Esc (RF-17).
         ClaudeEscapeForwarder.install(widget)
+        // Cópia por seleção com o mouse (RF-26); some junto com a aba.
+        ClaudeSelectionCopyButton.install(widget, parent)
         widget.sendCommandToExecute(command)
         return widget
+    }
+
+    /**
+     * Conteúdo do buffer da sessão: scrollback mais a tela visível (RF-21).
+     *
+     * No engine CLASSIC a plataforma monta a seleção do topo do histórico até a última linha
+     * da tela. Fora dele a interface cai no seu `default`, que devolve texto vazio — o botão
+     * de copiar avisa em vez de quebrar (CB-26).
+     */
+    fun readText(widget: TerminalWidget): CharSequence = widget.getText()
+
+    /**
+     * Escreve [input] direto no PTY, como se o usuário tivesse digitado (RF-22).
+     *
+     * É o mesmo caminho do [ClaudeEscapeForwarder]. `sendCommandToExecute` não serve aqui:
+     * ele lança `IOException` quando já há texto digitado no prompt, o que é a regra para
+     * um TUI vivo como o do Claude Code.
+     *
+     * @return `false` quando ainda não há PTY ou a escrita falhou.
+     */
+    fun sendInput(widget: TerminalWidget, input: String): Boolean {
+        val connector = widget.ttyConnector ?: return false
+
+        return try {
+            connector.write(input)
+            true
+        } catch (e: Exception) {
+            LOG.warn("Falha ao escrever na sessão do Claude Code", e)
+            false
+        }
     }
 
     /**

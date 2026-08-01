@@ -6,6 +6,8 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ex.ToolWindowEx
 import com.intellij.ui.SimpleTextAttributes
+import dev.reginaldomorais.claudedock.actions.CopySessionAction
+import dev.reginaldomorais.claudedock.actions.ExportSessionAction
 import dev.reginaldomorais.claudedock.actions.NewSessionAction
 import dev.reginaldomorais.claudedock.actions.ResumeSessionAction
 import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
@@ -19,10 +21,18 @@ import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
 class ClaudeToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        toolWindow.setTitleActions(listOf(NewSessionAction(), ResumeSessionAction()))
+        toolWindow.setTitleActions(
+            listOf(
+                NewSessionAction(),
+                ResumeSessionAction(),
+                CopySessionAction(),
+                ExportSessionAction(),
+            ),
+        )
         installEmptyState(project, toolWindow)
 
-        val command = ClaudeCommand.newSession(ClaudeDockSettings.getInstance().effectiveExecutable())
+        val settings = ClaudeDockSettings.getInstance()
+        val command = ClaudeCommand.newSession(settings.effectiveExecutable(), settings.flatOutput)
         ClaudeDockSessions.getInstance(project).addSession(toolWindow.contentManager, command)
     }
 
