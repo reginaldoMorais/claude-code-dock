@@ -1,8 +1,11 @@
 package dev.reginaldomorais.claudedock
 
 import com.intellij.util.ui.JBUI
-import java.awt.Color
+import java.awt.Component
+import java.awt.Graphics
+import java.awt.Insets
 import javax.swing.JComponent
+import javax.swing.border.Border
 
 /**
  * Afasta o conteúdo da sessão das bordas da tool window.
@@ -19,19 +22,46 @@ object ClaudeSessionPadding {
     /**
      * [padding] vem em pixels lógicos das configurações; o `JBUI` escala para monitores HiDPI.
      *
-     * [background] é a cor do painel do terminal. O `JPanel` do widget não define fundo próprio,
-     * então sem ela o respiro sairia na cor de painel do tema, e não na do terminal. Vem nulo
-     * quando não há painel JediTerm por trás (engine diferente do CLASSIC) — nesse caso aplica-se
-     * só a borda, e quem pinta o fundo é o componente do próprio engine.
+     * [terminalPanel] é o painel do JediTerm, usado só como fonte de cor. Vem nulo quando não há
+     * painel por trás (engine diferente do CLASSIC): aí a faixa fica transparente e quem a pinta
+     * é a tool window.
      */
-    fun apply(component: JComponent, background: Color?, padding: Int) {
-        component.border = JBUI.Borders.empty(padding)
+    fun apply(component: JComponent, terminalPanel: JComponent?, padding: Int) {
+        component.isOpaque = false
+        component.border =
+            if (terminalPanel == null) JBUI.Borders.empty(padding)
+            else TerminalBackgroundBorder(terminalPanel, padding)
+    }
 
-        if (background != null) {
-            // ponytail: cor lida uma vez. Trocar de tema com a sessão aberta deixa o respiro na
-            // cor antiga até a aba ser recriada; ouvir LafManagerListener só se incomodar.
-            component.isOpaque = true
-            component.background = background
+    /**
+     * Faixa pintada com o fundo do terminal, lido **a cada pintura**.
+     *
+     * `TerminalPanel.getBackground()` delega a `getWindowBackground()` e é recalculado a cada
+     * chamada: copiar a cor uma vez deixaria a faixa na cor antiga quando o usuário trocasse de
+     * tema com a sessão aberta. Lendo no `paintBorder`, a faixa acompanha sem listener nenhum.
+     */
+    private class TerminalBackgroundBorder(
+        private val terminalPanel: JComponent,
+        private val padding: Int,
+    ) : Border {
+
+        override fun getBorderInsets(c: Component): Insets = JBUI.insets(padding)
+
+        override fun isBorderOpaque(): Boolean = true
+
+        override fun paintBorder(c: Component, g: Graphics, x: Int, y: Int, width: Int, height: Int) {
+            val insets = getBorderInsets(c)
+            g.color = terminalPanel.background
+
+            g.fillRect(x, y, width, insets.top)
+            g.fillRect(x, y + height - insets.bottom, width, insets.bottom)
+            g.fillRect(x, y + insets.top, insets.left, height - insets.top - insets.bottom)
+            g.fillRect(
+                x + width - insets.right,
+                y + insets.top,
+                insets.right,
+                height - insets.top - insets.bottom,
+            )
         }
     }
 }

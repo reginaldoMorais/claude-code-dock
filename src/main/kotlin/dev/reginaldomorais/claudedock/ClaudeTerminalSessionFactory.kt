@@ -48,7 +48,7 @@ object ClaudeTerminalSessionFactory {
         // Respiro entre o conteúdo e as bordas da janela; o JediTerm só reserva 4px à esquerda.
         ClaudeSessionPadding.apply(
             widget.component,
-            JBTerminalWidget.asJediTermWidget(widget)?.terminalPanel?.background,
+            JBTerminalWidget.asJediTermWidget(widget)?.terminalPanel,
             ClaudeDockSettings.getInstance().effectivePadding(),
         )
         widget.sendCommandToExecute(command)
