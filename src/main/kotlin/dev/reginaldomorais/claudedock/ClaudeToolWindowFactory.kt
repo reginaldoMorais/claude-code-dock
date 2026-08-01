@@ -31,8 +31,9 @@ class ClaudeToolWindowFactory : ToolWindowFactory, DumbAware {
         )
         installEmptyState(project, toolWindow)
 
-        val settings = ClaudeDockSettings.getInstance()
-        val command = ClaudeCommand.newSession(settings.effectiveExecutable(), settings.flatOutput)
+        val command = ClaudeCommand.newSession(
+            ClaudeDockSettings.getInstance().effectiveExecutable(),
+        )
         ClaudeDockSessions.getInstance(project).addSession(toolWindow.contentManager, command)
     }
 

@@ -20,9 +20,6 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
     /** Caminho do CLI. O padrão resolve pelo PATH. */
     var claudeExecutable: String = DEFAULT_EXECUTABLE
 
-    /** Acrescenta `--ax-screen-reader` às novas sessões: saída plana, sem bordas nem animação. */
-    var flatOutput: Boolean = false
-
     /** Respiro entre o conteúdo da sessão e as bordas da janela, em pixels lógicos. */
     var sessionPadding: Int = DEFAULT_PADDING
 

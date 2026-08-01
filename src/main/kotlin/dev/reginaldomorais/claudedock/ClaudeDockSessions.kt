@@ -37,12 +37,12 @@ class ClaudeDockSessions(private val project: Project) {
 
     /** Sessão nova (RF-07). Único ponto que monta o comando, para não duplicar a regra. */
     fun openNewSession() = ClaudeDockSettings.getInstance().let {
-        openSession(ClaudeCommand.newSession(it.effectiveExecutable(), it.flatOutput))
+        openSession(ClaudeCommand.newSession(it.effectiveExecutable()))
     }
 
     /** Retomada de conversa anterior (RF-08). */
     fun openResumeSession() = ClaudeDockSettings.getInstance().let {
-        openSession(ClaudeCommand.resumeSession(it.effectiveExecutable(), it.flatOutput))
+        openSession(ClaudeCommand.resumeSession(it.effectiveExecutable()))
     }
 
     /**
