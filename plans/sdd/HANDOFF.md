@@ -4,13 +4,13 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-01
+- **Última atualização:** 2026-08-02
 
 ---
 
 ## Estado atual
 
-**Fase: em uso diário. SPEC v1.4 — RF-27 removido, RF-28 e RF-29 entregues e validados no IDE.**
+**Fase: especificação (SDD v1.5). Piper TTS adicionado — RF-30, RF-31, RF-32 especificados; Design, testes e achados criados.**
 
 | Artefato                                                         | Estado                                                          |
 | ---------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -522,3 +522,55 @@ pedida. Os três viraram RF-17, RF-18 e RF-19.
 - Nota metodológica: uma verificação inicial com `grep` sobre arquivos `.class` produziu
   **falsos negativos** por tratamento de binário; corrigida com `grep -a` após um teste de
   controle. Vale lembrar em futuras investigações de bytecode.
+
+### 2026-08-02 (manhã/tarde) — Especificação SDD v1.5: Piper TTS
+
+**Contexto:** Usuário pediu tocar em áudio, via Piper TTS do Linux, o texto selecionado na
+sessão. Botão de play próximo ao de copiar (RF-26 existente); botões de pause/stop num menu
+suspenso no cabeçalho; play desabilitado se Piper não disponível. Executável + modelo configuráveis.
+Única reprodução ativa por vez. Sem gerência de modelos, sem seletores de voz/velocidade, sem fila.
+
+**Fase 1 — Descoberta (adiantada):** Verificação empírica do ambiente (SEM re-implementar):
+
+- `piper-tts` 1.4.2 está instalado, acessível via `~/.pyenv/shims/piper`.
+- Modelo PT-BR de voz está em `~/.claude/piper-voices/pt_BR-faber-medium.onnx` (63 MB).
+- Síntese funciona: `echo "teste" | piper -m <modelo> --output-raw` → PCM 22050 Hz, 16-bit,
+  mono, little-endian, sem erros.
+- **Descoberta crítica:** Java Sound (`javax.sound.sampled`) consegue reproduzir direto esse PCM,
+  com mixer via ALSA/PipeWire. Não precisa chamar `aplay`/`paplay` externamente. T-4 dessa feature
+  (a premissa de que playback é viável) foi validada empiricamente antes de especificar.
+- **Limite do Piper:** requer `-m MODEL` obrigatoriamente — sem padrão como no `claude`. Logo,
+  "Piper disponível" = executável + arquivo modelo válido, não só o executável.
+
+**Fase 2 — Especificação:** SPEC.md v1.4 → v1.5 (mesma abordagem que as 4 rodadas anteriores):
+
+- Novos objetivos: tocar seleções em áudio.
+- Novos RF-30/31/32: play button, pause/resume/stop menu, detecção do Piper + modelo, config.
+- Novos RNF-19-23: acoplamento único (espelhando RNF-15 da API de terminal), síntese fora da EDT,
+  nenhum log de áudio/texto, limpeza de recurso de mixer, única reprodução ativa.
+- Novos fluxos J (tocar), J2 (pausar/retomar), G/H/I (erros: Piper não encontrado, modelo não
+  configurado, síntese falha).
+- Design Técnico: `ClaudePiperPlayback` (único acoplamento com Piper + javax.sound.sampled),
+  `ClaudeTtaSessions` (estado único por projeto), estensão de `ClaudeSelectionCopyButton`,
+  menu "Áudio" no cabeçalho via `DefaultActionGroup(popup=true)`, novos campos em settings.
+- Novos CB-38-42 (edge cases específicos de TTS).
+- Novos R-18-22 (riscos de modelagem, CPU-bound, latência, mixer indisponível).
+- Novos T-1.22-27 (unit tests para síntese, playback, persistência de configuração).
+- Novos T-3.21-27 (E2E: botão play visível, habilitado/desabilitado, pausar, parar, seleção grande).
+- Novos CA-20-24 (acceptance criteria para síntese, play, pausa, stop, configuração).
+- Novas Q-18-20 (open questions sobre seleção grande, caching de canSynthesize(), timeout).
+- Novos Achados 21-23 (revisão crítica v1.5): threading é trivial com IntelliJ API,
+  Java Sound suficiente para playback local, configuração manual de modelo é a decisão certa.
+- Evidências registradas na Rastreabilidade: Piper detectado, modelo encontrado, síntese testada,
+  mixer disponível, DefaultActionGroup funciona em setTitleActions, PersistentStateComponent
+  acomoda novos campos.
+
+**Decisões (implícitas no design):**
+
+- D-26: Sem autodetecção de modelos; usuário configura manualmente (decisão de "responsabilidade").
+- D-27: Uma única reprodução ativa; novo play interrompe anterior sem fila (YAGNI).
+- D-28: Síntese/playback fora da EDT via `executeOnPooledThread` (standard IntelliJ pattern).
+
+**Resultado:** SPEC.md + HANDOFF.md atualizados. Nenhum código Kotlin alterado. Pendente: aprovação
+da comunidade/usuário. Próximo: implementação de Fase 2.
+
