@@ -45,8 +45,8 @@ object ClaudeSessionLoading {
      */
     private const val VISIBLE_MS = 3_000
 
-    /** O ícone da tool window, ampliado — é SVG, então cresce sem borrar. */
-    private const val ICON_SCALE = 3.0f
+    /** A logo, ampliada — é SVG, então cresce sem borrar. */
+    private const val ICON_SCALE = 9.0f
 
     /** Tipadas como `Any` de propósito: ver a nota sobre overloads em [wrap]. */
     private val BOTTOM_LAYER: Any = JLayeredPane.DEFAULT_LAYER
@@ -128,5 +128,5 @@ object ClaudeSessionLoading {
     }
 
     private val CLAUDE_ICON =
-        IconLoader.getIcon("/icons/claudeDock.svg", ClaudeSessionLoading::class.java)
+        IconLoader.getIcon("/icons/claudeDuck.svg", ClaudeSessionLoading::class.java)
 }

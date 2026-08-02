@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src/main/resources/icons/claudeDuck.svg" alt="Claude Code Dock" width="128">
+</p>
+
 # Claude Code Dock - JetBrains Plugin
 
 Plugin pessoal para JetBrains que abre uma janela separada dentro do IDE, onde possamos interagir com o Claude Code de forma mais fluida, com cópia de texto, histórico de conversas, e talvez até integração com o código do projeto.
@@ -48,12 +52,12 @@ Roda o IntelliJ Plugin Verifier contra as IDEs recomendadas.
 
 Parâmetros ficam em [gradle.properties](gradle.properties):
 
-| Propriedade | Valor | Descrição |
-| --- | --- | --- |
-| `pluginGroup` | `dev.reginaldomorais.claudedock` | groupId do artefato |
-| `pluginVersion` | `0.1.0` | versão do plugin |
-| `platformVersion` | `2026.2` | IntelliJ IDEA usado na compilação |
-| `pluginSinceBuild` | `252` | build mínima suportada |
+| Propriedade        | Valor                            | Descrição                         |
+| ------------------ | -------------------------------- | --------------------------------- |
+| `pluginGroup`      | `dev.reginaldomorais.claudedock` | groupId do artefato               |
+| `pluginVersion`    | `0.1.0`                          | versão do plugin                  |
+| `platformVersion`  | `2026.2`                         | IntelliJ IDEA usado na compilação |
+| `pluginSinceBuild` | `252`                            | build mínima suportada            |
 
 A partir de 2025.3 (253) a JetBrains unificou a distribuição — não há mais IC
 publicada separadamente, então compilamos contra a distribuição única.
