@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 plugins {
@@ -52,5 +53,7 @@ intellijPlatform {
 tasks {
     test {
         useJUnit()
+        // Sem isto o log do CI mostra só a linha da exceção, sem os valores comparados.
+        testLogging.exceptionFormat = TestExceptionFormat.FULL
     }
 }
