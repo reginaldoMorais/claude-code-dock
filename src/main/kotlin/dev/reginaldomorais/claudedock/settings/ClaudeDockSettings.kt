@@ -23,6 +23,11 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
     /** Respiro entre o conteúdo da sessão e as bordas da janela, em pixels lógicos. */
     var sessionPadding: Int = DEFAULT_PADDING
 
+    /** Tecla que representa Esc (mantida por compatibilidade, sempre Backspace agora). */
+    @Deprecated("Sempre Backspace em GoLand; Esc em IntelliJ")
+    var escapeKeyName: String = "BACKSPACE"
+
+
     override fun getState(): ClaudeDockSettings = this
 
     override fun loadState(state: ClaudeDockSettings) {
