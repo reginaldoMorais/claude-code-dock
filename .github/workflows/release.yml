@@ -1,0 +1,51 @@
+# Publica uma release a cada tag `vX.Y.Z`.
+#
+# A tag é a única fonte da versão: `pluginVersion` chega por `-P`, que tem precedência sobre o
+# `gradle.properties`. O arquivo no repositório continua sendo só o valor de desenvolvimento.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Necessário para o `gh release create` escrever no repositório.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # O `--generate-notes` precisa do histórico para montar o changelog desde a tag anterior.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          # Mesmo toolchain declarado no build.gradle.kts.
+          java-version: 21
+
+      # Cacheia ~/.gradle: sem isso, cada release rebaixa o download da plataforma (~1,5 GB).
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: ./gradlew "-PpluginVersion=${TAG#v}" test buildPlugin
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          # Tag com hífen (v1.0.0-rc1) vira pré-release; vazio some na expansão sem aspas.
+          PRERELEASE: ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
+        run: |
+          gh release create "$TAG" \
+            "build/distributions/claude-code-dock-${TAG#v}.zip" \
+            --title "$TAG" \
+            --generate-notes \
+            $PRERELEASE
