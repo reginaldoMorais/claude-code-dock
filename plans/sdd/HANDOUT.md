@@ -10,27 +10,32 @@
 
 ## Estado atual
 
-**Fase: DEF-01 corrigido, RF-24/26/27 implementados (SPEC v1.3). Falta a validação manual.**
+**Fase: em uso diário. SPEC v1.4 — RF-27 removido, RF-28 e RF-29 entregues e validados no IDE.**
 
-| Artefato                                                         | Estado                                                   |
-| ---------------------------------------------------------------- | -------------------------------------------------------- |
-| [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)             |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.3 — DEF-01, RF-24/25/26 e Q-14 incorporados         |
-| `HANDOUT.md`                                                     | ✅ Este arquivo                                           |
-| Código do plugin                                                 | ✅ Implementado — compila, **51 testes passando**         |
-| **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente |
-| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)   |
-| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona    |
-| RF-22 (`/export`) — T-3.11                                       | ✅ **APROVADO** — saída limpa, verificada no arquivo gerado |
-| RF-21 (copiar buffer) — DEF-01                                   | ⚰️ **Substituído** por RF-24; buffer não é mais lido       |
-| RF-24 (cópia via `/export`), RF-26 (botão), RF-27 (saída plana) | ✅ Implementados e testados unitariamente                  |
-| R-13 (bloqueante de RF-24)                                       | ✅ **FECHADO** por leitura do binário, sem teste manual    |
-| Validação manual T-3.14 a T-3.17                                 | ⏳ Pendente — reinstalar o ZIP de 16:54                    |
-| Roteiros T-3.3 a T-3.6                                           | ⏳ Pendente                                               |
+| Artefato                                                         | Estado                                                          |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- |
+| [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                    |
+| [SPEC.md](SPEC.md)                                               | ✅ v1.4 — RF-27 removido; RF-28 e RF-29 especificados           |
+| `HANDOUT.md`                                                     | ✅ Este arquivo                                                 |
+| Código do plugin                                                 | ✅ **68 testes passando**, sem warnings                         |
+| **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente       |
+| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)         |
+| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona          |
+| RF-22 (`/export`), RF-24 (cópia), RF-26 (botão de seleção)       | ✅ Implementados e em uso                                       |
+| RF-21 (copiar buffer) — DEF-01                                   | ⚰️ **Substituído** por RF-24; buffer não é mais lido            |
+| RF-27 (saída plana)                                              | ⚰️ **REMOVIDO em v1.4** — funcionava, e não era o que servia    |
+| RF-28 (respiro nas bordas)                                       | ✅ Implementado e **validado no IDE**, em 20px por padrão       |
+| RF-29 (capa de carregamento)                                     | ✅ Implementado e **validado no IDE**, prazo de 3 s             |
+| Tela de configurações                                            | ✅ Reescrita em Kotlin UI DSL, com seções e `BoundConfigurable` |
+| T-1.21 (teste dos diretórios de fallback)                        | ✅ Implementado, com controle contra passar pelo motivo errado  |
+| Testes de integração T-2.\*                                      | ⏳ Nunca implementados                                          |
+| Roteiros T-3.3 a T-3.6, T-3.18 a T-3.20                          | ⏳ Pendentes                                                    |
 
-**Próximo passo imediato:** reinstalar `build/distributions/claude-code-dock-0.1.0.zip` e rodar
-T-3.14 (cópia sem duplicação), T-3.15/T-3.16 (botão flutuante) e T-3.17 (saída plana — é o dado
-que decide se Q-14 continua de pé).
+**Estado do repositório:** seis commits além do `HANDOUT` anterior, sendo `9e004a3` a capa de
+carregamento. Pendentes de commit: o teste T-1.21 e estes documentos. Um stash guardado:
+`shell -i -c com exec` — a alternativa medida e recusada (ver D-20).
+
+**Próximo passo imediato:** os testes de integração T-2.\*, que nunca existiram.
 
 ---
 
@@ -156,20 +161,50 @@ if (!e.isConsumed()) super.handleKeyEvent(e);
 
 > Mesma família de armadilha do `Esc`: **o comportamento depende do engine, não do widget.**
 
-| Fato                                                                                                                                                          | Como foi descoberto                                                       |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **`TerminalWidget.getText()` já devolve scrollback + tela** no CLASSIC — a seleção vai de `(0, -historyLinesCount)` a `(width, screenLinesCount-1)`, sob `buffer.lock()` | `javap -c` de `JBTerminalWidget.getText(TerminalPanel)` e do `TerminalWidgetBridge` |
-| Fora do CLASSIC o `default` da interface devolve **string vazia** — degrada, não lança                                                                        | `javap -c` da interface: `ldc ""` / `areturn`                             |
-| **Em Kotlin é `widget.getText()`, não `widget.text`** — ao contrário de `ttyConnector`, não é property                                                        | erro de compilação `Unresolved reference 'text'`                          |
-| **Não existe "copiar tudo" no CLASSIC.** `Terminal.SelectAll` só está no `Terminal.ReworkedTerminalContextMenu`, e seu `update()` exige `isReworkedTerminalEditor` | `plugin.xml` do terminal + `javap -c` de `TerminalSelectAllAction`         |
-| `sendCommandToExecute` **não serve** para falar com um TUI vivo: `ShellTerminalWidget.executeCommand` lança `IOException` se já houver texto digitado no prompt | `javap -c` de `executeCommand`                                            |
-| O CLI tem `/export`: `{type:"local-jsx", name:"export", description:"Export the current conversation to a file or clipboard", argumentHint:"[filename]"}`      | string extraída do binário `claude` 2.1.220                               |
-| **O destino "clipboard" do `/export` depende de `wl-copy`/`xclip`/`xsel` — nenhum instalado aqui** (Wayland). Delegar tudo ao CLI teria deixado o caso principal sem solução | `grep` no binário + `command -v`                                          |
-| Limite do scrollback vem do advanced setting `terminal.buffer.max.lines.count`                                                                                 | `javap -c` de `JBTerminalSystemSettingsProviderBase.getBufferMaxLinesCount` |
-| `CopyPasteManager.copyTextToClipboard` é estático; `Content` é `UserDataHolder` (dá para pendurar o widget na aba, sem mapa próprio)                          | `javap` de `intellij.platform.editor.ui.jar` e de `Content`               |
+| Fato                                                                                                                                                                         | Como foi descoberto                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **`TerminalWidget.getText()` já devolve scrollback + tela** no CLASSIC — a seleção vai de `(0, -historyLinesCount)` a `(width, screenLinesCount-1)`, sob `buffer.lock()`     | `javap -c` de `JBTerminalWidget.getText(TerminalPanel)` e do `TerminalWidgetBridge` |
+| Fora do CLASSIC o `default` da interface devolve **string vazia** — degrada, não lança                                                                                       | `javap -c` da interface: `ldc ""` / `areturn`                                       |
+| **Em Kotlin é `widget.getText()`, não `widget.text`** — ao contrário de `ttyConnector`, não é property                                                                       | erro de compilação `Unresolved reference 'text'`                                    |
+| **Não existe "copiar tudo" no CLASSIC.** `Terminal.SelectAll` só está no `Terminal.ReworkedTerminalContextMenu`, e seu `update()` exige `isReworkedTerminalEditor`           | `plugin.xml` do terminal + `javap -c` de `TerminalSelectAllAction`                  |
+| `sendCommandToExecute` **não serve** para falar com um TUI vivo: `ShellTerminalWidget.executeCommand` lança `IOException` se já houver texto digitado no prompt              | `javap -c` de `executeCommand`                                                      |
+| O CLI tem `/export`: `{type:"local-jsx", name:"export", description:"Export the current conversation to a file or clipboard", argumentHint:"[filename]"}`                    | string extraída do binário `claude` 2.1.220                                         |
+| **O destino "clipboard" do `/export` depende de `wl-copy`/`xclip`/`xsel` — nenhum instalado aqui** (Wayland). Delegar tudo ao CLI teria deixado o caso principal sem solução | `grep` no binário + `command -v`                                                    |
+| Limite do scrollback vem do advanced setting `terminal.buffer.max.lines.count`                                                                                               | `javap -c` de `JBTerminalSystemSettingsProviderBase.getBufferMaxLinesCount`         |
+| `CopyPasteManager.copyTextToClipboard` é estático; `Content` é `UserDataHolder` (dá para pendurar o widget na aba, sem mapa próprio)                                         | `javap` de `intellij.platform.editor.ui.jar` e de `Content`                         |
 
 **Lição:** uma ação registrada no IDE **não é** uma capacidade disponível. Ler o `update()` dela
 faz parte da verificação — senão o resultado é um botão morto.
+
+### Ambiente da sessão: o que o processo herda (2026-08-01, noite/2)
+
+> **Leia antes de mexer em como a sessão é lançada.** Foi o que custou duas tentativas falhas.
+
+| Fato                                                                                                                                                          | Como foi descoberto                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **O customizer do plugin oficial devolve o comando intacto** (`aload_3; areturn`) e só mexe no mapa de ambiente — injeta também `ENABLE_IDE_INTEGRATION=true` | `javap -c` de `TerminalCustomizer.customizeCommandAndEnvironment`                 |
+| **O processo do IDE herda o ambiente da sessão gráfica**, não do shell: sem `~/.local/bin`, sem o que o `.zshrc` acrescenta                                   | dump de `envs` no diálogo "Failed to start" do próprio IDE                        |
+| `PathEnvironmentVariableUtil.findInPath` lê o `PATH` do `EnvironmentUtil` — que **também** não tinha `~/.local/bin` aqui                                      | `javap -c` de `getPathVariableValue` + notificação indevida com o CLI funcionando |
+| Um shell interativo com `exec` preserva **variáveis exportadas** e **perde funções e aliases** (`sdk`, aliases do `.commands-extension.sh`)                   | `env -i … zsh -i -c 'exec "$0" "$@"' env` sob PTY, comparando só nomes            |
+| **Sem PTY o `.zshrc` não é carregado**, nem com `-i` — o rc desiste quando não há terminal                                                                    | mesmo comando sem `script`: nenhuma invocação resolveu o `claude`                 |
+| Os hooks do Claude Code rodam por `/bin/sh`, que nunca leria o `.zshrc` — para eles vale só o `PATH` exportado                                                | erro real do usuário: `/bin/sh: 1: code-review-graph: not found`                  |
+| `TerminalProjectOptionsProvider.getShellPath()` é público e síncrono: dá o shell configurado em Settings > Tools > Terminal                                   | `javap` da classe                                                                 |
+
+**Consequência prática:** trocar quem é o processo do PTY é uma decisão sobre **ambiente**, não
+sobre aparência. Qualquer mudança nessa linha começa medindo o ambiente resultante.
+
+### Armadilhas de Swing na capa e no respiro (2026-08-01, noite/2)
+
+| Fato                                                                                                         | Como apareceu                                               |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `JediTermWidget.getComponent()` devolve **o próprio widget** — `JPanel` com `BorderLayout`                   | `javap -c`: `aload_0; areturn`                              |
+| `TerminalPanel` mede **a si mesmo** para calcular o grid; `getInsetX()` é a constante `4`                    | `javap -c` de `getTerminalSizeFromComponent`                |
+| `TerminalPanel.getBackground()` é **recalculado a cada chamada** — copiar a cor uma vez envelhece com o tema | `javap -c`; e a faixa preta no tema claro que o usuário viu |
+| **`JBLoadingPanel` é translúcido**: o conteúdo por baixo continua legível                                    | o eco do comando aparecia através da capa                   |
+| **Componente escondido não tem dimensão**: o CLI desenha para tamanho inventado e redesenha ao aparecer      | rodapé quebrado por ~1 s ao revelar                         |
+| `JLayeredPane.DEFAULT_LAYER` é `Integer`; passá-lo direto ao `add` escolhe o overload de **índice**          | teste T-1.20 falhou na asserção de camada                   |
+| `Box.setLayout` lança `AWTError("Illegal request")`                                                          | três testes vermelhos de uma vez                            |
+| `IconUtil.scale(Icon, Double)` está depreciado; usar `scale(Icon, Component?, Float)`                        | warning de compilação                                       |
 
 ### API de terminal disponível na build 262
 
@@ -192,17 +227,23 @@ faz parte da verificação — senão o resultado é um botão morto.
 | **D-07** | Validar a premissa central (**T-4**) **antes** de implementar o resto                                                          | Toda a arquitetura depende dela; descobrir tarde custaria o retrabalho completo                                                                                                                                                                |
 | **D-08** | Este `HANDOUT.md` vive em `plans/sdd/`, não na raiz                                                                            | O hook `enforce-plans-dir.py` do projeto exige artefatos `.md` sob `plans/`. Decisão do usuário: manter o nome pedido pelo plano de origem, mas dentro de `plans/sdd/`, ao lado do SPEC                                                        |
 
-| **D-09** | O comando é enviado com `sendCommandToExecute` (string digitada no shell), com **escapamento POSIX** do caminho do executável                | Mesma abordagem do plugin oficial, e mantém o shell vivo após o `claude` sair — essencial para o diagnóstico previsto no Fluxo D. Como a string é interpretada pelo shell, o caminho é protegido por aspas simples. **Isso ajusta o RNF-08**, que pedia montagem por argv: argv exigiria substituir o shell e perder o fallback |
-| **D-10** | Kotlin 2.4.10 e distribuição unificada `intellijIdea("2026.2")`                                                                              | Imposições da plataforma, descobertas na compilação — não são escolhas                                                                                                                                                                                                                                                          |
-| **D-11** | T-4 virou **teste automatizado permanente**, não roteiro manual                                                                              | Determinístico, roda em cada `./gradlew test` e serve de regressão a cada upgrade de IDE (T-5.3), que era exatamente o risco R-01                                                                                                                                                                                               |
-| **D-12** | _(v1.1)_ O `Esc` é corrigido por **pre-handler no painel** (`ClaudeEscapeForwarder`), não mexendo em keymap nem em `TerminalOptionsProvider` | É a única opção que corrige só o `Esc`, só na nossa janela. Alterar keymap ou settings do terminal seria alterar o IDE do usuário — violação direta de RF-13. Anular `TOOL_WINDOW` no data context resolveria o `Esc` mas quebraria `Shift+Esc` e ações de tool window com foco no terminal                                     |
-| **D-13** | _(v1.1)_ O estado vazio usa `ToolWindowEx.emptyText` com links, e **não** recria sessão automaticamente ao reabrir a janela                  | Nativo, três linhas, e mantém a escolha com o usuário. Recriar sozinho exigiria listener de tool window e reabriria o debate de "quando é demais" — sem demanda comprovada                                                                                                                                                      |
-| **D-14** | _(v1.1)_ `CLAUDE_CONFIG_DIR` é **por projeto** e vive no arquivo de workspace; o executável continua por aplicação                           | Em IDEs JetBrains uma janela é um projeto, então projeto já entrega a granularidade pedida. Workspace e não `.idea/` versionado porque é caminho local de máquina e aponta para diretório com credenciais do CLI                                                                                                                |
-| **D-15** | _(v1.1)_ Uma única tela `projectConfigurable` mostra os dois campos, rotulando o escopo de cada um                                           | Duas telas para duas configurações seria burocracia. O rótulo ("Vale para todos os projetos" / "Somente este projeto") resolve a ambiguidade — mesmo padrão da tela de Terminal do IDE                                                                                                                                          |
-| **D-16** | _(v1.2)_ O `/export` é enviado por **escrita direta no `TtyConnector`**, não por `sendCommandToExecute`                                      | `sendCommandToExecute` cai em `ShellTerminalWidget.executeCommand`, que lança `IOException` quando já há texto digitado no prompt — a regra, e não a exceção, com um TUI vivo na frente. A escrita direta é o mesmo canal que o `ClaudeEscapeForwarder` já usa em produção                                                       |
-| **D-17** | _(v1.2)_ **Dois botões**, não um: copiar o buffer e disparar o `/export`                                                                     | São naturezas opostas e nenhuma substitui a outra. A cópia é o render literal (rápido, fiel à tela, com bordas de TUI); o `/export` é a transcrição limpa, produzida pelo CLI. Delegar tudo ao CLI não era opção: o destino "clipboard" dele exige `wl-copy`/`xclip`/`xsel`, ausentes nesta máquina                              |
-| **D-18** | _(v1.2)_ O widget fica pendurado no `Content` da aba por um `Key`, em vez de um mapa no serviço                                              | A referência morre junto com a aba, sem código de limpeza e sem risco de vazar widget de aba fechada                                                                                                                                                                                                                              |
-| **D-19** | _(v1.2)_ `readText`/`sendInput` moram em `ClaudeTerminalSessionFactory`, não nas ações                                                       | RNF-15 exige o contato com a API de terminal num arquivo só. As ações falam com `ClaudeDockSessions`, que sabe qual aba está selecionada                                                                                                                                                                                          |
+| **D-09** | O comando é enviado com `sendCommandToExecute` (string digitada no shell), com **escapamento POSIX** do caminho do executável | Mesma abordagem do plugin oficial, e mantém o shell vivo após o `claude` sair — essencial para o diagnóstico previsto no Fluxo D. Como a string é interpretada pelo shell, o caminho é protegido por aspas simples. **Isso ajusta o RNF-08**, que pedia montagem por argv: argv exigiria substituir o shell e perder o fallback |
+| **D-10** | Kotlin 2.4.10 e distribuição unificada `intellijIdea("2026.2")` | Imposições da plataforma, descobertas na compilação — não são escolhas |
+| **D-11** | T-4 virou **teste automatizado permanente**, não roteiro manual | Determinístico, roda em cada `./gradlew test` e serve de regressão a cada upgrade de IDE (T-5.3), que era exatamente o risco R-01 |
+| **D-12** | _(v1.1)_ O `Esc` é corrigido por **pre-handler no painel** (`ClaudeEscapeForwarder`), não mexendo em keymap nem em `TerminalOptionsProvider` | É a única opção que corrige só o `Esc`, só na nossa janela. Alterar keymap ou settings do terminal seria alterar o IDE do usuário — violação direta de RF-13. Anular `TOOL_WINDOW` no data context resolveria o `Esc` mas quebraria `Shift+Esc` e ações de tool window com foco no terminal |
+| **D-13** | _(v1.1)_ O estado vazio usa `ToolWindowEx.emptyText` com links, e **não** recria sessão automaticamente ao reabrir a janela | Nativo, três linhas, e mantém a escolha com o usuário. Recriar sozinho exigiria listener de tool window e reabriria o debate de "quando é demais" — sem demanda comprovada |
+| **D-14** | _(v1.1)_ `CLAUDE_CONFIG_DIR` é **por projeto** e vive no arquivo de workspace; o executável continua por aplicação | Em IDEs JetBrains uma janela é um projeto, então projeto já entrega a granularidade pedida. Workspace e não `.idea/` versionado porque é caminho local de máquina e aponta para diretório com credenciais do CLI |
+| **D-15** | _(v1.1)_ Uma única tela `projectConfigurable` mostra os dois campos, rotulando o escopo de cada um | Duas telas para duas configurações seria burocracia. O rótulo ("Vale para todos os projetos" / "Somente este projeto") resolve a ambiguidade — mesmo padrão da tela de Terminal do IDE |
+| **D-16** | _(v1.2)_ O `/export` é enviado por **escrita direta no `TtyConnector`**, não por `sendCommandToExecute` | `sendCommandToExecute` cai em `ShellTerminalWidget.executeCommand`, que lança `IOException` quando já há texto digitado no prompt — a regra, e não a exceção, com um TUI vivo na frente. A escrita direta é o mesmo canal que o `ClaudeEscapeForwarder` já usa em produção |
+| **D-17** | _(v1.2)_ **Dois botões**, não um: copiar o buffer e disparar o `/export` | São naturezas opostas e nenhuma substitui a outra. A cópia é o render literal (rápido, fiel à tela, com bordas de TUI); o `/export` é a transcrição limpa, produzida pelo CLI. Delegar tudo ao CLI não era opção: o destino "clipboard" dele exige `wl-copy`/`xclip`/`xsel`, ausentes nesta máquina |
+| **D-18** | _(v1.2)_ O widget fica pendurado no `Content` da aba por um `Key`, em vez de um mapa no serviço | A referência morre junto com a aba, sem código de limpeza e sem risco de vazar widget de aba fechada |
+| **D-19** | _(v1.2)_ `readText`/`sendInput` moram em `ClaudeTerminalSessionFactory`, não nas ações | RNF-15 exige o contato com a API de terminal num arquivo só. As ações falam com `ClaudeDockSessions`, que sabe qual aba está selecionada |
+| **D-20** | _(v1.4)_ **D-09 mantido:** a sessão continua sendo o shell do usuário com o comando digitado. A alternativa `shell -i -c 'exec "$0" "$@"'` foi implementada, medida e **recusada** | Ela elimina o eco na origem e preserva o ambiente exportado — mas o `-c` encerra o shell junto com o CLI, e com ele o prompt utilizável depois do `/exit`. O usuário testou as duas e escolheu manter o shell vivo, pagando o eco. Código guardado em stash, com a medição registrada acima |
+| **D-21** | _(v1.4)_ **RF-27 removido** em vez de corrigido | A flag funcionava. O que ela entrega — linha de entrada plana — é indistinguível de um prompt de shell, e isso piora CB-27. Recurso que funciona e não serve é recurso a remover, não a ajustar (Achado 18) |
+| **D-22** | _(v1.4)_ O respiro (RF-28) é **configuração**; o prazo da capa (RF-29) é **constante em código** | O respiro é preferência estética, com valor certo diferente por pessoa. O prazo é uma medida de quanto o CLI demora — tem um valor certo só, e expor um botão para ele seria transferir ao usuário um ajuste de implementação (Achado 19) |
+| **D-23** | _(v1.4)_ A capa fica **sobreposta** (`JLayeredPane`), nunca substituindo o terminal | Componente escondido não recebe dimensão: o CLI desenharia para um tamanho inventado e redesenharia ao aparecer, quebrando o rodapé. Sobreposto, o terminal conta como visível para `deferSessionStartUntilUiShown` e renderiza uma única vez |
+| **D-24** | _(v1.4)_ A verificação do executável é **advisória** e não bloqueia a abertura da aba | Ela enxerga menos que o shell da sessão, e um bloqueio por falso negativo custou a sessão inteira num teste real. Falso negativo agora custa só uma notificação supérflua — e os diretórios de fallback tornam isso raro |
+| **D-25** | _(v1.4)_ A tela de configurações usa Kotlin UI DSL + `BoundConfigurable` | Títulos de seção, separadores e alinhamento vêm prontos da plataforma — é de onde o plugin oficial tira os dele. E as ligações (`bindText`/`bindIntValue`) dispensam `isModified`/`apply`/`reset` escritos à mão: 110 linhas viraram 79 |
 
 ### Correção registrada
 
@@ -215,21 +256,23 @@ não tocar no protocolo, e não porque executar o CLI fosse proibido.
 
 ## Desafios em aberto
 
-| #        | Desafio                                                                                                                                          | Criticidade |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
-| **Q-01** | ✅ **RESOLVIDO em 2026-08-01.** O customizer alcança sim — validado por `TerminalCustomizerReachTest` (T-4), com teste de controle. R-02 fechado  | ✅ Resolvido |
-| **Q-02** | Duas sessões simultâneas (aba nativa + janela dedicada) no mesmo servidor MCP: qual "possui" um diff aberto?                                     | 🟡 Médio     |
-| **Q-03** | Semântica exata de `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` — string encontrada, comportamento não verificado                                  | 🟢 Baixo     |
-| **Q-04** | `TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?                                                                 | 🟡 Médio     |
-| **Q-05** | Vale ocultar o ponto de entrada do oficial para evitar confusão? Depende de Q-03                                                                 | 🟢 Baixo     |
-| **Q-06** | Remote Dev / split mode / WSL — declarados fora de escopo, reavaliar depois                                                                      | 🟢 Baixo     |
-| **Q-07** | Restaurar sessões ao reabrir o projeto? Sem demanda comprovada                                                                                   | 🟢 Baixo     |
-| **Q-08** | `since-build` definido como `252` por conservadorismo, mas **só `262` foi testado**                                                              | 🟢 Baixo     |
-| **Q-09** | _(v1.1)_ `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto? Exigiria diálogo a cada "Nova sessão"                                            | 🟢 Baixo     |
-| **Q-10** | _(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`? Lá o caminho é `Terminal.Escape` + EP `escapeHandler`, não o pre-handler. Ligado a Q-04 | 🟡 Médio     |
-| **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável em `.idea/` em vez de ficar no workspace?                                                   | 🟢 Baixo     |
-| **Q-12** | _(v1.2)_ Vale passar `[filename]` ao `/export` e abrir o arquivo no editor? Economiza cliques, mas exige adivinhar a semântica do argumento     | 🟢 Baixo     |
-| **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos | 🟢 Baixo     |
+| #        | Desafio                                                                                                                                                               | Criticidade  |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **Q-01** | ✅ **RESOLVIDO em 2026-08-01.** O customizer alcança sim — validado por `TerminalCustomizerReachTest` (T-4), com teste de controle. R-02 fechado                      | ✅ Resolvido |
+| **Q-02** | Duas sessões simultâneas (aba nativa + janela dedicada) no mesmo servidor MCP: qual "possui" um diff aberto?                                                          | 🟡 Médio     |
+| **Q-03** | Semântica exata de `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` — string encontrada, comportamento não verificado                                                       | 🟢 Baixo     |
+| **Q-04** | `TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?                                                                                      | 🟡 Médio     |
+| **Q-05** | Vale ocultar o ponto de entrada do oficial para evitar confusão? Depende de Q-03                                                                                      | 🟢 Baixo     |
+| **Q-06** | Remote Dev / split mode / WSL — declarados fora de escopo, reavaliar depois                                                                                           | 🟢 Baixo     |
+| **Q-07** | Restaurar sessões ao reabrir o projeto? Sem demanda comprovada                                                                                                        | 🟢 Baixo     |
+| **Q-08** | `since-build` definido como `252` por conservadorismo, mas **só `262` foi testado**                                                                                   | 🟢 Baixo     |
+| **Q-09** | _(v1.1)_ `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto? Exigiria diálogo a cada "Nova sessão"                                                                 | 🟢 Baixo     |
+| **Q-10** | _(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`? Lá o caminho é `Terminal.Escape` + EP `escapeHandler`, não o pre-handler. Ligado a Q-04                      | 🟡 Médio     |
+| **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável em `.idea/` em vez de ficar no workspace?                                                                        | 🟢 Baixo     |
+| **Q-12** | _(v1.2)_ Vale passar `[filename]` ao `/export` e abrir o arquivo no editor? Economiza cliques, mas exige adivinhar a semântica do argumento                           | 🟢 Baixo     |
+| **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos                       | 🟢 Baixo     |
+| **Q-16** | _(v1.4)_ Trocar o prazo fixo da capa por detecção de que o CLI já pintou? Avaliado: viável via `addModelListener` + `getScreenLines()`, mas acopla ao texto do banner | 🟢 Baixo     |
+| **Q-17** | _(v1.4)_ Reintroduzir a capa sobre uma partida sem eco (D-20), deixando-a só como acabamento? O pior caso do prazo viraria "tela vazia", não "eco visível"            | 🟢 Baixo     |
 
 ---
 
@@ -239,35 +282,70 @@ Concluído: ~~aprovação do SPEC~~ · ~~T-4~~ · ~~esqueleto Gradle~~ · ~~comp
 ~~`buildPlugin`~~ · ~~primeiro teste no IDE real~~ · ~~RF-17/RF-18/RF-19~~ ·
 ~~T-3.1/T-3.2 (diff ponta a ponta)~~ · ~~T-3.7/T-3.8/T-3.9~~ · ~~RF-21/RF-22~~
 
-**Pendente:**
+Concluído também: ~~RF-24/RF-26~~ · ~~T-3.14~~ · ~~T-3.17 (conclusivo: RF-27 removido)~~ ·
+~~RF-28~~ · ~~RF-29~~ · ~~tela de configurações em Kotlin UI DSL~~
 
-1. **Validar no IDE real** — o ZIP já está construído (16:54):
+**Pendente, em ordem:**
 
-   ```sh
-   # Settings → Plugins → ⚙ → Install Plugin from Disk…
-   #   build/distributions/claude-code-dock-0.1.0.zip
-   ```
-
-   Roteiro mínimo, com o plugin oficial ainda instalado:
-   - **T-3.14** — conversa longa, janela redimensionada no meio, "Copiar Conversa": tem de vir
-     **uma vez só**. E conferir que não sobra `claude-dock-export-*.md` em `/tmp`;
-   - **T-3.15 / T-3.16** — selecionar com o mouse: o botão aparece, copia só o trecho, some ao
-     desfazer — e digitar em seguida ainda vai para a sessão (foco não roubado);
-   - **T-3.17** — ligar "Saída plana" em Settings e comparar. **É o dado que decide Q-14**;
-   - **T-3.12** — com a última aba fechada, acionar os botões: notificam, não quebram;
-   - **regressão T-3.7** — `/usage` + `Esc`: agora três caminhos escrevem no mesmo
-     `TtyConnector` (Esc, `/export` e o comando inicial).
-
-2. **Testes de integração T-2.\*** — tool window registrada, isolamento de abas, liberação de
-   PTY ao fechar aba, e o comportamento com `TerminalEngine.REWORKED` vs `CLASSIC` (Q-04, Q-10,
-   CB-26 — no REWORKED a cópia devolve vazio).
-3. **Q-02** — investigar a ambiguidade de sessão dupla durante o uso real.
-4. Repetir a instalação nos demais IDEs (T-3.5); T-3.3, T-3.4 e T-3.6 seguem em aberto.
-5. Registrar achados neste arquivo.
+1. **Testes de integração T-2.\*** — nunca implementados. Tool window registrada, isolamento de
+   abas, liberação de PTY, e o comportamento com `REWORKED` vs `CLASSIC` (Q-04, Q-10, CB-26,
+   CB-36).
+2. **Roteiros manuais em aberto:** T-3.3 (`Ctrl+Alt+K` do oficial), T-3.4 (`--resume`), T-3.5
+   (outros IDEs), T-3.6 (desinstalação), T-3.18 a T-3.20 (respiro sob troca de tema, partida sem
+   eco, diretório não confiável).
+3. **Q-02** — ambiguidade de sessão dupla, durante o uso real.
+4. **Decidir o destino do stash** `shell -i -c com exec`: mantê-lo como referência de D-20 ou
+   descartar. Stash não é memória de longo prazo.
+5. **Limpeza conhecida:** `ClaudeTerminalSessionFactory.readText` está morto desde que RF-24
+   substituiu RF-21 — nenhum chamador. Deletar tira um ponto de acoplamento com a API de terminal.
 
 ---
 
 ## Log
+
+### 2026-08-01 (noite/2) — Ergonomia da janela, SPEC v1.4
+
+Sessão longa, quase toda de ajuste fino no que já funcionava. Quatro entregas, uma remoção e
+duas tentativas descartadas — as descartadas ensinaram mais que as entregues.
+
+- **RF-28 — respiro nas bordas.** O JediTerm reserva 4px só à esquerda, e nada nos outros lados.
+  A borda vai no componente do widget (um `JPanel` com `BorderLayout`), porque é o `TerminalPanel`
+  que mede a si mesmo para calcular o grid. Duas correções em cima disso, ambas pedidas pelo
+  usuário na tela: a faixa saiu preta no tema claro (eu copiava a cor uma vez, e ela envelhecia),
+  e depois saiu na cor da IDE quando o pedido era a cor do terminal. A forma final é um `Border`
+  que lê `terminalPanel.background` **no `paintBorder`** — acompanha troca de tema sem listener.
+- **RF-29 — capa de carregamento.** Três tentativas: o véu do `JBLoadingPanel` é translúcido e
+  deixava o eco legível; esconder o terminal com `CardLayout` funcionava mas tirava a dimensão
+  dele, e o CLI desenhava para 120 colunas numa aba de 149, redesenhando ao aparecer; a versão
+  boa é `JLayeredPane` com a capa por cima e o terminal sempre visível.
+- **RF-27 removido.** Antes disso, medi: a flag **não** trava a sessão (o `$` é o prompt do CLI
+  em modo plano, e o processo segue vivo — `exit=124` sob `timeout`). Funcionava e não servia.
+- **A tela de configurações** foi reescrita em Kotlin UI DSL com `BoundConfigurable`, a pedido do
+  usuário, que queria as seções que o plugin oficial tem. Caiu de 110 para 79 linhas.
+- **O erro de escopo que vale registrar:** pus o prazo da capa na tela de configurações sem
+  ninguém pedir. O usuário recusou na hora — aquilo é ajuste de bancada, não escolha de quem usa.
+  Ver D-22 e o Achado 19.
+- **As duas tentativas descartadas** viraram D-20. A primeira (PTY direto no CLI) quebrou o
+  ambiente do usuário: sem shell, os hooks pararam de achar suas ferramentas. A segunda
+  (`shell -i -c 'exec "$0" "$@"'`) resolvia tudo — eco eliminado na origem, ambiente exportado
+  preservado — e mesmo assim foi recusada, porque o `-c` encerra o shell junto com o CLI e o
+  usuário quer o prompt utilizável depois do `/exit`. Está em stash.
+- **A medição que deveria ter vindo primeiro:** só na terceira tentativa eu rodei o comando com
+  PTY e ambiente limpo para ver o que sobrevive. Variáveis exportadas sim, funções e aliases não.
+  Se essa medição tivesse aberto a investigação, as duas primeiras tentativas não teriam existido
+  (Achado 20).
+- **Correção de uma afirmação minha:** eu disse que não usaria a logo do Claude Code por ser marca
+  da Anthropic. O motivo real e defensável é outro — eu teria de copiar o asset de dentro do jar
+  do plugin oficial para o repositório do usuário. A ponderação de marca era minha, não uma regra,
+  e a decisão é dele.
+- **T-1.21 escrito ao fim da sessão**, fechando a única violação conhecida da regra "código novo
+  com teste": os diretórios de fallback estavam em produção sem cobertura, porque o teste tinha
+  ficado no ramo recusado. O par aceito/recusado sobre o **mesmo** nome inexistente é o controle
+  — com o nome real, os dois passariam pelo `PATH` de quem roda a suíte e o fallback nunca seria
+  exercitado.
+- Resultado: **68 testes, 0 falhas**, sem warnings. Seis commits; o T-1.21 e os
+  documentos ficaram pendentes.
+- **Ainda não validado:** T-3.18 a T-3.20, e todo o comportamento fora do engine CLASSIC.
 
 ### 2026-08-01 (noite) — RF-24, RF-26 e RF-27 implementados
 

@@ -1,8 +1,8 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.3
+- **Versão:** 1.4
 - **Data:** 2026-08-01
-- **Status:** Aprovado — v1.3 corrige a cópia duplicada e especifica a cópia por seleção
+- **Status:** Aprovado — v1.4 remove a saída plana e especifica o respiro e a tela de carregamento
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -13,6 +13,7 @@
 > | 1.1    | 2026-08-01 | RF-17 (Esc devolvido ao shell), RF-18 (estado vazio utilizável) e RF-19 (`CLAUDE_CONFIG_DIR` por projeto), após teste manual |
 > | 1.2    | 2026-08-01 | RF-21 (copiar o conteúdo da sessão) e RF-22 (exportar a conversa via `/export`), após T-3.1/T-3.2 aprovados                  |
 > | 1.3    | 2026-08-01 | DEF-01 (cópia duplicada) diagnosticado; RF-21 **revisto** para passar pelo `/export` (RF-24/RF-25); RF-26 (cópia flutuante por seleção); Q-14 (UI de markdown) analisada e recusada |
+> | 1.4    | 2026-08-01 | RF-27 (saída plana) **removido** após uso real; RF-28 (respiro nas bordas) e RF-29 (tela de carregamento) especificados; D-09 reconfirmado com a alternativa `exec` medida e recusada |
 
 ---
 
@@ -95,11 +96,19 @@ Explicitamente **não** serão construídos nesta tarefa:
   > apresentação, não capacidade. **Recomendação: não seguir.** Registrado em Q-14, com o
   > caminho técnico documentado, para que a decisão possa ser revista com dados e não do zero.
   >
-  > _Se o incômodo for legibilidade e não arquitetura_, há bem mais barato a tentar antes:
-  > a flag `--ax-screen-reader` do CLI ("flat text, no decorative borders or animations") e a
-  > fonte/tema do terminal do IDE. **Implementado como RF-27** — uma caixa de seleção nas
-  > configurações, para medir quanto do incômodo era só a moldura do TUI antes de considerar
-  > qualquer coisa maior.
+  > _Se o incômodo for legibilidade e não arquitetura_, havia algo bem mais barato a tentar
+  > antes: a flag `--ax-screen-reader` do CLI ("flat text, no decorative borders or animations").
+  > Foi implementada como RF-27 e **removida na v1.4** depois do uso real.
+  >
+  > **O que a medição mostrou** (verificado com PTY, ver anexo): a flag **não** trava a sessão —
+  > o `$` solto que parecia retorno ao shell é o prompt de entrada do CLI em modo plano. Ou seja,
+  > funciona como anunciado. O usuário simplesmente não a quis: troca a caixa de input por uma
+  > linha indistinguível de um prompt de shell, o que piora CB-27 em vez de melhorar a leitura.
+  >
+  > **Consequência para Q-14:** a alternativa barata deixou de existir. Isso **não** reabre a
+  > decisão — o custo de manter uma UI própria contra um formato sem contrato de estabilidade é o
+  > mesmo de antes. Mas o argumento "há algo mais simples a tentar primeiro" está gasto, e uma
+  > eventual reabertura precisa ser decidida pelo custo de manutenção, não por essa saída.
 - **Publicação na JetBrains Marketplace.**
 - **Suporte a Remote Development, split mode (frontend/backend) e WSL.** O alvo é execução local
   monolítica. Ver [Riscos](#riscos).
@@ -431,7 +440,9 @@ reimplementação frágil.**
 | **RF-24** | _(v1.3)_ "Copiar Conversa" DEVE obter o texto pelo `/export` do CLI, para arquivo temporário, e colocar **só a conversa** na área de transferência — sem banner repetido, sem caixa de input e sem barra de status (DEF-01). |
 | **RF-25** | _(v1.3)_ O arquivo temporário de RF-24 DEVE ser criado com permissão exclusiva do usuário e **apagado logo após a leitura**, com ou sem sucesso.           |
 | **RF-26** | _(v1.3)_ Ao selecionar texto com o mouse na sessão, o plugin DEVE oferecer um botão flutuante que copia **apenas o trecho selecionado**; ele DEVE sumir quando a seleção é desfeita. |
-| **RF-27** | _(v1.3)_ O plugin DEVE oferecer opção de aplicar `--ax-screen-reader` às novas sessões, para saída plana sem bordas nem animações; padrão **desligado**, valendo para todos os projetos. |
+| ~~**RF-27**~~ | ~~_(v1.3)_ O plugin DEVE oferecer opção de aplicar `--ax-screen-reader` às novas sessões.~~ **REMOVIDO em v1.4** — ver [Fora de Escopo](#fora-de-escopo) e o Achado 18. |
+| **RF-28** | _(v1.4)_ A sessão DEVE ser afastada das bordas da tool window por um respiro configurável, pintado com o fundo do terminal, e o valor DEVE valer para as sessões abertas a partir da mudança. |
+| **RF-29** | _(v1.4)_ Ao abrir uma aba, o plugin DEVE cobrir a sessão enquanto o CLI sobe, escondendo o prompt do shell e o eco do comando; a capa DEVE sair sozinha e NÃO DEVE impedir a sessão de receber o tamanho real da aba. |
 
 ---
 
@@ -637,6 +648,8 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
 ├── ClaudeSessionText.kt            # puro: normaliza o texto copiado (RF-21; revisto em RF-24)
 ├── ClaudeSessionExport.kt          # (v1.3) puro-ish: destino, comando e espera do /export (RF-24, RF-25)
 ├── ClaudeSelectionCopyButton.kt    # (v1.3) botão flutuante na seleção (RF-26)
+├── ClaudeSessionPadding.kt         # (v1.4) borda que se pinta com o fundo do terminal (RF-28)
+├── ClaudeSessionLoading.kt         # (v1.4) capa sobreposta enquanto o CLI sobe (RF-29)
 ├── ClaudeTabTitle.kt               # puro: títulos distinguíveis de aba
 ├── ClaudeWorkingDirectory.kt       # puro: resolução do diretório de trabalho
 ├── settings/
@@ -705,6 +718,34 @@ aditivo, não substitutivo: a plataforma o funde com o ambiente herdado do shell
 `LocalTerminalCustomizer` injetam. Logo, definir o config dir **não interfere** no
 `CLAUDE_CODE_SSE_PORT` do plugin oficial — as duas variáveis convivem, e a integração continua
 íntegra. Campo vazio produz mapa vazio, e o CLI cai no seu próprio padrão (`~/.claude`).
+
+### Respiro e capa: onde cada um encosta, e por quê _(v1.4)_
+
+Os dois são UI de dez linhas, mas cada um errou duas vezes antes de assentar. O que decide a
+posição correta é **o que a plataforma mede**, não o que o usuário vê.
+
+**RF-28 — o respiro vai no componente do widget, não no `Content` da aba.**
+`TerminalPanel.getTerminalSizeFromComponent()` calcula colunas e linhas a partir do **próprio
+painel** (`getWidth() - getInsetX()`, `getHeight()`), então uma borda aplicada acima na hierarquia
+não seria descontada do grid. O componente devolvido pelo widget é um `JPanel` com `BorderLayout`
+(`JediTermWidget.getComponent()` devolve `this`), e ali a borda vazia diminui a área e o grid se
+recalcula sozinho. O JediTerm só reserva 4px à esquerda, e nada nos outros lados — daí o conteúdo
+colado nas bordas.
+
+A cor **precisa ser lida na pintura**. `TerminalPanel.getBackground()` delega a
+`getWindowBackground()` e é recalculada a cada chamada; copiar a cor uma vez deixa a faixa na cor
+antiga quando o usuário troca de tema com a sessão aberta. Por isso a implementação é um `Border`
+próprio que preenche as quatro faixas no `paintBorder`, e não um `EmptyBorder` sobre um valor
+guardado.
+
+**RF-29 — a capa fica sobreposta, e o terminal nunca é escondido.** Este é o ponto sutil: um
+componente escondido não recebe dimensão, então o CLI desenharia para um tamanho inventado e
+redesenharia tudo ao aparecer. Sobreposto num `JLayeredPane`, o terminal conta como visível
+(inclusive para `deferSessionStartUntilUiShown`, RNF-02), recebe o tamanho real da aba e renderiza
+uma única vez.
+
+O prazo é **fixo, e não detecção**. Detectar "o CLI já pintou" exigiria vigiar o buffer, e a
+primeira mudança dele é justamente o eco que a capa existe para esconder. Ver Q-16.
 
 ### `plugin.xml`
 
@@ -794,6 +835,11 @@ Registrados por exigência do roteiro de SDD:
 | **CB-30** | _(v1.3)_ Seleção desfeita ou vazia com o botão flutuante na tela                 | O listener dispara com seleção vazia e o botão some sem copiar nada                                              |
 | **CB-31** | _(v1.3)_ Seleção feita numa aba e clique no botão depois de trocar de aba        | O botão é por painel e some junto com a aba; não há caminho para copiar seleção de outra aba                     |
 | **CB-32** | _(v1.3)_ Cópia acionada duas vezes seguidas antes de a primeira terminar         | Um `/export` por vez, por aba: a segunda é ignorada enquanto a primeira está em curso                            |
+| **CB-33** | _(v1.4)_ Usuário troca o tema do IDE com sessões abertas | O respiro acompanha: a cor é lida a cada pintura, não copiada na criação da aba (RF-28) |
+| **CB-34** | _(v1.4)_ O CLI pede algo nos primeiros segundos — ex.: "confia nesta pasta?" na primeira execução em diretório novo | A capa esconde até o prazo terminar; o diálogo continua lá e o usuário responde depois. Custo aceito de RF-29 |
+| **CB-35** | _(v1.4)_ Aba fechada antes de a capa sair | Timer, animação e capa são filhos do `Disposable` da aba: caem juntos, sem timer disparando sobre painel morto |
+| **CB-36** | _(v1.4)_ Engine sem JediTerm (`REWORKED`) com o respiro ligado | Sem painel para consultar, a borda fica vazia e a faixa é pintada pela tool window — degrada em cor, não em erro |
+| **CB-37** | _(v1.4)_ Executável instalado em diretório ausente do `PATH` do IDE (ex.: `~/.local/bin`) | A verificação consulta diretórios conhecidos antes de notificar; o shell da sessão resolve de qualquer forma (CB-01) |
 
 ---
 
@@ -816,6 +862,8 @@ Registrados por exigência do roteiro de SDD:
 | **R-13** | ~~_(v1.3)_ O argumento `[filename]` do `/export` não foi verificado~~ ✅ **FECHADO em 2026-08-01** — lido na implementação embutida no binário `claude` 2.1.220 | ~~Alto~~ | — | Grava direto e sem UI, sobrescreve, cria diretórios, e acrescenta `.txt` se faltar extensão. O destino de RF-24 termina em `.md` por causa disso. Revalidar a cada upgrade do CLI, junto de R-11 |
 | **R-14** | _(v1.3)_ RF-24 grava a conversa em arquivo temporário — código-fonte e possíveis segredos passam por disco, ainda que por segundos | Médio | Alta | Arquivo com permissão exclusiva do usuário e apagado em `finally` (RF-25). Liability real, aceita porque a alternativa (buffer) não entrega o recurso. Registrada em RNF-19 |
 | **R-15** | _(v1.3)_ O botão flutuante (RF-26) depende de `TerminalPanel.addSelectionListener`, específico do engine CLASSIC — mesma exposição de R-09 | Baixo | Média | Degrada igual: sem `asJediTermWidget` o botão não é instalado, e `Ctrl+C`/`Ctrl+Shift+C` seguem copiando a seleção. Perde-se conveniência, não capacidade |
+| **R-16** | _(v1.4)_ O prazo da capa (RF-29) é fixo. Máquina mais lenta, hook de sessão pesado ou CLI atualizando deixam o eco escapar quando a capa sai | Baixo | Média | Constante única em `ClaudeSessionLoading`, ajustável em um lugar. Falha é cosmética e passageira, nunca funcional. Q-16 registra o caminho para trocar prazo por detecção |
+| **R-17** | _(v1.4)_ A verificação do executável usa o `PATH` do `EnvironmentUtil`, que **não** enxerga o que o `.zshrc`/`.bashrc` acrescenta — falso negativo observado com o CLI funcionando | Baixo | Alta | Consulta `~/.local/bin` e `/usr/local/bin` antes de desistir, e a notificação nunca bloqueia a abertura da aba. Quem instala fora disso tem o campo de configuração |
 
 ---
 
@@ -842,8 +890,12 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.13** | Comando de export                 | _(v1.3)_ O caminho vai **cru** para o `/export`, sem aspas — o CLI faz `argumento.trim()` e aspas virariam parte do nome do arquivo. Oposto de T-1.6, que protege contra o **shell** (RF-24) |
 | **T-1.14** | Leitura do export                 | _(v1.3)_ Arquivo ausente ou vazio dentro do prazo produz falha tratada; arquivo com conteúdo produz o texto; o temporário é removido nos dois casos (RF-25, CB-29) |
 | **T-1.15** | Destino do export                 | _(v1.3)_ O temporário termina em `.md` (senão o CLI grava em outro caminho) e nasce com permissão exclusiva do dono (RF-25) |
-| **T-1.16** | `ClaudeCommand`                   | _(v1.3)_ `--ax-screen-reader` entra só quando ligado, antes dos demais argumentos, e convive com caminho citado (RF-27) |
-| **T-1.17** | `ClaudeDockSettings`              | _(v1.3)_ `flatOutput` nasce desligado e sobrevive a `loadState` (RF-27) |
+| ~~**T-1.16**~~ | ~~`ClaudeCommand`~~ | ~~_(v1.3)_ `--ax-screen-reader`~~ **removido com RF-27 em v1.4**; no lugar, o teste guarda o oposto: o comando não ganha argumento além do pedido |
+| ~~**T-1.17**~~ | ~~`ClaudeDockSettings`~~ | ~~_(v1.3)_ `flatOutput`~~ **removido com RF-27 em v1.4** |
+| **T-1.18** | `ClaudeSessionPadding`            | _(v1.4)_ Borda nos quatro lados; a faixa é pintada com o fundo do terminal e **acompanha a troca de cor**; sem painel JediTerm sobra borda vazia; zero não adiciona borda (RF-28, CB-33, CB-36) |
+| **T-1.19** | `ClaudeDockSettings`              | _(v1.4)_ `sessionPadding` nasce no padrão, persiste via `loadState` e valor fora da faixa é limitado (RF-28) |
+| **T-1.20** | `ClaudeSessionLoading`            | _(v1.4)_ O terminal continua na árvore e **visível** sob a capa; a capa é opaca e fica em camada superior; as camadas ocupam a área inteira; prazo zero devolve o próprio terminal (RF-29, CB-35) |
+| **T-1.21** | Verificação do executável         | _(v1.4)_ Caminho explícito exige existir e ser executável; nome ausente do `PATH` é aceito quando está num diretório conhecido, e recusado quando o diretório não o tem — o par é o controle que impede o teste de passar resolvendo pelo `PATH` de quem roda a suíte (CB-01, CB-02, CB-37, R-17) |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
 executada após cada implementação.
@@ -910,7 +962,10 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.14** | _(v1.3)_ Conversa longa, com a janela redimensionada no meio: "Copiar Conversa" traz a conversa **uma única vez**, sem banner repetido nem barra de status; o temporário não fica em `/tmp` (RF-24, RF-25, DEF-01) |
 | **T-3.15** | _(v1.3)_ Selecionar um trecho com o mouse: o botão flutuante aparece, copia só o trecho e some ao desfazer a seleção (RF-26, CB-30) |
 | **T-3.16** | _(v1.3)_ Com o botão flutuante na tela, digitar na sessão: o foco **não** foi roubado pelo popup (RF-26) |
-| **T-3.17** | _(v1.3)_ Ligar "Saída plana" em Settings, abrir nova sessão e comparar com uma sessão sem a opção — decide se Q-14 continua valendo a pena (RF-27) |
+| ~~**T-3.17**~~ | ~~_(v1.3)_ Ligar "Saída plana" e comparar~~ ✅ **EXECUTADO e conclusivo** — a flag funciona, mas troca a caixa de input por um `$` indistinguível de prompt de shell. RF-27 removido em v1.4 |
+| **T-3.18** | _(v1.4)_ Abrir aba, mudar o tema do IDE (claro ↔ escuro) e conferir que o respiro acompanha o fundo do terminal, sem faixa de cor antiga (RF-28, CB-33) |
+| **T-3.19** | _(v1.4)_ Abrir aba e observar a partida: a capa cobre o prompt e o eco, sai sozinha, e o rodapé do CLI **não** aparece quebrado nem redesenha ao sair (RF-29) |
+| **T-3.20** | _(v1.4)_ Abrir aba em diretório novo, onde o CLI pergunta "confia nesta pasta?": o diálogo continua respondível depois de a capa sair (CB-34) |
 
 ### Testes de regressão
 
@@ -1027,6 +1082,18 @@ abre no visualizador do IDE de ponta a ponta.
 - **When** o usuário aciona "Exportar Conversa"
 - **Then** o `/export` é executado dentro da própria sessão e o CLI apresenta seu seletor de destino, sem que o plugin interprete ou armazene a transcrição
 
+**CA-18 — Respiro nas bordas** _(v1.4, RF-28)_
+
+- **Given** uma sessão aberta com respiro configurado
+- **When** o usuário troca o tema do IDE
+- **Then** a faixa entre o conteúdo e as bordas acompanha o novo fundo do terminal, sem ficar na cor antiga nem exigir reabrir a aba
+
+**CA-19 — Partida sem eco** _(v1.4, RF-29)_
+
+- **Given** a tool window aberta
+- **When** uma nova aba de sessão é criada
+- **Then** o prompt do shell e o comando `claude` não são vistos, a capa sai sozinha, e o CLI aparece já desenhado na largura real da aba — sem redesenhar o rodapé
+
 ---
 
 ## Plano de Rollout
@@ -1088,7 +1155,9 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável (`.idea/`) em vez de ficar no workspace?                                 | Decidido pelo workspace (RNF-05). Reavaliar só se surgir caso de config dir relativo ao repositório, compartilhável pelo time                                            |
 | **Q-12** | ~~_(v1.2)_ Vale passar `[filename]` ao `/export`?~~                                                                           | ✅ **RESOLVIDO em v1.3.** Sim, e deixou de ser conveniência: é a única forma de entregar a cópia sem duplicação (DEF-01). Virou RF-24, com R-13 a verificar primeiro |
 | **Q-14** | _(v1.3)_ Reimplementar a UI como visualizador de markdown, dirigindo o CLI por `stream-json`?                                 | **Analisado e recusado.** Viável tecnicamente, mas é outro produto: descarta o terminal e todo o comportamento interativo que ele dá de graça, e acopla a um formato JSON sem contrato de estabilidade. Ver [Fora de Escopo](#fora-de-escopo) e Achado 17 |
-| **Q-15** | _(v1.3)_ Qual prazo limite para o `/export` de RF-24 responder?                                                              | Em aberto. Depende do tempo real observado em T-3.13. Curto demais falha em conversa longa; longo demais trava a percepção de resposta do botão                     |
+| **Q-15** | ~~_(v1.3)_ Qual prazo limite para o `/export` de RF-24 responder?~~                                                          | ✅ **RESOLVIDO na implementação.** 20 s, com sondagem do arquivo. Nenhum estouro observado no uso real; revisitar só se aparecer conversa que não caiba nesse prazo |
+| **Q-16** | _(v1.4)_ Trocar o prazo fixo da capa (RF-29) por detecção de que o CLI já pintou?                                            | **Avaliado, não implementado.** É viável: `JediTermWidget.getTerminalTextBuffer()` e `addModelListener` são públicos, e `getScreenLines()` dá a tela como texto. Custo: acoplar-se ao texto do banner do CLI, que não tem contrato — some com a rede de segurança do prazo. Ver R-16 |
+| **Q-17** | _(v1.4)_ Vale reintroduzir a capa em cima de uma partida sem eco (a alternativa de D-20), ficando só como acabamento?        | Em aberto. Combinadas, o pior caso da capa deixaria de ser "eco visível" e passaria a ser "tela vazia por um instante" — o chute do prazo ficaria inofensivo       |
 | **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver uma, em vez de sempre copiar tudo?                        | Adiado. `Ctrl+C`/`Ctrl+Shift+C` já cobrem a seleção; o botão existe justamente para o caso que o CLASSIC não resolve. `JBTerminalWidget.getSelectedText()` existe se mudarmos de ideia |
 
 ---
@@ -1263,6 +1332,51 @@ UI própria inverteria essa premissa inteira para ganhar aparência. Se um dia e
 revista, que seja com esse custo à vista — e não pela pergunta "dá pra fazer?", cuja resposta
 sempre foi sim.
 
+### Achado 18 — Um recurso pode funcionar e mesmo assim estar errado _(v1.4)_
+
+O RF-27 fez exatamente o que prometia: `--ax-screen-reader` produz saída plana, sem bordas nem
+animação. A flag foi verificada com PTY e **não trava a sessão** — o `$` que parecia retorno ao
+shell é o prompt de entrada do CLI em modo plano.
+
+E foi removido assim mesmo. O motivo é que ele resolvia um problema que o usuário não tinha, e
+criava um que ele tinha: uma linha de entrada indistinguível de prompt de shell, o que piora
+CB-27 justamente na hora em que a sessão morre.
+
+**Lição registrada:** "funciona conforme especificado" não é evidência de valor. O que decidiu
+foi o uso, e o uso levou três minutos — menos tempo do que se gastou implementando a opção.
+
+### Achado 19 — Constante de bancada não é configuração de usuário _(v1.4)_
+
+O prazo da capa (RF-29) foi parar na tela de configurações por iniciativa minha, com a
+justificativa de que "calibrar exige reinstalar o plugin". O usuário recusou de imediato: aquilo
+é ajuste de implementação, não escolha de quem usa. Voltou a ser uma constante em um arquivo.
+
+O respiro (RF-28) ficou na tela — e a diferença entre os dois casos é o teste que vale: **o
+respiro é preferência estética, com valor certo diferente por pessoa; o prazo é uma medida de
+quanto o CLI demora, com um valor certo só.** Configuração existe para o primeiro tipo.
+
+**Lição registrada:** dificuldade de calibrar não é razão para expor um botão. É razão para o
+número morar num lugar fácil de achar.
+
+### Achado 20 — A ordem de investigação mudou o resultado, para pior _(v1.4)_
+
+A tentativa de eliminar o eco do comando foi feita em três passos, e os dois primeiros
+falharam por eu ter medido tarde demais:
+
+1. **PTY direto no CLI.** Eliminou o eco e quebrou o ambiente: sem shell, o processo herdou o
+   `PATH` da sessão gráfica e os hooks do usuário pararam de achar suas ferramentas.
+2. **Correção pontual do `PATH`.** Resolvi a busca do `claude` e deixei todo o resto quebrado —
+   remendo sobre o sintoma, não sobre a causa.
+3. **Shell interativo com `exec`.** Preserva o ambiente exportado e elimina o eco. Foi aqui que
+   eu **finalmente** medi o que sobrevive: variáveis exportadas sim, funções e aliases não.
+
+Se a medição do passo 3 tivesse vindo antes do passo 1, os dois primeiros não teriam existido.
+A informação estava disponível o tempo todo — bastava rodar o comando com PTY e ambiente limpo,
+que é o que acabou decidindo tudo.
+
+**Lição registrada:** quando a mudança mexe em ambiente de execução, medir o ambiente resultante
+é o **primeiro** passo, não o último. Vale para qualquer troca de "quem é o processo pai".
+
 ---
 
 ## Anexo — Rastreabilidade das evidências
@@ -1304,6 +1418,22 @@ Toda afirmação técnica sobre o estado atual remonta a uma verificação diret
 | _(v1.3)_ `/export <arquivo>` grava **sem UI**, sobrescreve, cria diretórios e acrescenta `.txt` se faltar extensão; o argumento é usado cru (`r.trim()`) | implementação extraída do binário `claude` 2.1.220 (funções `azb`, `Y5b`, `u0n`) |
 | _(v1.3)_ `--ax-screen-reader` não tem restrição a `--print`, então vale em sessão interativa | `claude --help`: a descrição não traz a ressalva "(only works with --print)" presente em outras flags |
 | _(v1.3)_ `JBPopupFactory.createComponentPopupBuilder` + `setRequestFocus/setCancelOnClickOutside/setResizable/setMovable` e `JBPopup.show(RelativePoint)` existem em 262 | `javap` de `intellij.platform.ide.jar` e `intellij.platform.ide.core.jar` |
+| _(v1.4)_ **O customizer do plugin oficial devolve o comando intacto** e só mexe no ambiente — injeta `CLAUDE_CODE_SSE_PORT` e também `ENABLE_IDE_INTEGRATION=true` | `javap -c` de `com.anthropic.code.plugin.TerminalCustomizer.customizeCommandAndEnvironment`: o método termina em `aload_3; areturn` |
+| _(v1.4)_ `JediTermWidget.getComponent()` devolve **o próprio widget** (`JPanel` com `BorderLayout`); o terminal e a barra ficam num `JLayeredPane` interno | `javap -c`: `aload_0; areturn`, e o construtor faz `add(myInnerPanel, "Center")` |
+| _(v1.4)_ `TerminalPanel.getTerminalSizeFromComponent()` mede o **próprio painel** (`getWidth() - getInsetX()`), e `getInsetX()` devolve a constante `4` | `javap -c` de `TerminalPanel` |
+| _(v1.4)_ `TerminalPanel.getBackground()` delega a `getWindowBackground()` → `SettingsProvider.getDefaultBackground()`, **recalculado a cada chamada** | `javap -c` de `TerminalPanel` |
+| _(v1.4)_ Nem `JediTermWidget` nem `JBTerminalWidget` chamam `setBackground`: o `JPanel` fica na cor de painel do tema | `javap -c` das duas classes, sem ocorrência de `setBackground` |
+| _(v1.4)_ `PathEnvironmentVariableUtil.findInPath` usa `EnvironmentUtil.getValue("PATH")` — que **não** continha `~/.local/bin` neste ambiente, gerando falso negativo | `javap -c` de `getPathVariableValue` + a notificação observada com o CLI funcionando |
+| _(v1.4)_ `--ax-screen-reader` **não trava a sessão**: o processo segue vivo e o `$` é o prompt de entrada em modo plano | `script -qec` com `timeout 15`: saída `exit=124` (morto pelo timeout) e último byte `$` + `ESC[2G` |
+| _(v1.4)_ O modo também liga por `CLAUDE_AX_SCREEN_READER` ou pelo setting `axScreenReader` | string extraída do binário `claude` 2.1.220 (classe `ytu.isEnabled`) |
+| _(v1.4)_ Um shell interativo com `exec` preserva **variáveis exportadas** (`PATH` completo, `NVM_DIR`, `SDKMAN_DIR`, `PYENV_ROOT`…) e **perde** funções e aliases | `env -i … zsh -i -c 'exec "$0" "$@"' env` sob PTY, comparando nomes; e `command -v` para `sdk`/funções |
+| _(v1.4)_ Sem PTY, o `.zshrc` do usuário **não** é carregado nem com `-i` | mesmo comando sem `script`: nenhuma invocação resolveu o `claude` |
+| _(v1.4)_ `JBLoadingPanel` cobre com **véu translúcido**: o conteúdo por baixo continua legível | observação no IDE — o eco do comando aparecia através da capa |
+| _(v1.4)_ `JLayeredPane.DEFAULT_LAYER` é `Integer`, e passá-lo direto ao `add` faz o Kotlin escolher o overload de **índice**, ignorando a camada | teste `T-1.20` falhou afirmando `getLayer(capa) > getLayer(terminal)` |
+| _(v1.4)_ `Box.setLayout` lança `AWTError("Illegal request")` | três testes de `ClaudeSessionLoading` falharam com essa exceção |
+| _(v1.4)_ `IconUtil.scale(Icon, Double)` está **depreciado** em 262; o substituto é `scale(Icon, Component?, Float)` | warning de compilação |
+| _(v1.4)_ `TerminalProjectOptionsProvider.getShellPath()` é público e síncrono — dá o shell configurado em Settings > Tools > Terminal | `javap` de `TerminalProjectOptionsProvider` |
+| _(v1.4)_ `JediTermWidget.getTerminalTextBuffer()`, `TerminalTextBuffer.addModelListener` e `getScreenLines()` são públicos — base para Q-16 | `javap` de `JediTermWidget` e `TerminalTextBuffer` |
 
 **Não verificado (declarado como suposição):** semântica de
 `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` (Q-03); comportamento de builds anteriores a `262`
@@ -1315,5 +1445,13 @@ simulada~~ ✅ verificado em T-3.11.
 por leitura do binário — ver [Como o `/export` trata o argumento](#como-o-export-trata-o-argumento-lido-no-binário-não-suposto).
 
 _(v1.3)_ **Não verificado:** se o popup de RF-26 se comporta bem sob arraste rápido e troca de
-aba (T-3.15, T-3.16); e quanto o `--ax-screen-reader` de fato melhora a leitura no uso diário,
-que é o dado que faltava para decidir Q-14 (T-3.17).
+aba (T-3.15, T-3.16). ~~Quanto o `--ax-screen-reader` melhora a leitura no uso diário~~ ✅
+respondido em T-3.17: funciona, e mesmo assim foi recusado (Achado 18).
+
+_(v1.4)_ **Não verificado:** o comportamento do respiro e da capa fora do engine CLASSIC
+(CB-36, ligado a Q-04); se o prazo da capa se mantém suficiente em máquina mais lenta ou com
+hooks de sessão pesados (R-16); e o caso de diretório não confiável com a capa no ar (CB-34,
+T-3.20).
+
+_(v1.4)_ ~~**Código sem teste:** os diretórios de fallback da verificação do executável (R-17)~~
+✅ **COBERTO** — T-1.21 implementado, com o par aceito/recusado servindo de controle.
