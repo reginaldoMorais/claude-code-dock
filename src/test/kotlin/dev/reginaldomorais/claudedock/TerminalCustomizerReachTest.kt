@@ -23,6 +23,9 @@ import org.jetbrains.plugins.terminal.ShellStartupOptions
  * Se este teste falhar, a integração com o plugin oficial NÃO funciona na janela
  * dedicada e o SPEC precisa ser revisto antes de qualquer outra coisa.
  */
+// O EP e a classe base seguem depreciados na 262, e continuam sendo o que o plugin oficial usa:
+// é justamente esse caminho que o teste precisa exercitar.
+@Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
 class TerminalCustomizerReachTest : BasePlatformTestCase() {
 
     fun `test customizer alcanca sessoes criadas fora da tool window nativa`() {
@@ -67,7 +70,6 @@ class TerminalCustomizerReachTest : BasePlatformTestCase() {
     }
 
     /** Reproduz o que o `TerminalCustomizer` do plugin oficial faz. */
-    @Suppress("DEPRECATION")
     private class SentinelCustomizer : LocalTerminalCustomizer() {
         override fun customizeCommandAndEnvironment(
             project: Project,

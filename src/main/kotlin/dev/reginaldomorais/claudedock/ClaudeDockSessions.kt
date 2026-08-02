@@ -89,10 +89,18 @@ class ClaudeDockSessions(private val project: Project) {
             return
         }
 
+        // Esconde o prompt e o eco do comando enquanto o CLI sobe.
+        val component = ClaudeSessionLoading.wrap(
+            widget.component,
+            sessionDisposable,
+            "Iniciando o Claude Code…",
+        )
+
         val content: Content = ContentFactory.getInstance()
-            .createContent(widget.component, title, false)
+            .createContent(component, title, false)
         content.isCloseable = true
         content.setDisposer(sessionDisposable)
+        // O foco vai para o terminal, e não para o painel que o cobre.
         content.preferredFocusableComponent = widget.component
         // A referência vive junto com a aba: fechar a aba a leva embora, sem mapa para limpar.
         content.putUserData(SESSION_WIDGET, widget)

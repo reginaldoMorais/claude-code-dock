@@ -39,7 +39,9 @@ object ClaudeTerminalSessionFactory {
             .envVariables(ClaudeEnvironment.build(configDir))
             .build()
 
-        // deferSessionStartUntilUiShown = true: o processo só nasce quando a UI aparece (RNF-02).
+        // deferSessionStartUntilUiShown = true: o processo nasce quando a UI aparece (RNF-02).
+        // A capa de carregamento fica *sobreposta*, e não no lugar do terminal, justamente para
+        // que ele conte como visível aqui e receba o tamanho real da aba desde o primeiro frame.
         val widget = runner.startShellTerminalWidget(parent, options, true)
         // Fora da tool window "Terminal" a plataforma engole o Esc (RF-17).
         ClaudeEscapeForwarder.install(widget)
@@ -88,18 +90,41 @@ object ClaudeTerminalSessionFactory {
     /**
      * Verifica se o executável configurado pode ser encontrado (CB-01, CB-02).
      *
+     * É **advisório**: quem resolve o nome de verdade é o shell interativo da sessão, com o
+     * `PATH` do `.zshrc`/`.bashrc`. Esta verificação enxerga menos que ele, e por isso não
+     * bloqueia nada — no máximo notifica.
+     *
      * Faz acesso a disco — não deve ser chamado na EDT (RNF-03).
      */
-    fun isExecutableAvailable(executable: String): Boolean {
+    fun isExecutableAvailable(
+        executable: String,
+        fallbackDirs: List<String> = DEFAULT_FALLBACK_DIRS,
+    ): Boolean {
         val trimmed = executable.trim()
         if (trimmed.isEmpty()) return false
 
         // Caminho explícito: precisa existir e ser executável.
         if (trimmed.contains(File.separatorChar) || trimmed.contains('/')) {
-            val file = File(trimmed)
-            return file.isFile && file.canExecute()
+            return File(trimmed).let { it.isFile && it.canExecute() }
         }
 
-        return PathEnvironmentVariableUtil.findInPath(trimmed) != null
+        if (PathEnvironmentVariableUtil.findInPath(trimmed) != null) return true
+
+        return fallbackDirs.any { dir -> File(dir, trimmed).let { it.isFile && it.canExecute() } }
     }
+
+    /**
+     * Diretórios consultados quando o `PATH` do IDE não resolve o nome.
+     *
+     * `~/.local/bin` é onde o instalador oficial do Claude Code coloca o binário, e ele entra no
+     * `PATH` por um arquivo de shell que o IDE nunca lê — o processo do IDE herda o ambiente da
+     * sessão gráfica. Sem isto, uma instalação padrão gera notificação de "não encontrado" com o
+     * CLI funcionando perfeitamente na sessão.
+     *
+     * ponytail: dois diretórios, não uma varredura.
+     */
+    private val DEFAULT_FALLBACK_DIRS: List<String> = listOf(
+        File(System.getProperty("user.home"), ".local/bin").path,
+        "/usr/local/bin",
+    )
 }
