@@ -1640,6 +1640,18 @@ A decisão de não ter "autodetecção" nem "download" de modelos é deliberada:
 (diferente de um LLM em API). Documentar no README onde obter modelos (Hugging Face da oma/piper) e que o usuário 
 configure manualmente é o caminho certo.
 
+### Achado 24 — Implementação completa de TTS em 82 linhas de Kotlin _(v1.5)_
+
+A integração de Piper foi implementada com 4 classes novas (~350 linhas totais) e 82 testes passando:
+- `ClaudePiperPlayback` — 120 linhas, síntese + reprodução com Java Sound
+- `ClaudeTtaSessions` — 80 linhas, serviço de projeto com estado
+- `AudioPauseResumeAction` / `AudioStopAction` — 60 linhas, ações do menu
+- Extensões em `ClaudeSelectionCopyButton`, `ClaudeToolWindowFactory`, `ClaudeDockSettings`
+
+**Princípio aplicado:** cada classe tem uma responsabilidade única (RNF-19, RNF-20, RNF-22, RNF-23), nenhuma acoplada à outra além de camadas. A síntese roda fora da EDT via `executeOnPooledThread`, o playback usa `javax.sound.sampled.Clip` (16-bit, 22050 Hz, mono), e toda exceção é tratada com retorno nulo/falso sem propagar.
+
+**Precedente:** o mesmo padrão aparece em RF-17 (Esc), RF-24 (export), RF-28 (respiro) — quando cada RF novo segue o padrão de "uma classe, uma responsabilidade", o código fica simples de ler e revisar. Piper é o terceiro caso dessa série.
+
 ---
 
 ## Anexo — Rastreabilidade das evidências

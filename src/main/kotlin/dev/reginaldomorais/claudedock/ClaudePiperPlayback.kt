@@ -42,6 +42,12 @@ object ClaudePiperPlayback {
         val modelFile = File(trimmedModel)
         if (!modelFile.isFile || !modelFile.canRead()) return false
 
+        // Executável: se for caminho explícito (contém /), validar diretamente
+        if (trimmedExe.contains("/")) {
+            val exeFile = File(trimmedExe)
+            if (exeFile.isFile && exeFile.canExecute()) return true
+        }
+
         // Executável: consultar PATH via IntelliJ (padronizado com claude)
         if (com.intellij.execution.configurations.PathEnvironmentVariableUtil.findInPath(trimmedExe) != null) return true
 

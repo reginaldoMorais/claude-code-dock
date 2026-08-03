@@ -1,0 +1,9 @@
+<svg width="16" height="16" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.2">
+    <path d="M4 6v4"/>
+    <path d="M6 4v8"/>
+    <path d="M8 7v2"/>
+    <path d="M10 5v6"/>
+    <path d="M12 2v12"/>
+  </g>
+</svg>

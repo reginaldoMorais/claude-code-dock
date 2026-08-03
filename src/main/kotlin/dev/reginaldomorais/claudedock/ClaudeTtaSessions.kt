@@ -1,6 +1,8 @@
 package dev.reginaldomorais.claudedock
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.util.messages.Topic
@@ -12,6 +14,7 @@ import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
  * Uma única síntese/reprodução ativa por vez; novo play interrompe anterior.
  * Dispara eventos para listeners (ações do menu "Áudio").
  */
+@Service(Service.Level.PROJECT)
 class ClaudeTtaSessions(private val project: Project) {
 
     private val LOG = Logger.getInstance(ClaudeTtaSessions::class.java)
@@ -104,8 +107,7 @@ class ClaudeTtaSessions(private val project: Project) {
     }
 
     companion object {
-        fun getInstance(project: Project): ClaudeTtaSessions =
-            project.getService(ClaudeTtaSessions::class.java)
+        fun getInstance(project: Project): ClaudeTtaSessions = project.service()
     }
 }
 

@@ -85,7 +85,7 @@ class ClaudeDockConfigurable(private val project: Project) :
                         .align(AlignX.FILL)
                         .bindText(settings::piperExecutable)
                         .comment(
-                            "Vale para todos os projetos. " +
+                            "Piper é um TTS local open-source. Veja https://github.com/OHF-Voice/piper1-gpl. " +
                                 "Deixe \"piper\" para resolver pelo PATH.",
                         )
                 }

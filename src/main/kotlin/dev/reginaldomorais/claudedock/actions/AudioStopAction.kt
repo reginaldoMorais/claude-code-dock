@@ -17,14 +17,20 @@ class AudioStopAction : AnAction("Parar", "Parar reprodução de áudio", AllIco
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        val project = e.project ?: run {
+        val project = e.project
+        if (project == null) {
             e.presentation.isEnabled = false
             return
         }
 
-        val sessions = ClaudeTtaSessions.getInstance(project)
-        val state = sessions.getState()
+        val sessions = try {
+            ClaudeTtaSessions.getInstance(project)
+        } catch (ex: Exception) {
+            e.presentation.isEnabled = false
+            return
+        }
 
+        val state = sessions.getState()
         e.presentation.isEnabled = state != TtsState.Idle
     }
 

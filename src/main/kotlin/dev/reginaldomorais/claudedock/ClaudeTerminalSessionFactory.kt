@@ -45,8 +45,8 @@ object ClaudeTerminalSessionFactory {
         val widget = runner.startShellTerminalWidget(parent, options, true)
         // Fora da tool window "Terminal" a plataforma engole o Esc (RF-17).
         ClaudeEscapeForwarder.install(widget)
-        // Cópia por seleção com o mouse (RF-26); some junto com a aba.
-        ClaudeSelectionCopyButton.install(widget, parent)
+        // Cópia por seleção com o mouse (RF-26); play de TTS (RF-30); some junto com a aba.
+        ClaudeSelectionCopyButton.install(widget, parent, project)
         // Respiro entre o conteúdo e as bordas da janela; o JediTerm só reserva 4px à esquerda.
         ClaudeSessionPadding.apply(
             widget.component,

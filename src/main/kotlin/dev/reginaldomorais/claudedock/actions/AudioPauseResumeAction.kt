@@ -12,23 +12,26 @@ import dev.reginaldomorais.claudedock.TtsStateListener
 /**
  * Alterna entre pausar e retomar a reprodução de áudio (RF-31).
  */
-class AudioPauseResumeAction : AnAction(), DumbAware {
+class AudioPauseResumeAction : AnAction("Pausar", "Pausar ou retomar reprodução de áudio", AllIcons.Actions.Pause), DumbAware {
 
     private var currentState: TtsState = TtsState.Idle
-
-    init {
-        val project = null // Will be set in update()
-    }
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        val project = e.project ?: run {
+        val project = e.project
+        if (project == null) {
             e.presentation.isEnabled = false
             return
         }
 
-        val sessions = ClaudeTtaSessions.getInstance(project)
+        val sessions = try {
+            ClaudeTtaSessions.getInstance(project)
+        } catch (ex: Exception) {
+            e.presentation.isEnabled = false
+            return
+        }
+
         val state = sessions.getState()
         currentState = state
 

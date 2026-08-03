@@ -6,6 +6,7 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.openapi.wm.ex.ToolWindowEx
 import com.intellij.ui.SimpleTextAttributes
+import dev.reginaldomorais.claudedock.actions.AudioMenuAction
 import dev.reginaldomorais.claudedock.actions.CopySessionAction
 import dev.reginaldomorais.claudedock.actions.ExportSessionAction
 import dev.reginaldomorais.claudedock.actions.NewSessionAction
@@ -27,6 +28,7 @@ class ClaudeToolWindowFactory : ToolWindowFactory, DumbAware {
                 ResumeSessionAction(),
                 CopySessionAction(),
                 ExportSessionAction(),
+                AudioMenuAction(),
             ),
         )
         installEmptyState(project, toolWindow)
