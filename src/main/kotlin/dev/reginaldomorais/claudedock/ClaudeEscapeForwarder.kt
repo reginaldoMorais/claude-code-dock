@@ -15,7 +15,7 @@ import java.awt.event.KeyEvent
 object ClaudeEscapeForwarder {
 
     /** Sequência ESC do VT100, o mesmo byte que o JediTerm enviaria. */
-    private const val ESC = "\u001b"
+    private const val ESC = ""
 
     private val LOG = Logger.getInstance(ClaudeEscapeForwarder::class.java)
 

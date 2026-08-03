@@ -27,6 +27,12 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
     @Deprecated("Sempre Backspace em GoLand; Esc em IntelliJ")
     var escapeKeyName: String = "BACKSPACE"
 
+    /** Caminho do Piper TTS. O padrão resolve pelo PATH. */
+    var piperExecutable: String = "piper"
+
+    /** Caminho absoluto para o arquivo .onnx do modelo de voz. Vazio desabilita síntese. */
+    var piperModel: String = ""
+
 
     override fun getState(): ClaudeDockSettings = this
 
@@ -45,6 +51,13 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
      * as colunas do terminal.
      */
     fun effectivePadding(): Int = sessionPadding.coerceIn(MIN_PADDING, MAX_PADDING)
+
+    /** Executável do Piper: cai no padrão se o usuário limpar o campo. */
+    fun effectivePiperExecutable(): String =
+        piperExecutable.trim().ifEmpty { "piper" }
+
+    /** Caminho do modelo: vazio significa síntese desabilitada. */
+    fun effectivePiperModel(): String = piperModel.trim()
 
     companion object {
         const val DEFAULT_EXECUTABLE = "claude"

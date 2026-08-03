@@ -73,6 +73,38 @@ class ClaudeDockConfigurable(private val project: Project) :
                         )
                 }
             }
+
+            group("Piper TTS") {
+                row("Executável do Piper:") {
+                    textFieldWithBrowseButton(
+                        FileChooserDescriptorFactory.createSingleFileNoJarsDescriptor()
+                            .withTitle("Executável do Piper")
+                            .withDescription("Selecione o binário do Piper TTS"),
+                        project,
+                    )
+                        .align(AlignX.FILL)
+                        .bindText(settings::piperExecutable)
+                        .comment(
+                            "Piper é um TTS local open-source. Veja https://github.com/OHF-Voice/piper1-gpl. " +
+                                "Deixe \"piper\" para resolver pelo PATH.",
+                        )
+                }
+
+                row("Modelo de voz (.onnx):") {
+                    textFieldWithBrowseButton(
+                        FileChooserDescriptorFactory.createSingleFileDescriptor("onnx")
+                            .withTitle("Arquivo de modelo do Piper")
+                            .withDescription("Selecione o arquivo .onnx da voz desejada"),
+                        project,
+                    )
+                        .align(AlignX.FILL)
+                        .bindText(settings::piperModel)
+                        .comment(
+                            "Caminho absoluto para a voz desejada. Obrigatório para ativar síntese. " +
+                                "Vale para todos os projetos.",
+                        )
+                }
+            }
         }
     }
 }

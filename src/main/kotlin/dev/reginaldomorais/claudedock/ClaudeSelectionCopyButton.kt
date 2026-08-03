@@ -3,6 +3,7 @@ package dev.reginaldomorais.claudedock
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.util.Disposer
@@ -15,9 +16,11 @@ import com.jediterm.terminal.model.TerminalSelection
 import com.jediterm.terminal.model.TerminalSelectionChangesListener
 import com.jediterm.terminal.ui.TerminalPanel
 import java.awt.Cursor
+import java.awt.FlowLayout
 import java.awt.Point
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
 /**
@@ -33,11 +36,11 @@ import javax.swing.SwingUtilities
  */
 object ClaudeSelectionCopyButton {
 
-    fun install(widget: TerminalWidget, parent: Disposable) {
+    fun install(widget: TerminalWidget, parent: Disposable, project: Project) {
         val jediTermWidget = JBTerminalWidget.asJediTermWidget(widget) ?: return
         val panel = jediTermWidget.terminalPanel
 
-        val controller = Controller(jediTermWidget, panel)
+        val controller = Controller(jediTermWidget, panel, project)
         panel.addMouseListener(controller)
         panel.addSelectionListener(controller)
 
@@ -51,6 +54,7 @@ object ClaudeSelectionCopyButton {
     private class Controller(
         private val widget: JBTerminalWidget,
         private val panel: TerminalPanel,
+        private val project: Project,
     ) : MouseAdapter(), TerminalSelectionChangesListener {
 
         private var popup: JBPopup? = null

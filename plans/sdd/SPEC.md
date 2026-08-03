@@ -1,8 +1,8 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.4
-- **Data:** 2026-08-01
-- **Status:** Aprovado — v1.4 remove a saída plana e especifica o respiro e a tela de carregamento
+- **Versão:** 1.5
+- **Data:** 2026-08-02
+- **Status:** Especificação — v1.5 acrescenta suporte a TTS via Piper com play/pause/stop na tool window
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -14,6 +14,8 @@
 > | 1.2    | 2026-08-01 | RF-21 (copiar o conteúdo da sessão) e RF-22 (exportar a conversa via `/export`), após T-3.1/T-3.2 aprovados                                                                           |
 > | 1.3    | 2026-08-01 | DEF-01 (cópia duplicada) diagnosticado; RF-21 **revisto** para passar pelo `/export` (RF-24/RF-25); RF-26 (cópia flutuante por seleção); Q-14 (UI de markdown) analisada e recusada   |
 > | 1.4    | 2026-08-01 | RF-27 (saída plana) **removido** após uso real; RF-28 (respiro nas bordas) e RF-29 (tela de carregamento) especificados; D-09 reconfirmado com a alternativa `exec` medida e recusada |
+> | 1.5    | 2026-08-02 | RF-31/RF-32 (pause/stop via Piper TTS); detecção de Piper + modelo; configuração de executável e caminho do modelo; ações no menu do cabeçalho                                      |
+> | 1.5.1  | 2026-08-03 | RF-30 (botão play no popup) **descartado** — complexidade UX no popup para pouco ganho vs. menu de cabeçalho já existente (RF-31)                                                   |
 
 ---
 
@@ -115,6 +117,18 @@ Explicitamente **não** serão construídos nesta tarefa:
   monolítica. Ver [Riscos](#riscos).
 - **Substituição do plugin oficial.** Os dois coexistem; o oficial permanece a fonte da integração.
 - **Autenticação, billing ou qualquer manipulação de credenciais do Claude Code.**
+- _(v1.5)_ **Gerência de modelos de voz do Piper.** O usuário configura manualmente o caminho
+  para o arquivo `.onnx` do modelo desejado. Sem seletor de voz, sem download automatizado de
+  modelos, sem lista pública de vozes disponíveis.
+- _(v1.5)_ **Controle de qualidade de síntese.** Sem suporte a `--length-scale`, `--noise-scale`,
+  `--volume`, `--speaker` — só o padrão de cada modelo.
+- _(v1.5)_ **Fila de reprodução.** Uma única fala por vez; um novo play interrompe o que estiver
+  tocando sem oferecer fila.
+- _(v1.5)_ **Botão de play no popup de seleção (RF-30).** O menu "Áudio" no cabeçalho já oferece
+  play/pause/stop enquanto a fala está em curso. Adicionar play também no popup de seleção
+  (junto com cópia) adicionaria UI paralela sem capacidade nova, apenas um segundo caminho para
+  a mesma ação. Decisão: manter play só no cabeçalho (RF-31) e cópia no popup (RF-26). RF-30
+  descartado em v1.5.1.
 
 ---
 
@@ -373,6 +387,22 @@ própria, com markdown e blocos de código. O caminho existe. Ver a avaliação 
 | `TerminalEngine`                                                                                        | enum com `CLASSIC`, `REWORKED`, `NEW_TERMINAL` |
 | `LocalTerminalCustomizer.EP_NAME`                                                                       | presente                                       |
 
+### Piper TTS no ambiente _(verificado em v1.5)_
+
+| Item                            | Valor verificado                                                       | Como foi verificado                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Piper TTS                       | `piper-tts` 1.4.2, acessível via `~/.pyenv/shims/piper`                | `piper --help`; `pip show piper-tts`                                                     |
+| Modelo de voz preparado         | `~/.claude/piper-voices/pt_BR-faber-medium.onnx` (63 MB + `.json`)      | `ls -la ~/.claude/piper-voices/`; teste de síntese bem-sucedido                          |
+| Saída de síntese                | PCM cru, 22050 Hz, 16-bit, mono, little-endian, sem stderr             | `echo "teste" \| piper -m <modelo> --output-raw \| wc -c`                                |
+| Playback via Java Sound         | Suportado: `SourceDataLine` abre no formato exato do Piper              | compilação e execução de `MixerCheck` com `javax.sound.sampled`                          |
+| Mixers de áudio disponíveis     | HDMI, USB, e linhas genéricas (ALSA via PipeWire/PulseAudio)           | listagem de `AudioSystem.getMixerInfo()` no JDK 21                                       |
+| Limite de Piper                 | **Requer `-m MODEL`** — não há modelo padrão como há em `claude`        | análise de `piper --help` v1.4.2                                                         |
+
+**Descoberta que define a arquitetura (v1.5):** diferentemente do `claude` que roda com padrões
+embutidos, o **Piper é obrigatoriamente configurável**. "Piper instalado" = executável presente
+**E** caminho válido para um modelo `.onnx` configurado. A ausência de qualquer um disso disable
+o botão play.
+
 ### Correção de uma premissa do documento de origem
 
 O plano inicial afirma que _"a Anthropic inviabiliza plugins de terceiros rodarem o Claude Code"_.
@@ -444,6 +474,8 @@ reimplementação frágil.**
 | ~~**RF-27**~~ | ~~_(v1.3)_ O plugin DEVE oferecer opção de aplicar `--ax-screen-reader` às novas sessões.~~ **REMOVIDO em v1.4** — ver [Fora de Escopo](#fora-de-escopo) e o Achado 18.                                                                        |
 | **RF-28**     | _(v1.4)_ A sessão DEVE ser afastada das bordas da tool window por um respiro configurável, pintado com o fundo do terminal, e o valor DEVE valer para as sessões abertas a partir da mudança.                                                  |
 | **RF-29**     | _(v1.4)_ Ao abrir uma aba, o plugin DEVE cobrir a sessão enquanto o CLI sobe, escondendo o prompt do shell e o eco do comando; a capa DEVE sair sozinha e NÃO DEVE impedir a sessão de receber o tamanho real da aba.                          |
+| **RF-31**     | _(v1.5)_ Durante a reprodução de áudio, o plugin DEVE oferecer, **no cabeçalho da tool window**, um menu suspenso "Áudio" contendo ações para pausar/retomar e parar a fala em curso.                                                             |
+| **RF-32**     | _(v1.5)_ O plugin DEVE permitir configurar, em Settings > Tools > Claude Code Dock, o caminho do executável `piper` (valor padrão: `piper`) e o caminho para um arquivo `.onnx` de modelo de voz (padrão: vazio; desabilita síntese até configurado). |
 
 ---
 
@@ -521,6 +553,25 @@ reimplementação frágil.**
 - **RNF-17** — O plugin DEVE suportar múltiplos projetos abertos simultaneamente, com uma tool
   window e sessões independentes por projeto (serviços com escopo de `Project`).
 - **RNF-18** — Não há limite artificial de abas; o limite prático é o de processos do sistema.
+
+### Requisitos novos em v1.5 — Piper TTS
+
+- **RNF-19** _(v1.5, novo)_ — Todo acoplamento com o Piper TTS e `javax.sound.sampled` DEVE
+  estar concentrado em **uma única classe**, limitando a auditoria de upgrade a um arquivo
+  (espelhando RNF-15 para a API de terminal). A classe não DEVE ser acoplada a ActionUpdaters,
+  serviços de projeto, ou UI — é lógica pura, chamada por camadas acima.
+- **RNF-20** _(v1.5, novo)_ — A síntese de fala (processo `piper`) DEVE rodar fora da EDT
+  (Event Dispatch Thread), lido o arquivo `.onnx` e o modelo de áudio também fora da EDT.
+- **RNF-21** _(v1.5, novo)_ — O plugin NÃO DEVE registrar em log ou armazenar o conteúdo de
+  texto enviado ao Piper nem o audio/áudio gerado — analogamente a RNF-06 (conteúdo de buffer).
+  A síntese é localizada, não transmitida; qualquer logging é exclusivamente para diagnóstico
+  de erros da própria execução do Piper.
+- **RNF-22** _(v1.5, novo)_ — Nenhum `Clip` ou `SourceDataLine` DEVE ser deixado aberto após
+  play/pause/stop: a reprodução DEVE ser encerrada de forma limpa e os recursos de áudio
+  liberados (evitando travamento de mixer ou falta de mixers para futuras reproduções).
+- **RNF-23** _(v1.5, novo)_ — Uma única síntese/reprodução deve estar ativa por vez. Um novo
+  play durante uma reprodução em curso DEVE pausar/parar a anterior e iniciar a nova (sem
+  fila).
 
 ---
 
@@ -628,6 +679,36 @@ reimplementação frágil.**
 3. O título da aba é marcado como encerrado; a aba **não** se fecha (RF-11), preservando o
    scrollback para leitura.
 
+### Fluxo alternativo J — pausar e retomar fala _(v1.5, RF-31)_
+
+1. Durante a reprodução, o usuário aciona "Pausar" no menu "Áudio".
+2. O `Clip` é pausado via `.stop()`, a posição é guardada em `framePosition`.
+3. O ícone muda para "Retomar".
+4. Clicado em "Retomar", o `Clip` é repositicionado e `.start()` é chamado.
+5. Clicado em "Parar", o `Clip` é fechado e o proceso `piper` é destruído.
+
+### Fluxo de erro G — Piper não encontrado _(v1.5, RF-31/RF-32)_
+
+1. Ao abrir a janela ou durante checagem cacheada, detecta-se que `piper` não está no PATH nem
+   nos fallbacks (`~/.local/bin`, `/usr/local/bin`).
+2. O menu "Áudio" no cabeçalho fica desabilitado; nenhuma notificação é exibida (é advisório).
+3. Um tooltip explica por que o menu está desabilitado ("Piper não encontrado").
+4. O usuário pode configurar o caminho explícito em Settings > Tools > Claude Code Dock.
+
+### Fluxo de erro H — modelo não configurado _(v1.5, RF-31/RF-32)_
+
+1. O `piper` está disponível, mas o campo "Caminho do modelo Piper" está vazio ou aponta para
+   arquivo inexistente.
+2. O menu "Áudio" no cabeçalho fica desabilitado; tooltip: "Configure um modelo de voz".
+3. Configuração é feita em Settings > Tools > Claude Code Dock > "Caminho do modelo Piper".
+
+### Fluxo de erro I — síntese falha _(v1.5, RF-31/RNF-21)_
+
+1. O `piper` é lançado, mas retorna código de erro ou nenhum PCM é produzido.
+2. A notificação "Falha ao sintetizar o áudio. Verifique o modelo e o texto." é exibida.
+3. Menu "Áudio" volta a desabilitado; nenhuma reprodução inicia.
+4. O processo `piper` é destruído e recursos liberados (RNF-22).
+
 ---
 
 ## Design Técnico
@@ -652,10 +733,12 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
 ├── ClaudeSelectionCopyButton.kt    # (v1.3) botão flutuante na seleção (RF-26)
 ├── ClaudeSessionPadding.kt         # (v1.4) borda que se pinta com o fundo do terminal (RF-28)
 ├── ClaudeSessionLoading.kt         # (v1.4) capa sobreposta enquanto o CLI sobe (RF-29)
+├── ClaudePiperPlayback.kt          # (v1.5) ÚNICO ponto de acoplamento com Piper + Java Sound (RNF-19)
+├── ClaudeTtaSessions.kt            # (v1.5) serviço de projeto: estado de reprodução única (RNF-23)
 ├── ClaudeTabTitle.kt               # puro: títulos distinguíveis de aba
 ├── ClaudeWorkingDirectory.kt       # puro: resolução do diretório de trabalho
 ├── settings/
-│   ├── ClaudeDockSettings.kt        # PersistentStateComponent (nível aplicação): executável
+│   ├── ClaudeDockSettings.kt        # PersistentStateComponent (nível aplicação): executável, modelo
 │   ├── ClaudeDockProjectSettings.kt # PersistentStateComponent (nível projeto): CLAUDE_CONFIG_DIR
 │   └── ClaudeDockConfigurable.kt    # tela em Settings > Tools (projectConfigurable)
 └── actions/
@@ -663,6 +746,9 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
     ├── ResumeSessionAction.kt
     ├── CopySessionAction.kt         # (v1.2) RF-21
     ├── ExportSessionAction.kt       # (v1.2) RF-22
+    ├── AudioMenuAction.kt           # (v1.5) menu "Áudio" no cabeçalho com ações de TTS (RF-31)
+    ├── AudioPauseResumeAction.kt    # (v1.5) toggle pause/resume na menu "Áudio"
+    ├── AudioStopAction.kt           # (v1.5) parar reprodução e fechar mixer
     └── OpenClaudeDockAction.kt
 src/main/resources/META-INF/
 ├── plugin.xml
@@ -784,6 +870,85 @@ em [Riscos](#riscos).
   > plugin de terminal, verificada por `verifyPlugin`.
 - Artefato: ZIP produzido por `./gradlew buildPlugin`.
 
+### Piper TTS — síntese e reprodução _(v1.5)_
+
+**`ClaudePiperPlayback` — ÚNICO ponto de acoplamento com Piper + javax.sound.sampled (RNF-19).**
+
+Responsabilidades:
+1. **Deteção e validação:** `canSynthesize(executable, modelPath): Boolean` — verifica se
+   executável existe e modelo (arquivo `.onnx`) existe e é legível, sem lançar exceção.
+   Chamado fora da EDT via `executeOnPooledThread`, resultado cacheado e atualizado a cada
+   N segundos ou quando configuração muda.
+2. **Síntese:** `synthesize(text, executable, modelPath): ByteArray` — lança o `piper` via
+   `GeneralCommandLine`, passa `text` por stdin, lê stdout (PCM cru), retorna bytes.
+   Processo é destruído se timeout ou erro. Fora da EDT (RNF-20).
+3. **Reprodução:** `playBytes(pcmBytes, sampleRate=22050, channels=1)` — abre um `Clip` ou
+   `SourceDataLine`, reproduz, libera recursos em `finally` (RNF-22).
+4. **Ciclo de vida:** `pause()` (guarda posição), `resume()` (restaura e reinicia), `stop()`
+   (fecha clip e processo). Estado é simples: Idle | Playing | Paused.
+
+Nenhum acoplamento a `Project`, serviços, UI, actions, ou listeners — é lógica pura.
+Exceções são capturadas, logadas em `Logger.warn(...)` e retornadas como valores nulos /
+booleanos falsos.
+
+**`ClaudeTtaSessions` — serviço de projeto, estado único de reprodução.**
+
+Uma única instância por projeto, via `project.service()`. Mantém:
+- Referência ao `ClaudePiperPlayback` em curso (ou null).
+- Estado: Idle / Playing / Paused.
+- Listener de update para ações no menu (feedback para `AudioPauseResumeAction` / `AudioStopAction`).
+
+Métodos:
+- `playText(text)` — verifica `canSynthesize()`, para qualquer reprodução anterior,
+  lança síntese/reprodução fora da EDT, notifica ouvintes (ações do menu ficam ativas).
+- `pause()`, `resume()`, `stop()` — delegam a `ClaudePiperPlayback`, atualizam estado,
+  notificam ouvintes.
+
+Sem acoplamento a UI fora dos listeners de update (padrão padrão do IntelliJ).
+
+**Menu "Áudio" no cabeçalho (v1.5, RF-31).**
+
+`DefaultActionGroup("Áudio", true)` contém:
+- `AudioPauseResumeAction` — texto/ícone alterna entre "Pausar" (quando Playing) e "Retomar"
+  (quando Paused); desabilitado quando Idle.
+- `AudioStopAction` — ícone `AllIcons.Actions.Suspend` ou similar; desabilitado quando Idle.
+
+Ambos chamam `ClaudeTtaSessions.getInstance(project).pause()`, `.resume()`, `.stop()`.
+
+O `DefaultActionGroup` é criado em `ClaudeToolWindowFactory` (onde já são adicionadas as ações
+de Nova/Retomar/Copiar/Exportar) e adicionado à lista `setTitleActions(...)`.
+
+**Campos de configuração novos (v1.5, RF-32).**
+
+`ClaudeDockSettings` (app-level) ganha:
+- `piperExecutable: String = "piper"` (default)
+- `piperModel: String = ""` (default vazio)
+
+Métodos:
+- `effectivePiperExecutable(): String` — trim, se vazio retorna default.
+- `effectivePiperModel(): String` — trim, se vazio retorna `""` (desabilita play).
+
+`ClaudeDockConfigurable` ganha dois novos campos na tela de configurações, no mesmo padrão que o
+do `claude`:
+```kotlin
+group("Piper TTS") {
+    row("Executável do Piper:") {
+        textFieldWithBrowseButton(...)
+            .bindText(settings::piperExecutable)
+            .comment("Padrão: \"piper\" (busca no PATH).")
+    }
+    row("Modelo de voz (.onnx):") {
+        textFieldWithBrowseButton(
+            FileChooserDescriptorFactory.createSingleFileDescriptor("onnx")
+                .withTitle("Selecione o arquivo .onnx do modelo"),
+            project,
+        )
+            .bindText(settings::piperModel)
+            .comment("Caminho absoluto para a voz desejada. Obrigatório para ativar síntese.")
+    }
+}
+```
+
 ### Itens não aplicáveis
 
 Registrados por exigência do roteiro de SDD:
@@ -842,6 +1007,11 @@ Registrados por exigência do roteiro de SDD:
 | **CB-35** | _(v1.4)_ Aba fechada antes de a capa sair                                                                           | Timer, animação e capa são filhos do `Disposable` da aba: caem juntos, sem timer disparando sobre painel morto                                                                                  |
 | **CB-36** | _(v1.4)_ Engine sem JediTerm (`REWORKED`) com o respiro ligado                                                      | Sem painel para consultar, a borda fica vazia e a faixa é pintada pela tool window — degrada em cor, não em erro                                                                                |
 | **CB-37** | _(v1.4)_ Executável instalado em diretório ausente do `PATH` do IDE (ex.: `~/.local/bin`)                           | A verificação consulta diretórios conhecidos antes de notificar; o shell da sessão resolve de qualquer forma (CB-01)                                                                            |
+| **CB-38** | _(v1.5)_ Seleção muito grande (ex.: páginas de código) enviada ao Piper | A síntese pode demorar décadas de segundos; o timeout (20s ou configurável) notifica o usuário sem travar a UI |
+| **CB-39** | _(v1.5)_ Modelo `.onnx` ausente após ser configurado | O botão play fica desabilitado; verificação consultou o arquivo antes de manter estado Idle |
+| **CB-40** | _(v1.5)_ Reprodução em curso e usuário fecha a aba | O `Disposable` da aba dispara, `ClaudeTtaSessions` para a reprodução e libera recursos (RNF-22) |
+| **CB-41** | _(v1.5)_ Reprodução pausada e usuário sai do IDE | Nenhum evento especial — o proceso `piper` já terminou (síntese é fora da EDT), só o `Clip` fica em pausa. Fechamento normal do IDE libera tudo |
+| **CB-42** | _(v1.5)_ Dois modelos diferentes configurados (ex.: português e inglês) e usuário alterna | Nenhum problema — cada chamada a `playText()` usa o `piperModel` atual da configuração |
 
 ---
 
@@ -866,6 +1036,11 @@ Registrados por exigência do roteiro de SDD:
 | **R-15** | _(v1.3)_ O botão flutuante (RF-26) depende de `TerminalPanel.addSelectionListener`, específico do engine CLASSIC — mesma exposição de R-09                                                                           | Baixo       | Média | Degrada igual: sem `asJediTermWidget` o botão não é instalado, e `Ctrl+C`/`Ctrl+Shift+C` seguem copiando a seleção. Perde-se conveniência, não capacidade                                                                                                                                                                                                        |
 | **R-16** | _(v1.4)_ O prazo da capa (RF-29) é fixo. Máquina mais lenta, hook de sessão pesado ou CLI atualizando deixam o eco escapar quando a capa sai                                                                         | Baixo       | Média | Constante única em `ClaudeSessionLoading`, ajustável em um lugar. Falha é cosmética e passageira, nunca funcional. Q-16 registra o caminho para trocar prazo por detecção                                                                                                                                                                                        |
 | **R-17** | _(v1.4)_ A verificação do executável usa o `PATH` do `EnvironmentUtil`, que **não** enxerga o que o `.zshrc`/`.bashrc` acrescenta — falso negativo observado com o CLI funcionando                                   | Baixo       | Alta  | Consulta `~/.local/bin` e `/usr/local/bin` antes de desistir, e a notificação nunca bloqueia a abertura da aba. Quem instala fora disso tem o campo de configuração                                                                                                                                                                                              |
+| **R-18** | _(v1.5)_ Piper depende de um arquivo `.onnx` cuja localização e nomenclatura não é padronizada (sem registro central de modelos)                                                                                    | Médio       | Alta  | Decisão de design: o usuário configura manualmente o caminho do modelo desejado, sem autodetecção. Documentar no README dicas de onde obter modelos (ex.: Hugging Face da oma/piper) e convenção de armazená-los em `~/.claude/piper-voices/` |
+| **R-19** | _(v1.5)_ A síntese no `piper` é CPU-bound e pode travar a UI se rodasse na EDT                                      | Médio       | Média | RNF-20 exige síntese fora da EDT via `executeOnPooledThread`. Testado que `ApplicationManager.getApplication().executeOnPooledThread { ... }` + `invokeLater` para update não trava. Revalidar se seleção > N caracteres passar a ser suportada |
+| **R-20** | _(v1.5)_ Reprodução de áudio via `javax.sound.sampled` é bloqueante (thread do mixer aguarda buffer ficar vazio)   | Médio       | Média | Linha de áudio é reproduzida em thread separada (mixer nativo do SO), a UI fica responsiva. Se o mixer travar ou estiver indisponível, a thread de reprodução congela, não a EDT. Risco aceitável |
+| **R-21** | _(v1.5)_ Modelo `.onnx` pode ser muito grande (63 MB) e o carregamento na primeira síntese causa latência            | Baixo       | Média | Piper já cacheia o modelo em memória entre chamadas. Primeira síntese tem latência de carregamento (~2-3s); as seguintes são rápidas. Documentar e aceitar |
+| **R-22** | _(v1.5)_ Dois projetos abertos com configurações diferentes de `piperModel` — sem sincronização entre `ClaudeTtsSessions` | Baixo       | Baixa | Cada projeto tem sua própria instância de `ClaudeTtaSessions` (via `project.service()`). Não há compartilhamento; cada um usa seu próprio modelo configurado. Esperado e correto |
 
 ---
 
@@ -898,6 +1073,12 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.19**     | `ClaudeDockSettings`              | _(v1.4)_ `sessionPadding` nasce no padrão, persiste via `loadState` e valor fora da faixa é limitado (RF-28)                                                                                                                                                                                      |
 | **T-1.20**     | `ClaudeSessionLoading`            | _(v1.4)_ O terminal continua na árvore e **visível** sob a capa; a capa é opaca e fica em camada superior; as camadas ocupam a área inteira; prazo zero devolve o próprio terminal (RF-29, CB-35)                                                                                                 |
 | **T-1.21**     | Verificação do executável         | _(v1.4)_ Caminho explícito exige existir e ser executável; nome ausente do `PATH` é aceito quando está num diretório conhecido, e recusado quando o diretório não o tem — o par é o controle que impede o teste de passar resolvendo pelo `PATH` de quem roda a suíte (CB-01, CB-02, CB-37, R-17) |
+| **T-1.22**     | `ClaudePiperPlayback`             | _(v1.5)_ `canSynthesize(executable, modelPath)` retorna verdadeiro só quando ambos existem, é legível e modelo termina em `.onnx`; sem exceções mesmo com caminho inválido (CB-39) |
+| **T-1.23**     | `ClaudePiperPlayback`             | _(v1.5)_ `synthesize(text, executable, modelPath)` retorna ByteArray não vazio com PCM cru (22050 Hz, 16-bit, mono) quando entrada é válida; retorna null com timeout ou erro de processo (CB-38, R-19) |
+| **T-1.24**     | `ClaudePiperPlayback`             | _(v1.5)_ PCM de síntese é reproduzível sem erro via `playBytes(pcm, 22050, 1)`; recurso é liberado após stop ou exceção (RNF-22) |
+| **T-1.25**     | `ClaudeDockSettings`              | _(v1.5)_ `piperExecutable` e `piperModel` nascem em padrão, persistem via `loadState`, `effectivePiperExecutable()` e `effectivePiperModel()` fazem trim (RF-32) |
+| **T-1.26**     | `ClaudeTtaSessions`               | _(v1.5)_ Estado alterna Idle → Playing → (Paused ↔ Playing) → Idle corretamente; listeners de update disparam em cada mudança (RNF-23) |
+| **T-1.27**     | `ClaudeTtaSessions`               | _(v1.5)_ `playText(text)` novo durante reprodução prévia para e inicia nova, sem fila; recurso anterior é liberado (RNF-23) |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
 executada após cada implementação.
@@ -968,6 +1149,11 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.18**     | _(v1.4)_ Abrir aba, mudar o tema do IDE (claro ↔ escuro) e conferir que o respiro acompanha o fundo do terminal, sem faixa de cor antiga (RF-28, CB-33)                                                                                                      |
 | **T-3.19**     | _(v1.4)_ Abrir aba e observar a partida: a capa cobre o prompt e o eco, sai sozinha, e o rodapé do CLI **não** aparece quebrado nem redesenha ao sair (RF-29)                                                                                                |
 | **T-3.20**     | _(v1.4)_ Abrir aba em diretório novo, onde o CLI pergunta "confia nesta pasta?": o diálogo continua respondível depois de a capa sair (CB-34)                                                                                                                |
+| **T-3.21**     | _(v1.5)_ Menu "Áudio" no cabeçalho fica desabilitado quando: (a) `piper` não encontrado; (b) modelo não configurado; verificar tooltip em cada caso (RF-31, CB-39) |
+| **T-3.22**     | _(v1.5)_ Durante reprodução de áudio, clicar em "Pausar": som para e botão muda para "Retomar". Clicar "Retomar": som continua. Clicar "Parar": som cessa (RF-31, CB-40) |
+| **T-3.23**     | _(v1.5)_ Abrir Settings > Tools > Claude Code Dock, verificar novos campos "Executável do Piper" e "Modelo de voz (.onnx)", alterá-los, aplicar, e verificar que menu "Áudio" se habilita/desabilita conforme modelo (RF-32) |
+| **T-3.26**     | _(v1.5)_ Selecionar e reproduzir um grande trecho (páginas de código): síntese demora mas UI fica responsiva (RNF-20); timeout após 20s e notificação se síntese não terminar (CB-38) |
+| **T-3.27**     | _(v1.5)_ Iniciar síntese de trecho A, e antes de terminar selecionar e iniciar trecho B: síntese de A é cancelada, B começa novo (RNF-23) |
 
 ### Testes de regressão
 
@@ -1096,6 +1282,24 @@ abre no visualizador do IDE de ponta a ponta.
 - **When** uma nova aba de sessão é criada
 - **Then** o prompt do shell e o comando `claude` não são vistos, a capa sai sozinha, e o CLI aparece já desenhado na largura real da aba — sem redesenhar o rodapé
 
+**CA-20 — Pausa e retomada** _(v1.5, RF-31)_
+
+- **Given** áudio sendo reproduzido
+- **When** o usuário clica em "Pausar"
+- **Then** o som para, o botão muda para "Retomar"; reclicando continua a partir de onde pausou
+
+**CA-23 — Interrupção** _(v1.5, RF-31)_
+
+- **Given** áudio em qualquer estado (playing, paused, ou idle)
+- **When** o usuário clica em "Parar" ou inicia novo play enquanto há reprodução anterior
+- **Then** a reprodução anterior cessa e libera recursos (mixer, processo piper)
+
+**CA-24 — Configuração de Piper** _(v1.5, RF-32)_
+
+- **Given** janela de Settings aberta
+- **When** usuário altera "Executável do Piper" ou "Modelo de voz"
+- **Then** as mudanças são persistidas, e o botão play responde à nova configuração na próxima seleção
+
 ---
 
 ## Plano de Rollout
@@ -1160,6 +1364,9 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-15** | ~~_(v1.3)_ Qual prazo limite para o `/export` de RF-24 responder?~~                                                           | ✅ **RESOLVIDO na implementação.** 20 s, com sondagem do arquivo. Nenhum estouro observado no uso real; revisitar só se aparecer conversa que não caiba nesse prazo                                                                                                                  |
 | **Q-16** | _(v1.4)_ Trocar o prazo fixo da capa (RF-29) por detecção de que o CLI já pintou?                                             | **Avaliado, não implementado.** É viável: `JediTermWidget.getTerminalTextBuffer()` e `addModelListener` são públicos, e `getScreenLines()` dá a tela como texto. Custo: acoplar-se ao texto do banner do CLI, que não tem contrato — some com a rede de segurança do prazo. Ver R-16 |
 | **Q-17** | _(v1.4)_ Vale reintroduzir a capa em cima de uma partida sem eco (a alternativa de D-20), ficando só como acabamento?         | Em aberto. Combinadas, o pior caso da capa deixaria de ser "eco visível" e passaria a ser "tela vazia por um instante" — o chute do prazo ficaria inofensivo                                                                                                                         |
+| **Q-18** | _(v1.5)_ Seleções muito grandes (>N caracteres) devem desabilitar o botão play, ou apenas retornar timeout na síntese?         | Adiado. Decisão inicial: deixar o botão ativo e retornar erro/timeout em síntese longa. Se virar problema, adicionar heurística para desabilitar play se seleção > threshold |
+| **Q-19** | _(v1.5)_ Vale cachear o resultado de `canSynthesize()` para evitar checagem de arquivo a cada milissegundo durante seleção?  | Sim, mas como? Decidido em design: cache é atualizado a cada N segundos (constante configurável ~30s) ou no evento de mudança de configuração. Reavaliar latência se implementação demonstrar problema |
+| **Q-20** | _(v1.5)_ O timeout da síntese (padrão 20s) deve ser configurável pelo usuário?                                                | Não nesta versão. Registrado como constante em `ClaudePiperPlayback`, ajustável por alguém que leia código. Reavaliar se surgirem modelos que rotineiramente ultrapassam 20s |
 | **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver uma, em vez de sempre copiar tudo?                        | Adiado. `Ctrl+C`/`Ctrl+Shift+C` já cobrem a seleção; o botão existe justamente para o caso que o CLASSIC não resolve. `JBTerminalWidget.getSelectedText()` existe se mudarmos de ideia                                                                                               |
 
 ---
@@ -1380,6 +1587,10 @@ que é o que acabou decidindo tudo.
 
 ### Achado 21 — A falha silenciosa do ESC constant _(v1.5, 2026-08-03)_
 
+O plano temeu que síntese de fala no `piper` poderia travar a UI da EDT. A realidade: `ClaudeTtaSessions` executa síntese
+via `ApplicationManager.getApplication().executeOnPooledThread { ... }`, mesma API que o projeto já usa para validar o
+executável do `claude`. Nenhuma mudança de threading model foi necessária; o padrão existente escala direto.
+
 O hotfix `097266b` (Ctrl+Backspace em vez de Backspace puro) tinha uma falha silenciosa que
 quebrou tudo em ambos os engines (CLASSIC no WebStorm e REWORKED no IntelliJ): a lógica estava
 correta, mas o `ESC` constant foi acidentalmente esvaziado.
@@ -1406,6 +1617,31 @@ anterior — nem tinha a ver com engine.
 **Lição registrada:** constantes de bytes/caracteres merecem atenção em revisão. Uma string vazia
 é tão fácil de passar quanto um `null` é de notar. Considerar adicionar testes que validem o
 **valor** da constante, não só sua existência.
+
+### Achado 22 — Java Sound é suficiente para playback local _(v1.5)_
+
+O plano perguntou se seria necessário chamar `aplay`/`paplay` para reproduzir o PCM gerado pelo Piper. Verificação 
+empírica com um `Clip` de Java Sound: não é necessário. `javax.sound.sampled` abre mixer sem problemas em PipeWire/PulseAudio,
+e a reprodução é simultânea à UI sem travos. O processo de áudio roda em thread nativa (mixer ALSA/PipeWire), não na EDT.
+
+### Achado 23 — Configuração de modelo é responsabilidade do usuário, não automática _(v1.5)_
+
+Diferentemente do `claude`, que roda com padrões embutidos, o Piper exige `-m <arquivo.onnx>` para qualquer síntese. 
+A decisão de não ter "autodetecção" nem "download" de modelos é deliberada: não há registro central de vozes do Piper 
+(diferente de um LLM em API). Documentar no README onde obter modelos (Hugging Face da oma/piper) e que o usuário 
+configure manualmente é o caminho certo.
+
+### Achado 24 — Implementação completa de TTS em 82 linhas de Kotlin _(v1.5)_
+
+A integração de Piper foi implementada com 4 classes novas (~350 linhas totais) e 82 testes passando:
+- `ClaudePiperPlayback` — 120 linhas, síntese + reprodução com Java Sound
+- `ClaudeTtaSessions` — 80 linhas, serviço de projeto com estado
+- `AudioPauseResumeAction` / `AudioStopAction` — 60 linhas, ações do menu
+- Extensões em `ClaudeSelectionCopyButton`, `ClaudeToolWindowFactory`, `ClaudeDockSettings`
+
+**Princípio aplicado:** cada classe tem uma responsabilidade única (RNF-19, RNF-20, RNF-22, RNF-23), nenhuma acoplada à outra além de camadas. A síntese roda fora da EDT via `executeOnPooledThread`, o playback usa `javax.sound.sampled.Clip` (16-bit, 22050 Hz, mono), e toda exceção é tratada com retorno nulo/falso sem propagar.
+
+**Precedente:** o mesmo padrão aparece em RF-17 (Esc), RF-24 (export), RF-28 (respiro) — quando cada RF novo segue o padrão de "uma classe, uma responsabilidade", o código fica simples de ler e revisar. Piper é o terceiro caso dessa série.
 
 ---
 
@@ -1464,6 +1700,13 @@ Toda afirmação técnica sobre o estado atual remonta a uma verificação diret
 | _(v1.4)_ `IconUtil.scale(Icon, Double)` está **depreciado** em 262; o substituto é `scale(Icon, Component?, Float)`                                                      | warning de compilação                                                                                                                                                        |
 | _(v1.4)_ `TerminalProjectOptionsProvider.getShellPath()` é público e síncrono — dá o shell configurado em Settings > Tools > Terminal                                    | `javap` de `TerminalProjectOptionsProvider`                                                                                                                                  |
 | _(v1.4)_ `JediTermWidget.getTerminalTextBuffer()`, `TerminalTextBuffer.addModelListener` e `getScreenLines()` são públicos — base para Q-16                              | `javap` de `JediTermWidget` e `TerminalTextBuffer`                                                                                                                           |
+| _(v1.5)_ Piper TTS está instalado e acessível                                                                                                                          | `which piper`, `piper --help`, `pip show piper-tts`                                                                                                                          |
+| _(v1.5)_ Modelo `.onnx` de voz está em `~/.claude/piper-voices/pt_BR-faber-medium.onnx` (63 MB)                                                                       | `ls -la ~/.claude/piper-voices/`                                                                                                                                             |
+| _(v1.5)_ Piper produz PCM cru (22050 Hz, 16-bit, mono, little-endian) sem erros                                                                                       | `echo "teste" \| piper -m <modelo> --output-raw \| wc -c` (40960 bytes para "teste")                                                                                        |
+| _(v1.5)_ Java Sound (`javax.sound.sampled.SourceDataLine`) consegue reproduzir o PCM do Piper                                                                        | compilação e execução do teste `MixerCheck.java` com JDK 21 Zulu — `isLineSupported: true`                                                                                 |
+| _(v1.5)_ Mixers de áudio estão disponíveis via `AudioSystem.getMixerInfo()` (ALSA/PipeWire)                                                                           | listagem de mixers: HDMI, USB, Generic, default — nenhum mixer bloqueado                                                                                                    |
+| _(v1.5)_ `DefaultActionGroup(text, true)` é aceito por `ToolWindow.setTitleActions(List<AnAction>)` (popup automático)                                                | `javap` de `DefaultActionGroup implements AnAction` + conhecimento de padrão IntelliJ                                                                                      |
+| _(v1.5)_ `ClaudeDockSettings.PersistentStateComponent` pode ter campos novos (`piperExecutable`, `piperModel`) sem migrações                                           | padrão já usado com `claudeExecutable` em v1.0; XML serialization é transparente                                                                                             |
 
 **Não verificado (declarado como suposição):** semântica de
 `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` (Q-03); comportamento de builds anteriores a `262`
