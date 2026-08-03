@@ -21,6 +21,25 @@ class ClaudeEscapeForwarderTest {
     }
 
     @Test
+    fun `encaminha Ctrl+Backspace como Esc`() {
+        assertTrue(
+            ClaudeEscapeForwarder.shouldForward(
+                id = KeyEvent.KEY_PRESSED,
+                keyCode = KeyEvent.VK_BACK_SPACE,
+                modifiersEx = KeyEvent.CTRL_DOWN_MASK,
+                consumed = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `ignora Backspace puro para deixar apagar texto no terminal`() {
+        assertFalse(
+            ClaudeEscapeForwarder.shouldForward(KeyEvent.KEY_PRESSED, KeyEvent.VK_BACK_SPACE, 0, false),
+        )
+    }
+
+    @Test
     fun `ignora key released e key typed para nao duplicar o envio`() {
         assertFalse(
             ClaudeEscapeForwarder.shouldForward(KeyEvent.KEY_RELEASED, KeyEvent.VK_ESCAPE, 0, false),

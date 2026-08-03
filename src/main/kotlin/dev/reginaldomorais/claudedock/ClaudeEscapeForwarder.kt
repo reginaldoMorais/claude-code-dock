@@ -6,18 +6,16 @@ import com.intellij.terminal.ui.TerminalWidget
 import java.awt.event.KeyEvent
 
 /**
- * Devolve a tecla Esc ao shell quando a sessão roda fora da tool window "Terminal".
+ * Encaminha Esc puro e Ctrl+Backspace como Esc ao shell.
  *
- * `com.intellij.terminal.TerminalEscapeKeyListener` só entrega o Esc ao processo quando
- * o terminal está na tool window de id "Terminal"; em qualquer outra ele consome a tecla
- * e move o foco para o editor. Como o Claude Code usa Esc para sair de comandos como
- * `/usage`, interceptamos o evento antes desse listener, escrevemos o Esc no PTY e
- * consumimos o evento — o resultado é o mesmo comportamento do terminal do IDE.
+ * Em GoLand 2026.2, o Esc é bloqueado globalmente. Ctrl+Backspace é a alternativa
+ * para sair de comandos interativos como `/usage`. Backspace puro segue o
+ * comportamento padrão (apagar texto no terminal).
  */
 object ClaudeEscapeForwarder {
 
     /** Sequência ESC do VT100, o mesmo byte que o JediTerm enviaria. */
-    private const val ESC = "\u001b"
+    private const val ESC = ""
 
     private val LOG = Logger.getInstance(ClaudeEscapeForwarder::class.java)
 
@@ -46,12 +44,14 @@ object ClaudeEscapeForwarder {
     /**
      * Regra pura de encaminhamento, isolada para poder ser testada sem UI.
      *
-     * Só o Esc puro é redirecionado: combinações com modificador continuam com o
-     * tratamento original do IDE.
+     * Encaminha Esc puro e Ctrl+Backspace como Esc ao shell.
+     * Backspace puro segue o comportamento padrão (apagar texto).
      */
     fun shouldForward(id: Int, keyCode: Int, modifiersEx: Int, consumed: Boolean): Boolean =
         id == KeyEvent.KEY_PRESSED &&
-            keyCode == KeyEvent.VK_ESCAPE &&
-            modifiersEx == 0 &&
-            !consumed
+            !consumed &&
+            (
+                (keyCode == KeyEvent.VK_ESCAPE && modifiersEx == 0) ||
+                (keyCode == KeyEvent.VK_BACK_SPACE && modifiersEx == KeyEvent.CTRL_DOWN_MASK)
+            )
 }
