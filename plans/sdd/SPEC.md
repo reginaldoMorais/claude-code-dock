@@ -14,7 +14,8 @@
 > | 1.2    | 2026-08-01 | RF-21 (copiar o conteúdo da sessão) e RF-22 (exportar a conversa via `/export`), após T-3.1/T-3.2 aprovados                                                                           |
 > | 1.3    | 2026-08-01 | DEF-01 (cópia duplicada) diagnosticado; RF-21 **revisto** para passar pelo `/export` (RF-24/RF-25); RF-26 (cópia flutuante por seleção); Q-14 (UI de markdown) analisada e recusada   |
 > | 1.4    | 2026-08-01 | RF-27 (saída plana) **removido** após uso real; RF-28 (respiro nas bordas) e RF-29 (tela de carregamento) especificados; D-09 reconfirmado com a alternativa `exec` medida e recusada |
-> | 1.5    | 2026-08-02 | RF-30 a RF-32 (play/pause/stop via Piper TTS); detecção de Piper + modelo; configuração de executável e caminho do modelo; ações no menu do cabeçalho e popup de seleção            |
+> | 1.5    | 2026-08-02 | RF-31/RF-32 (pause/stop via Piper TTS); detecção de Piper + modelo; configuração de executável e caminho do modelo; ações no menu do cabeçalho                                      |
+> | 1.5.1  | 2026-08-03 | RF-30 (botão play no popup) **descartado** — complexidade UX no popup para pouco ganho vs. menu de cabeçalho já existente (RF-31)                                                   |
 
 ---
 
@@ -56,9 +57,6 @@ na JetBrains Marketplace**.
 10. _(v1.2)_ Permitir **tirar o conteúdo da sessão de dentro da janela** em um clique — como o
     ícone de cópia da extensão de VS Code —, tanto na forma bruta (o que está na tela) quanto na
     forma de transcrição (via o `/export` do próprio CLI).
-11. _(v1.5)_ Permitir **tocar em áudio, via Piper TTS**, o texto que o usuário seleciona dentro
-    da sessão, com botões de play (desabilitado se Piper não estiver disponível), pause/resume
-    e stop, acionáveis pelo mouse sem soltar a seleção.
 
 ---
 
@@ -126,6 +124,11 @@ Explicitamente **não** serão construídos nesta tarefa:
   `--volume`, `--speaker` — só o padrão de cada modelo.
 - _(v1.5)_ **Fila de reprodução.** Uma única fala por vez; um novo play interrompe o que estiver
   tocando sem oferecer fila.
+- _(v1.5)_ **Botão de play no popup de seleção (RF-30).** O menu "Áudio" no cabeçalho já oferece
+  play/pause/stop enquanto a fala está em curso. Adicionar play também no popup de seleção
+  (junto com cópia) adicionaria UI paralela sem capacidade nova, apenas um segundo caminho para
+  a mesma ação. Decisão: manter play só no cabeçalho (RF-31) e cópia no popup (RF-26). RF-30
+  descartado em v1.5.1.
 
 ---
 
@@ -471,7 +474,6 @@ reimplementação frágil.**
 | ~~**RF-27**~~ | ~~_(v1.3)_ O plugin DEVE oferecer opção de aplicar `--ax-screen-reader` às novas sessões.~~ **REMOVIDO em v1.4** — ver [Fora de Escopo](#fora-de-escopo) e o Achado 18.                                                                        |
 | **RF-28**     | _(v1.4)_ A sessão DEVE ser afastada das bordas da tool window por um respiro configurável, pintado com o fundo do terminal, e o valor DEVE valer para as sessões abertas a partir da mudança.                                                  |
 | **RF-29**     | _(v1.4)_ Ao abrir uma aba, o plugin DEVE cobrir a sessão enquanto o CLI sobe, escondendo o prompt do shell e o eco do comando; a capa DEVE sair sozinha e NÃO DEVE impedir a sessão de receber o tamanho real da aba.                          |
-| **RF-30**     | _(v1.5)_ Ao selecionar texto com o mouse na sessão, o plugin DEVE oferecer, **junto ao botão de cópia** (RF-26), um botão de play que envia o trecho selecionado ao Piper para síntese; o botão de play DEVE estar desabilitado se o Piper não estiver instalado ou um modelo válido não estiver configurado. |
 | **RF-31**     | _(v1.5)_ Durante a reprodução de áudio, o plugin DEVE oferecer, **no cabeçalho da tool window**, um menu suspenso "Áudio" contendo ações para pausar/retomar e parar a fala em curso.                                                             |
 | **RF-32**     | _(v1.5)_ O plugin DEVE permitir configurar, em Settings > Tools > Claude Code Dock, o caminho do executável `piper` (valor padrão: `piper`) e o caminho para um arquivo `.onnx` de modelo de voz (padrão: vazio; desabilita síntese até configurado). |
 
@@ -677,20 +679,7 @@ reimplementação frágil.**
 3. O título da aba é marcado como encerrado; a aba **não** se fecha (RF-11), preservando o
    scrollback para leitura.
 
-### Fluxo principal J — tocar texto selecionado via Piper _(v1.5, RF-30/RF-31)_
-
-1. O usuário seleciona texto com o mouse na sessão.
-2. O popup flutuante aparece com dois botões: copiar (RF-26) e play.
-   - O play fica desabilitado se Piper não estiver disponível (executável + modelo não configurado).
-3. Clicado em play:
-   a. A síntese é disparada fora da EDT, via `ClaudePiperPlayback.synthesizeAndPlay(text)`.
-   b. O `piper` é lançado em processo separado com o texto por stdin, saída `--output-raw`.
-   c. O PCM é lido do stdout e reproduzido em tempo real em um `Clip` ou `SourceDataLine`.
-   d. O menu "Áudio" aparece no cabeçalho com ações Pausar e Parar ativas (habilitadas).
-4. Se já havia reprodução em curso, a anterior é parada (sem fila).
-5. Fim de síntese ou clique em Parar: menu "Áudio" volta a desabilitado.
-
-### Fluxo alternativo J2 — pausar e retomar fala _(v1.5, RF-31)_
+### Fluxo alternativo J — pausar e retomar fala _(v1.5, RF-31)_
 
 1. Durante a reprodução, o usuário aciona "Pausar" no menu "Áudio".
 2. O `Clip` é pausado via `.stop()`, a posição é guardada em `framePosition`.
@@ -698,22 +687,22 @@ reimplementação frágil.**
 4. Clicado em "Retomar", o `Clip` é repositicionado e `.start()` é chamado.
 5. Clicado em "Parar", o `Clip` é fechado e o proceso `piper` é destruído.
 
-### Fluxo de erro G — Piper não encontrado _(v1.5, RF-30/RF-32)_
+### Fluxo de erro G — Piper não encontrado _(v1.5, RF-31/RF-32)_
 
 1. Ao abrir a janela ou durante checagem cacheada, detecta-se que `piper` não está no PATH nem
    nos fallbacks (`~/.local/bin`, `/usr/local/bin`).
-2. O botão play no popup fica desabilitado; nenhuma notificação é exibida (é advisório).
-3. Um tooltip explica por que o botão está desabilitado ("Piper não encontrado").
+2. O menu "Áudio" no cabeçalho fica desabilitado; nenhuma notificação é exibida (é advisório).
+3. Um tooltip explica por que o menu está desabilitado ("Piper não encontrado").
 4. O usuário pode configurar o caminho explícito em Settings > Tools > Claude Code Dock.
 
-### Fluxo de erro H — modelo não configurado _(v1.5, RF-30/RF-32)_
+### Fluxo de erro H — modelo não configurado _(v1.5, RF-31/RF-32)_
 
 1. O `piper` está disponível, mas o campo "Caminho do modelo Piper" está vazio ou aponta para
    arquivo inexistente.
-2. O botão play fica desabilitado; tooltip: "Configure um modelo de voz".
+2. O menu "Áudio" no cabeçalho fica desabilitado; tooltip: "Configure um modelo de voz".
 3. Configuração é feita em Settings > Tools > Claude Code Dock > "Caminho do modelo Piper".
 
-### Fluxo de erro I — síntese falha _(v1.5, RF-30/RNF-21)_
+### Fluxo de erro I — síntese falha _(v1.5, RF-31/RNF-21)_
 
 1. O `piper` é lançado, mas retorna código de erro ou nenhum PCM é produzido.
 2. A notificação "Falha ao sintetizar o áudio. Verifique o modelo e o texto." é exibida.
@@ -745,7 +734,7 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
 ├── ClaudeSessionPadding.kt         # (v1.4) borda que se pinta com o fundo do terminal (RF-28)
 ├── ClaudeSessionLoading.kt         # (v1.4) capa sobreposta enquanto o CLI sobe (RF-29)
 ├── ClaudePiperPlayback.kt          # (v1.5) ÚNICO ponto de acoplamento com Piper + Java Sound (RNF-19)
-├── ClaudeTtsSessions.kt            # (v1.5) serviço de projeto: estado de reprodução única (RNF-23)
+├── ClaudeTtaSessions.kt            # (v1.5) serviço de projeto: estado de reprodução única (RNF-23)
 ├── ClaudeTabTitle.kt               # puro: títulos distinguíveis de aba
 ├── ClaudeWorkingDirectory.kt       # puro: resolução do diretório de trabalho
 ├── settings/
@@ -757,6 +746,7 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
     ├── ResumeSessionAction.kt
     ├── CopySessionAction.kt         # (v1.2) RF-21
     ├── ExportSessionAction.kt       # (v1.2) RF-22
+    ├── AudioMenuAction.kt           # (v1.5) menu "Áudio" no cabeçalho com ações de TTS (RF-31)
     ├── AudioPauseResumeAction.kt    # (v1.5) toggle pause/resume na menu "Áudio"
     ├── AudioStopAction.kt           # (v1.5) parar reprodução e fechar mixer
     └── OpenClaudeDockAction.kt
@@ -915,18 +905,6 @@ Métodos:
   notificam ouvintes.
 
 Sem acoplamento a UI fora dos listeners de update (padrão padrão do IntelliJ).
-
-**`ClaudeSelectionCopyButton` — agora com segundo botão (v1.5, RF-30).**
-
-O popup que já existe ganha um segundo `JBLabel` com ícone `AllIcons.Actions.Play` (ou similar),
-ao lado do de copiar. Clique dispara `ClaudeTtaSessions.getInstance(project).playText(selectedText())`.
-
-O botão de play fica desabilitado quando:
-- `ClaudePiperPlayback.canSynthesize()` retorna false (executável ou modelo inválido).
-- Seleção vazia.
-
-Checagem `canSynthesize()` é feita fora da EDT, resultado é cacheado, e a UI é atualizada
-a cada 30s (constante configurável).
 
 **Menu "Áudio" no cabeçalho (v1.5, RF-31).**
 
@@ -1095,7 +1073,7 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.19**     | `ClaudeDockSettings`              | _(v1.4)_ `sessionPadding` nasce no padrão, persiste via `loadState` e valor fora da faixa é limitado (RF-28)                                                                                                                                                                                      |
 | **T-1.20**     | `ClaudeSessionLoading`            | _(v1.4)_ O terminal continua na árvore e **visível** sob a capa; a capa é opaca e fica em camada superior; as camadas ocupam a área inteira; prazo zero devolve o próprio terminal (RF-29, CB-35)                                                                                                 |
 | **T-1.21**     | Verificação do executável         | _(v1.4)_ Caminho explícito exige existir e ser executável; nome ausente do `PATH` é aceito quando está num diretório conhecido, e recusado quando o diretório não o tem — o par é o controle que impede o teste de passar resolvendo pelo `PATH` de quem roda a suíte (CB-01, CB-02, CB-37, R-17) |
-| **T-1.22**     | `ClaudePiperPlayback`             | _(v1.5)_ `canSynthesize(executable, modelPath)` retorna verdadeiro só quando ambos existem, é legível e modelo termina em `.onnx`; sem exceções mesmo com caminho inválido (RF-30, CB-39) |
+| **T-1.22**     | `ClaudePiperPlayback`             | _(v1.5)_ `canSynthesize(executable, modelPath)` retorna verdadeiro só quando ambos existem, é legível e modelo termina em `.onnx`; sem exceções mesmo com caminho inválido (CB-39) |
 | **T-1.23**     | `ClaudePiperPlayback`             | _(v1.5)_ `synthesize(text, executable, modelPath)` retorna ByteArray não vazio com PCM cru (22050 Hz, 16-bit, mono) quando entrada é válida; retorna null com timeout ou erro de processo (CB-38, R-19) |
 | **T-1.24**     | `ClaudePiperPlayback`             | _(v1.5)_ PCM de síntese é reproduzível sem erro via `playBytes(pcm, 22050, 1)`; recurso é liberado após stop ou exceção (RNF-22) |
 | **T-1.25**     | `ClaudeDockSettings`              | _(v1.5)_ `piperExecutable` e `piperModel` nascem em padrão, persistem via `loadState`, `effectivePiperExecutable()` e `effectivePiperModel()` fazem trim (RF-32) |
@@ -1171,11 +1149,9 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.18**     | _(v1.4)_ Abrir aba, mudar o tema do IDE (claro ↔ escuro) e conferir que o respiro acompanha o fundo do terminal, sem faixa de cor antiga (RF-28, CB-33)                                                                                                      |
 | **T-3.19**     | _(v1.4)_ Abrir aba e observar a partida: a capa cobre o prompt e o eco, sai sozinha, e o rodapé do CLI **não** aparece quebrado nem redesenha ao sair (RF-29)                                                                                                |
 | **T-3.20**     | _(v1.4)_ Abrir aba em diretório novo, onde o CLI pergunta "confia nesta pasta?": o diálogo continua respondível depois de a capa sair (CB-34)                                                                                                                |
-| **T-3.21**     | _(v1.5)_ Selecionar texto, verificar que o botão play aparece **ao lado** do botão de copiar no popup, ativo se Piper disponível (RF-30) |
-| **T-3.22**     | _(v1.5)_ Clicar em play: o texto é sintetizado e reproduzido em áudio, menu "Áudio" fica ativo no cabeçalho (RF-31) |
-| **T-3.23**     | _(v1.5)_ Durante reprodução, clicar em "Pausar": som para e botão muda para "Retomar". Clicar "Retomar": som continua. Clicar "Parar": som cessa (RF-31, CB-40) |
-| **T-3.24**     | _(v1.5)_ Botão play fica desabilitado quando: (a) `piper` não encontrado; (b) modelo não configurado; verificar tooltip em cada caso (RF-30, CB-39) |
-| **T-3.25**     | _(v1.5)_ Abrir Settings > Tools > Claude Code Dock, verificar novos campos "Executável do Piper" e "Modelo de voz (.onnx)", alterá-los, aplicar, e verificar que botão play se habilita/desabilita conforme modelo (RF-32) |
+| **T-3.21**     | _(v1.5)_ Menu "Áudio" no cabeçalho fica desabilitado quando: (a) `piper` não encontrado; (b) modelo não configurado; verificar tooltip em cada caso (RF-31, CB-39) |
+| **T-3.22**     | _(v1.5)_ Durante reprodução de áudio, clicar em "Pausar": som para e botão muda para "Retomar". Clicar "Retomar": som continua. Clicar "Parar": som cessa (RF-31, CB-40) |
+| **T-3.23**     | _(v1.5)_ Abrir Settings > Tools > Claude Code Dock, verificar novos campos "Executável do Piper" e "Modelo de voz (.onnx)", alterá-los, aplicar, e verificar que menu "Áudio" se habilita/desabilita conforme modelo (RF-32) |
 | **T-3.26**     | _(v1.5)_ Selecionar e reproduzir um grande trecho (páginas de código): síntese demora mas UI fica responsiva (RNF-20); timeout após 20s e notificação se síntese não terminar (CB-38) |
 | **T-3.27**     | _(v1.5)_ Iniciar síntese de trecho A, e antes de terminar selecionar e iniciar trecho B: síntese de A é cancelada, B começa novo (RNF-23) |
 
@@ -1306,19 +1282,7 @@ abre no visualizador do IDE de ponta a ponta.
 - **When** uma nova aba de sessão é criada
 - **Then** o prompt do shell e o comando `claude` não são vistos, a capa sai sozinha, e o CLI aparece já desenhado na largura real da aba — sem redesenhar o rodapé
 
-**CA-20 — Síntese e reprodução de áudio** _(v1.5, RF-30/RF-31)_
-
-- **Given** Piper instalado e modelo de voz configurado
-- **When** o usuário seleciona texto e clica em play no popup
-- **Then** o texto é sintetizado e reproduzido em áudio, os botões de pausa/stop aparecem ativos no menu "Áudio"
-
-**CA-21 — Desabilitação de play sem Piper** _(v1.5, RF-30)_
-
-- **Given** Piper não instalado OU modelo não configurado
-- **When** o usuário seleciona texto
-- **Then** o botão de play no popup fica desabilitado com tooltip explicativo
-
-**CA-22 — Pausa e retomada** _(v1.5, RF-31)_
+**CA-20 — Pausa e retomada** _(v1.5, RF-31)_
 
 - **Given** áudio sendo reproduzido
 - **When** o usuário clica em "Pausar"
