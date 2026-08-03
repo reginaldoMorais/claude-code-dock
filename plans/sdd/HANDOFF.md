@@ -252,6 +252,34 @@ Claude Code"_ — **não se confirma**. Não há bloqueio técnico a executar `c
 O que não é público é o **protocolo de integração**. A arquitetura escolhida contorna isso ao
 não tocar no protocolo, e não porque executar o CLI fosse proibido.
 
+### Achado 20 — A falha silenciosa do ESC constant (2026-08-03)
+
+O hotfix `097266b` (Ctrl+Backspace em vez de Backspace puro) funcionava — a regra `shouldForward`
+estava correta — mas **nada funcionava**: nem Esc puro, nem Ctrl+Backspace, em ambos os engines
+(CLASSIC no WebStorm 2026.2 e REWORKED no IntelliJ 2026.2).
+
+**Culpado:** mudança lateral inadvertida no `ESC` constant:
+
+```kotlin
+// 679562f (antes — funcionava):
+private const val ESC = ""   // ESC char correto
+
+// 097266b (depois — quebrado):
+private const val ESC = ""         // String vazia!
+```
+
+Quando um evento de teclado era interceptado, `connector.write(ESC)` enviava uma string vazia em
+vez do byte ESC (U+001B), e o shell recebia nada. O evento era consumido corretamente, mas o
+resultado era inerte.
+
+**Porque não foi visto na revisão:** a diferença é visual (uma string vazia parece estar lá), e
+o comportamento _funciona parcialmente_ — o terminal não quebra, o `write()` não lança exceção,
+apenas envia nada. A falha é silenciosa.
+
+**Lição:** constantes de bytes/caracteres merecem atenção na revisão. Uma string vazia é tão
+fácil de deixar passar quanto um `null` é de notar — considerar adicionar testes que validam
+o **valor** da constante, não só sua existência.
+
 ---
 
 ## Desafios em aberto

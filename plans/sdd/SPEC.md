@@ -1387,13 +1387,13 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-01** | ~~O `TerminalCustomizer` da Anthropic de fato alcança widgets criados fora da tool window nativa?~~                           | ✅ **RESOLVIDO em 2026-08-01.** Sim. Validado por `TerminalCustomizerReachTest` (T-4) com teste de controle. Ponto exato: `configureStartupOptions` aplica os customizers                                                                                                            |
 | **Q-02** | Duas sessões simultâneas conectadas ao mesmo servidor MCP causam ambiguidade de atribuição (ex.: qual sessão recebe um diff)? | Em aberto (R-05). Investigar durante T-4                                                                                                                                                                                                                                             |
 | **Q-03** | Qual a semântica exata de `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON`?                                                         | String encontrada no jar oficial; **semântica não verificada**. Não usar antes de confirmar                                                                                                                                                                                          |
-| **Q-04** | O engine `REWORKED` se comporta como o `CLASSIC` fora da tool window nativa?                                                  | Em aberto (R-06, CB-11). Cobrir em T-2.6                                                                                                                                                                                                                                             |
+| **Q-04** | ~~O engine `REWORKED` se comporta como o `CLASSIC` fora da tool window nativa?~~                                              | ✅ **RESOLVIDO em 2026-08-03.** Falsa alarme. O problema foi o ESC constant vazio em 097266b (Achado 20), não divergência de engine. Ambos (CLASSIC no WebStorm + REWORKED no IntelliJ) trabalhavam com o hotfix corrigido                                                              |
 | **Q-05** | Vale ocultar o botão/ação do plugin oficial para evitar confusão de dois pontos de entrada?                                   | Decisão de produto, adiada até haver uso real. Depende de Q-03                                                                                                                                                                                                                       |
 | **Q-06** | Suportar Remote Development e WSL no futuro?                                                                                  | Fora de escopo agora (CB-16, CB-17). Reavaliar conforme necessidade                                                                                                                                                                                                                  |
 | **Q-07** | A tool window deve restaurar automaticamente as sessões ao reabrir o projeto?                                                 | Não previsto. `isTerminalSessionPersistent` existe na plataforma, mas persistência acrescenta complexidade sem demanda comprovada                                                                                                                                                    |
 | **Q-08** | Qual o `since-build` mínimo realmente testável?                                                                               | Definido como `252` por conservadorismo; **testado apenas em `262`**. Builds anteriores não foram verificadas                                                                                                                                                                        |
 | **Q-09** | _(v1.1)_ Vale permitir `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto?                                                 | Adiado. Em IDEs JetBrains uma janela é um projeto, então o escopo atual já atende o pedido. Por aba exigiria diálogo a cada "Nova sessão" — reavaliar se houver demanda                                                                                                              |
-| **Q-10** | _(v1.1)_ O `TerminalEscapeKeyListener` se comporta igual no engine `REWORKED`?                                                | Em aberto. Lá o `Esc` passa por `Terminal.Escape` + EP `escapeHandler`, caminho diferente do pre-handler adotado. Ligado a Q-04 e R-09                                                                                                                                               |
+| **Q-10** | ~~_(v1.1)_ O `TerminalEscapeKeyListener` se comporta igual no engine `REWORKED`?~~                                            | ✅ **RESOLVIDO em 2026-08-03.** Falsa alarme. Q-04 acima. O hotfix 097266b tinha o ESC constant vazio — ao ser restaurado para `""`, ambos os engines (CLASSIC e REWORKED) funcionam normalmente (Achado 20)                                                                      |
 | **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável (`.idea/`) em vez de ficar no workspace?                                 | Decidido pelo workspace (RNF-05). Reavaliar só se surgir caso de config dir relativo ao repositório, compartilhável pelo time                                                                                                                                                        |
 | **Q-12** | ~~_(v1.2)_ Vale passar `[filename]` ao `/export`?~~                                                                           | ✅ **RESOLVIDO em v1.3.** Sim, e deixou de ser conveniência: é a única forma de entregar a cópia sem duplicação (DEF-01). Virou RF-24, com R-13 a verificar primeiro                                                                                                                 |
 | **Q-14** | _(v1.3)_ Reimplementar a UI como visualizador de markdown, dirigindo o CLI por `stream-json`?                                 | **Analisado e recusado.** Viável tecnicamente, mas é outro produto: descarta o terminal e todo o comportamento interativo que ele dá de graça, e acopla a um formato JSON sem contrato de estabilidade. Ver [Fora de Escopo](#fora-de-escopo) e Achado 17                            |
@@ -1621,11 +1621,38 @@ que é o que acabou decidindo tudo.
 **Lição registrada:** quando a mudança mexe em ambiente de execução, medir o ambiente resultante
 é o **primeiro** passo, não o último. Vale para qualquer troca de "quem é o processo pai".
 
-### Achado 21 — Processamento fora da EDT é trivial com IntelliJ API _(v1.5)_
+### Achado 21 — A falha silenciosa do ESC constant _(v1.5, 2026-08-03)_
 
 O plano temeu que síntese de fala no `piper` poderia travar a UI da EDT. A realidade: `ClaudeTtaSessions` executa síntese
 via `ApplicationManager.getApplication().executeOnPooledThread { ... }`, mesma API que o projeto já usa para validar o
 executável do `claude`. Nenhuma mudança de threading model foi necessária; o padrão existente escala direto.
+
+O hotfix `097266b` (Ctrl+Backspace em vez de Backspace puro) tinha uma falha silenciosa que
+quebrou tudo em ambos os engines (CLASSIC no WebStorm e REWORKED no IntelliJ): a lógica estava
+correta, mas o `ESC` constant foi acidentalmente esvaziado.
+
+```kotlin
+// 679562f (antes):
+private const val ESC = ""   // Correto
+
+// 097266b (depois):
+private const val ESC = ""   // Vazio!
+```
+
+Quando `connector.write(ESC)` era chamado, enviava uma string vazia para o shell. O evento de
+teclado era interceptado e consumido corretamente, mas o resultado era inerte. Nenhuma exceção,
+nenhum erro — apenas silêncio.
+
+**Por que não foi visto?** A diferença visual é mínima, e o comportamento _funciona
+parcialmente_ — o terminal não quebra, o `write()` não lança exceção. A falha é silenciosa.
+
+**Impacto incorreto em Q-04 e Q-10:** ambas as perguntas abertas sobre divergência de engines
+foram aparentemente confirmadas como "sim, há divergência", quando na verdade o problema era
+anterior — nem tinha a ver com engine.
+
+**Lição registrada:** constantes de bytes/caracteres merecem atenção em revisão. Uma string vazia
+é tão fácil de passar quanto um `null` é de notar. Considerar adicionar testes que validem o
+**valor** da constante, não só sua existência.
 
 ### Achado 22 — Java Sound é suficiente para playback local _(v1.5)_
 
