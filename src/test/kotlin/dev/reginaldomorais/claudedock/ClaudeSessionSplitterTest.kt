@@ -1,6 +1,7 @@
 package dev.reginaldomorais.claudedock
 
 import com.intellij.openapi.ui.Splitter
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -97,6 +98,140 @@ class ClaudeSessionSplitterTest {
         val inner = outer.secondComponent as Splitter
         assertSame(second, inner.firstComponent)
         assertSame(third, inner.secondComponent)
+    }
+
+    /** Pane marcada, como as que `createPane` produz. */
+    private fun markedPane() = JPanel().also(ClaudeSessionSplitter::markPane)
+
+    @Test
+    fun `firstPane acha a sobrevivente sob um splitter aninhado`() {
+        val first = markedPane()
+        val second = markedPane()
+        val third = markedPane()
+        ClaudeSessionSplitter.root(first)
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+        ClaudeSessionSplitter.split(second, third, stacked = true)
+
+        // É daqui que sai a sessão que reassume foco e chave da aba (DEF-05).
+        val inner = second.parent as Splitter
+        assertSame(second, ClaudeSessionSplitter.firstPane(inner))
+        assertSame(second, ClaudeSessionSplitter.firstPane(second))
+    }
+
+    @Test
+    fun `contar panes reflete as divisoes da aba`() {
+        val first = markedPane()
+        val second = markedPane()
+        val third = markedPane()
+        val root = ClaudeSessionSplitter.root(first)
+
+        assertEquals(1, ClaudeSessionSplitter.countPanes(root))
+
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+        assertEquals(2, ClaudeSessionSplitter.countPanes(root))
+
+        ClaudeSessionSplitter.split(second, third, stacked = true)
+        assertEquals(3, ClaudeSessionSplitter.countPanes(root))
+
+        // Fechar tira da conta: é o que decide se a aba ainda tem sessão viva (RF-44).
+        ClaudeSessionSplitter.close(third)
+        assertEquals(2, ClaudeSessionSplitter.countPanes(root))
+    }
+
+    @Test
+    fun `componente sem marca nao conta como pane`() {
+        val unmarked = JPanel().apply { add(JPanel()) }
+
+        assertEquals(0, ClaudeSessionSplitter.countPanes(unmarked))
+        assertNull(ClaudeSessionSplitter.firstPane(unmarked))
+    }
+
+    @Test
+    fun `isSplit distingue a pane sozinha da pane dividida`() {
+        val first = pane()
+        val second = pane()
+        ClaudeSessionSplitter.root(first)
+
+        // Sozinha na aba: nada a trocar, girar ou fechar.
+        assertFalse(ClaudeSessionSplitter.isSplit(first))
+
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+
+        assertTrue(ClaudeSessionSplitter.isSplit(first))
+        assertTrue(ClaudeSessionSplitter.isSplit(second))
+    }
+
+    @Test
+    fun `pane fechada deixa de estar na arvore, e e assim que o encerramento se distingue`() {
+        val first = pane()
+        val second = pane()
+        val root = ClaudeSessionSplitter.root(first)
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+
+        ClaudeSessionSplitter.close(second)
+
+        // DEF-03: fechar deliberadamente destaca a pane **antes** de matar o processo. É esta
+        // ausência da árvore que impede a aba de ser marcada como encerrada com a irmã viva.
+        assertNull(ClaudeSessionSplitter.paneOf(second, root))
+        assertSame(first, ClaudeSessionSplitter.paneOf(first, root))
+    }
+
+    @Test
+    fun `trocar de lado inverte as duas panes`() {
+        val first = pane()
+        val second = pane()
+        val root = ClaudeSessionSplitter.root(first)
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+
+        assertTrue(ClaudeSessionSplitter.swap(first))
+
+        val splitter = root.getComponent(0) as Splitter
+        assertSame(second, splitter.firstComponent)
+        assertSame(first, splitter.secondComponent)
+    }
+
+    @Test
+    fun `trocar duas vezes volta ao arranjo original`() {
+        val first = pane()
+        val second = pane()
+        val root = ClaudeSessionSplitter.root(first)
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+
+        ClaudeSessionSplitter.swap(first)
+        ClaudeSessionSplitter.swap(first)
+
+        val splitter = root.getComponent(0) as Splitter
+        assertSame(first, splitter.firstComponent)
+        assertSame(second, splitter.secondComponent)
+    }
+
+    @Test
+    fun `girar alterna entre lado a lado e empilhado`() {
+        val first = pane()
+        val second = pane()
+        val root = laidOut(ClaudeSessionSplitter.root(first))
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+        laidOut(root)
+
+        // Antes de girar: lado a lado.
+        assertTrue("second.x=${second.x}", second.x > first.x)
+
+        assertTrue(ClaudeSessionSplitter.rotate(first))
+        laidOut(root)
+
+        // Depois de girar: empilhado, e na mesma faixa horizontal.
+        assertTrue("second.y=${second.y} first.y=${first.y}", second.y > first.y)
+        assertEqualsGeometry(first.x, second.x)
+    }
+
+    @Test
+    fun `trocar e girar sem divisao devolvem falso, sem tocar na arvore`() {
+        val only = pane()
+        val root = ClaudeSessionSplitter.root(only)
+
+        assertFalse(ClaudeSessionSplitter.swap(only))
+        assertFalse(ClaudeSessionSplitter.rotate(only))
+        assertSame(only, root.getComponent(0))
     }
 
     @Test

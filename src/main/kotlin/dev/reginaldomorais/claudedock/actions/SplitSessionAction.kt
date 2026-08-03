@@ -39,7 +39,58 @@ class SplitSessionMenuAction : DefaultActionGroup("Dividir", true), DumbAware {
             ),
         )
         addSeparator()
+        addAll(
+            RearrangeSplitAction(
+                "Trocar de lado",
+                "Troca a sessão em foco de lugar com a vizinha",
+                AllIcons.Actions.SwapPanels,
+            ) { it.swapSelectedSplit() },
+            RearrangeSplitAction(
+                "Girar divisão",
+                "Alterna entre lado a lado e empilhado",
+                AllIcons.Actions.SynchronizeScrolling,
+            ) { it.rotateSelectedSplit() },
+        )
+        addSeparator()
         add(CloseSplitAction())
+        add(CloseAllSessionsAction())
+    }
+
+    /**
+     * Lê o estado da árvore de componentes, que é da EDT.
+     *
+     * O `AudioMenuAction` — o outro menu deste cabeçalho, e o que comprovadamente funciona —
+     * declara o seu explicitamente. Este não declarava, e o menu apareceu vazio uma vez até o
+     * usuário trocar de aba (DEF-04).
+     */
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+    override fun update(e: AnActionEvent) {
+        // "À direita" e "Abaixo" valem sempre, então o grupo nunca fica sem filho habilitado —
+        // é isso que impede `isDisableGroupIfEmpty` de apagar o menu inteiro.
+        e.presentation.isEnabled = e.project != null
+    }
+}
+
+/**
+ * Reposiciona a divisão em foco (RF-43).
+ *
+ * Trocar de lado e girar cobrem o que "reposicionar" significa numa aba de duas a quatro panes.
+ * Arrastar com o mouse continua fora de escopo, e não por dificuldade de DnD: a superfície da
+ * pane já é do terminal — arrastar ali **é** selecionar texto (RF-26) —, então o arraste exigiria
+ * primeiro uma barra de título por pane, roubando altura de todas para servir uma ação
+ * ocasional. Ver Q-28.
+ */
+class RearrangeSplitAction(
+    text: String,
+    description: String,
+    icon: javax.swing.Icon,
+    private val rearrange: (ClaudeDockSessions) -> Unit,
+) : SplitOnlyAction(text, description, icon) {
+
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        rearrange(ClaudeDockSessions.getInstance(project))
     }
 }
 
@@ -50,17 +101,36 @@ class SplitSessionMenuAction : DefaultActionGroup("Dividir", true), DumbAware {
  * da plataforma, que numa aba dividida diz o oposto do que faz. Este item existe para que a
  * capacidade tenha um nome honesto e fique onde o usuário procura.
  */
-class CloseSplitAction : AnAction(
-    "Fechar divisão",
-    "Fecha a sessão em foco e devolve o espaço à sessão vizinha",
+class CloseSplitAction : SplitOnlyAction(
+    "Fechar esta sessão",
+    "Fecha apenas a sessão em foco e devolve o espaço à vizinha",
     AllIcons.Actions.Cancel,
-), DumbAware {
-
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+) {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         ClaudeDockSessions.getInstance(project).closeSelectedSplit()
+    }
+}
+
+/**
+ * Fecha a aba e todas as sessões dela (RF-46).
+ *
+ * O `X` da aba já fazia isso, mas quem está no menu de divisões procura por ali — e foi
+ * justamente a ausência deste item que fez "Fechar divisão" ser lido como "fechar todas"
+ * (DEF-06). Os dois nomes agora dizem quantas sessões morrem.
+ */
+class CloseAllSessionsAction : AnAction(
+    "Fechar todas as sessões",
+    "Fecha a aba inteira, com todas as sessões divididas",
+    AllIcons.Actions.CloseHovered,
+), DumbAware {
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        ClaudeDockSessions.getInstance(project).closeSelectedTab()
     }
 }
 
@@ -76,10 +146,33 @@ class SplitSessionAction(
     private val stacked: Boolean,
 ) : AnAction(text, description, icon), DumbAware {
 
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         ClaudeDockSessions.getInstance(project).splitSelectedSession(stacked)
+    }
+}
+
+/**
+ * Ação que só faz sentido com a aba dividida (RF-45).
+ *
+ * Desabilitar é melhor que avisar depois do clique: o usuário vê antes de tentar. As
+ * notificações continuam nos métodos do serviço, porque o estado pode mudar entre o `update` e
+ * o clique.
+ */
+abstract class SplitOnlyAction(
+    text: String,
+    description: String,
+    icon: javax.swing.Icon,
+) : AnAction(text, description, icon), DumbAware {
+
+    /** Lê a árvore de componentes, que é da EDT. */
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+
+    override fun update(e: AnActionEvent) {
+        val project = e.project
+        e.presentation.isEnabled =
+            project != null && ClaudeDockSessions.getInstance(project).isSelectedSessionSplit()
     }
 }

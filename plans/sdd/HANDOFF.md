@@ -10,13 +10,13 @@
 
 ## Estado atual
 
-**Fase: v1.7.2 — divisão da aba (RF-36 a RF-42) validada no IDE, com DEF-02 corrigido.**
-**Base: v1.6 commitada em `main`. 104 testes verdes.**
+**Fase: v1.8.2 — divisão da aba (RF-36 a RF-46); DEF-03, DEF-05 e DEF-06 corrigidos.**
+**Base: v1.6 commitada em `main`. 113 testes verdes.**
 
 | Artefato                                                         | Estado                                                                  |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                            |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.7.2 — RF-36 a RF-42 (split); DEF-02; D-33 a D-37; Achados 27/28/29 |
+| [SPEC.md](SPEC.md)                                               | ✅ v1.8 — RF-36 a RF-43 (split + reposicionar); DEF-02; D-33 a D-38; Achados 27/28/29 |
 | `HANDOFF.md`                                                     | ✅ Este arquivo, com novo log de 2026-08-03                             |
 | Código do plugin                                                 | ✅ **82 testes passando** (69 + 13 novos), sem warnings                 |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente               |
@@ -36,6 +36,14 @@
 | **RF-36 a RF-40 (split da aba)**                                 | ✅ Implementados e **validados no IDE** pelo usuário (4 panes)          |
 | **RF-41/RF-42 (fechar a divisão)**                               | ✅ Item "Fechar divisão" no cabeçalho + foco reassumido (v1.7.1)        |
 | **DEF-02 (navegação com uma aba)**                               | ✅ Corrigido em v1.7.2 — guarda em `ClaudeTabNavigation` (T-1.40)       |
+| **RF-43 (trocar de lado / girar)**                               | ✅ Implementado em v1.8, sobre `Splitter.swapComponents()`              |
+| **DEF-03 ("encerrado" com sessão viva)**                         | ✅ Corrigido em v1.8.1 — callback por pane + `isDescendingFrom`         |
+| **DEF-04 (menu "Dividir" vazio)**                                | ✅ Era sintoma de DEF-05; diagnóstico anterior revogado (Achado 30)     |
+| **DEF-05 (cabeçalho morto após fechar pane)**                    | ✅ Corrigido — `preferredFocusableComponent` passa à sobrevivente        |
+| **DEF-06 (nome ambíguo do fechamento)**                          | ✅ "Fechar esta sessão" e "Fechar todas as sessões" (RF-46)             |
+| Q-26 ("encerrado" numa aba dividida)                             | ✅ Respondida pelo uso real: é "sem sessão viva" (RF-44)                |
+| **DnD de panes (Q-28)**                                          | ⚰️ **Avaliado e recusado** — falta onde agarrar, não mecanismo          |
+| Roteiros T-3.45-47 (reposicionar)                                | ⏳ Pendentes — aguardando IDE real                                      |
 | `ClaudeSessionSplitter`                                          | ✅ Objeto puro de Swing: árvore de panes (RNF-29, RNF-30)              |
 | **Premissa de engine (CB-26/36/47, R-15)**                       | ✅ **CORRIGIDA** — a sessão é sempre JediTerm/CLASSIC (Achado 27)      |
 | Testes de integração T-2.\*                                      | ⏳ Nunca implementados                                                  |
@@ -383,6 +391,92 @@ Concluído também: ~~RF-24/RF-26~~ · ~~T-3.14~~ · ~~T-3.17 (conclusivo: RF-27
 ---
 
 ## Log
+
+### 2026-08-03 (noite/2) — DEF-05 e DEF-06: a aba morria de foco, e o nome mentia
+
+Relato com quatro sessões numa aba (`aaaaa` a `ddddd`): fechar uma deixava três no ar, mas
+**nenhuma ação do cabeçalho funcionava mais naquela aba** — nem "Nova sessão". Clicar em outra
+aba consertava.
+
+- **DEF-05 — causa encontrada.** `addSession` define
+  `content.preferredFocusableComponent = pane.widget.component` na criação. Fechando **essa**
+  pane — a primeira, normalmente a em foco —, a aba passa a apontar para um componente
+  descartado e fora da árvore: o foco não vai a lugar nenhum e o `DataContext` da toolbar fica
+  sem projeto. Daí *todo* o cabeçalho parar.
+- **A v1.8.1 já trocava a chave e pedia foco, mas esqueceu o `preferredFocusableComponent`** —
+  eram três lugares apontando para a pane, e eu tinha consertado dois. RF-42 agora lista os três.
+- **Achado 30 — e isto revoga o diagnóstico de DEF-04.** Eu tinha atribuído o "menu vazio" a
+  `ActionUpdateThread`/`update()` ausentes, comparando com o `AudioMenuAction`. Hipótese
+  plausível, **errada**. O que a salvou de virar dívida silenciosa foi ter sido registrada como
+  hipótese pendente (T-3.48), e não como conserto. O sintoma "nem criar aba nova eu consigo"
+  já excluía a explicação de menu na primeira leitura — segui a pista que eu sabia comparar,
+  não a que explicava tudo. As mudanças de thread ficaram, porque ler a árvore Swing fora da EDT
+  era errado de qualquer forma; só não eram a correção.
+- **DEF-06 — o nome era meu, e mentia.** O usuário acionou "Fechar divisão" esperando encerrar a
+  aba inteira. "Divisão" tanto é *a pane* quanto *o arranjo*. **É o mesmo erro que eu diagnostiquei
+  no "Close Tab" da plataforma uma rodada antes** (DEF-04/Achado 29) — repetido em rótulo escrito
+  por mim, depois de a lição estar registrada. Agora os nomes dizem quantas sessões morrem:
+  **"Fechar esta sessão"** e **"Fechar todas as sessões"** (RF-46), esta última fechando a aba
+  com todas as divisões, como o usuário propôs.
+- **De quebra:** `firstPane`/`countPanes` saíram de `ClaudeDockSessions` para
+  `ClaudeSessionSplitter`, onde a lógica de árvore mora — e ficaram testáveis (T-1.46, T-1.47).
+- Resultado: **113 testes, 0 falhas** (eram 110).
+
+### 2026-08-03 (noite) — DEF-03 e DEF-04, e um conserto que não consertava
+
+Dois defeitos no primeiro uso do "Fechar divisão".
+
+- **DEF-03 — a aba inteira virou "(encerrado)" com uma sessão viva ao lado.** O callback de
+  término era registrado só para a sessão **original** da aba. Fechar a divisão descarta o
+  `Disposable` daquela pane → mata o PTY → dispara o callback. Como a pane em foco costuma ser
+  justamente a original, a aba era marcada como encerrada enquanto a vizinha trabalhava.
+- **A correção passou a ser por pane, com duas guardas:** a pane ainda estar na árvore
+  (fechamento deliberado destaca antes de matar) e ser a última da aba. A segunda **responde
+  Q-26**, que a v1.7 deixou em aberto por não saber o que "(encerrado)" deveria significar numa
+  aba dividida — e cuja saída eu tinha descartado como cara. Custou seis linhas.
+- **O que vale mais que os dois defeitos: meu primeiro conserto não consertava nada.** A guarda
+  usava `paneOf(...) == null` para detectar o fechamento deliberado. Não funciona: `close()`
+  desanexa o *splitter* da árvore, mas a pane fechada **continua filha dele**, e `paneOf`
+  devolvia assim que achasse um `Splitter` acima — sem nunca confirmar que ele leva à aba. Eu
+  teria publicado um conserto inerte, do mesmo feitio do ESC vazio do Achado 21.
+  **Quem pegou foi o teste** que escrevi junto (T-1.45), e só porque ele afirmava o estado da
+  árvore em vez de repetir a chamada que eu estava consertando.
+- **A correção final foi em `paneOf`**, não na guarda: exigir `isDescendingFrom(component, root)`
+  antes de subir. Assim todos os chamadores ficam cobertos, e não só o caso relatado.
+- **DEF-04 — o menu "Dividir" apareceu vazio até o usuário trocar de aba.** **Não reproduzi.** O
+  que dá para afirmar: `Presentation.isDisableGroupIfEmpty()` vale por padrão, e o
+  `AudioMenuAction` — o outro menu do mesmo cabeçalho, que funciona — declara
+  `getActionUpdateThread()` e `update()`, que o meu não declarava. Pior: as ações filhas
+  declaravam `BGT` e **leem a árvore Swing**, que é da EDT. Corrigi as duas coisas, mas a causa
+  segue por confirmar — está em T-3.48, e o SPEC diz que é hipótese, não conserto verificado.
+- Resultado: **110 testes, 0 falhas** (eram 108).
+
+### 2026-08-03 (tarde/5) — v1.8: reposicionar panes, e por que não por arraste
+
+Pergunta do usuário antes dos testes manuais: dá para arrastar as panes para reposicioná-las,
+como as abas do editor? Pedido explícito de **avaliação**, não de implementação.
+
+- **É possível, e o obstáculo não é o DnD.** A plataforma tem `DnDSupport` genérico e o framework
+  `DockManager`/`DockContainer` (6 métodos + `DockableContent`) que o editor usa. O problema é
+  **onde agarrar**: o editor arrasta o **rótulo da aba** (`TabInfo.DragOutDelegate` +
+  `JBEditorTabs`), nunca o corpo do editor.
+- **E a nossa superfície já tem dono.** As panes não têm aba, e arrastar dentro do terminal **é**
+  selecionar texto — é o mecanismo de RF-26/RF-33, que o usuário acabou de validar. DnD do corpo
+  da pane brigaria com o próprio recurso de copiar/exportar seleção. Logo, exigiria antes uma
+  barra de título por pane: UI permanente, roubando altura de todas, para servir ação ocasional.
+- **Sinal de custo que pesou:** o plugin de terminal da JetBrains tem split e **não** implementa
+  DnD de panes (nenhuma classe de DnD no `terminal.jar`). Quem implementa é o editor, que tem
+  abas de onde puxar.
+- **A alternativa cobriu o caso real:** com 2–4 panes, "reposicionar" é trocar de lado ou girar a
+  divisão. Virou RF-43, duas ações no menu "Dividir" que já existia.
+- **A plataforma tinha a peça exata.** Eu ia escrever a troca à mão e cair numa armadilha:
+  `setFirstComponent` remove o componente que estava naquele lado, então trocar em dois passos
+  derruba o que o primeiro passo pôs. **`Splitter.swapComponents()` existe**, troca as duas
+  referências internas sem reparentar e já chama `revalidate`/`repaint` — 27 instruções de
+  bytecode. Procurar antes de escrever economizou o bug.
+- Resultado: **108 testes, 0 falhas** (eram 104), sem warnings.
+- **Q-28 registra a avaliação do DnD por escrito**, com o caminho técnico levantado, para que uma
+  eventual reabertura parta de dados e não do zero — mesmo tratamento que Q-14 recebeu.
 
 ### 2026-08-03 (tarde/4) — DEF-02: a terceira parcela do "de graça"
 

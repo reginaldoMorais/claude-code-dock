@@ -98,20 +98,43 @@ class ClaudeDockSessions(private val project: Project) :
         // A referência vive junto com a aba: fechar a aba a leva embora, sem mapa para limpar.
         content.putUserData(SESSION_WIDGET, pane.widget)
 
+        content.putUserData(TAB_TITLE, title)
+
         contentManager.addContent(content)
         contentManager.setSelectedContent(content)
 
-        // Sessão encerrada apenas marca a aba; o scrollback é preservado (RF-11).
-        // ponytail: só a sessão original renomeia a aba. Com split, marcar a aba porque *uma*
-        // pane morreu diria menos do que parece — ver Q-26.
+        markEndedWhenLast(content, pane)
+    }
+
+    /**
+     * Marca a aba como encerrada quando a sessão morre — mas só quando isso significa o que diz
+     * (RF-11, RF-44).
+     *
+     * O callback é registrado **por pane**, e não só para a sessão original da aba, com duas
+     * guardas que DEF-03 mostrou serem necessárias:
+     *
+     * - **A pane ainda está na árvore.** Fechar a divisão tira a pane e só depois mata o
+     *   processo; sem esta guarda, fechar deliberadamente marcava a aba de "encerrado" com uma
+     *   sessão viva do lado.
+     * - **É a última pane.** Numa aba dividida, uma sessão que acaba não encerra a aba — a
+     *   vizinha continua trabalhando. Isto responde Q-26 com o que o uso real mostrou.
+     */
+    private fun markEndedWhenLast(content: Content, pane: Pane) {
         pane.widget.addTerminationCallback({
             ApplicationManager.getApplication().invokeLater {
-                if (!project.isDisposed) {
-                    content.displayName = "$title (encerrado)"
+                if (project.isDisposed) return@invokeLater
+                // Saiu da árvore: foi fechamento deliberado, não sessão encerrada.
+                if (ClaudeSessionSplitter.paneOf(pane.component, content.component) == null) {
+                    return@invokeLater
                 }
+                if (ClaudeSessionSplitter.countPanes(content.component) > 1) return@invokeLater
+
+                val title = content.getUserData(TAB_TITLE) ?: return@invokeLater
+                content.displayName = "$title (encerrado)"
             }
-        }, tabDisposable)
+        }, pane.disposable)
     }
+
 
     /**
      * Divide a pane de [widget], abrindo uma sessão nova ao lado (RF-36).
@@ -135,8 +158,20 @@ class ClaudeDockSessions(private val project: Project) :
             return notify("Não foi possível dividir a sessão.", NotificationType.WARNING)
         }
 
+        // A pane nova também marca a aba quando for a última a sobrar (RF-44).
+        markEndedWhenLast(content, incoming)
+
         // A divisão nasce com o foco: quem dividiu quer digitar na sessão nova.
         incoming.widget.requestFocus()
+    }
+
+    /** Se a sessão em foco está numa divisão — habilita as ações que só fazem sentido aí. */
+    fun isSelectedSessionSplit(): Boolean {
+        val widget = selectedWidget() ?: return false
+        val content = contentOf(widget) ?: return false
+        val pane = ClaudeSessionSplitter.paneOf(widget.component, content.component) ?: return false
+
+        return ClaudeSessionSplitter.isSplit(pane)
     }
 
     /** Divide a sessão em foco da aba selecionada — o caminho do cabeçalho (RF-36). */
@@ -157,6 +192,29 @@ class ClaudeDockSessions(private val project: Project) :
         if (closeSplit(widget)) return
 
         contentOf(widget)?.let { findToolWindow()?.contentManager?.removeContent(it, true) }
+    }
+
+    /** Troca a sessão em foco de lado com a vizinha (RF-43). */
+    fun swapSelectedSplit() = rearrangeSelectedSplit(ClaudeSessionSplitter::swap)
+
+    /** Gira a divisão em foco: lado a lado ↔ empilhado (RF-43). */
+    fun rotateSelectedSplit() = rearrangeSelectedSplit(ClaudeSessionSplitter::rotate)
+
+    /**
+     * Aplica [rearrange] à divisão da sessão em foco, avisando quando não há divisão.
+     *
+     * As duas ações diferem só nessa função: separar em dois métodos duplicaria a busca da pane
+     * e a mensagem de aviso.
+     */
+    private fun rearrangeSelectedSplit(rearrange: (JComponent) -> Boolean) {
+        val widget = selectedWidget()
+            ?: return notify("Nenhuma sessão aberta.", NotificationType.WARNING)
+        val content = contentOf(widget) ?: return
+        val pane = ClaudeSessionSplitter.paneOf(widget.component, content.component) ?: return
+
+        if (!rearrange(pane)) {
+            notify("Esta aba não está dividida.", NotificationType.INFORMATION)
+        }
     }
 
     /**
@@ -186,24 +244,37 @@ class ClaudeDockSessions(private val project: Project) :
 
         // A pane saiu da árvore; o processo dela morre aqui, e só ele.
         paneDisposable(pane)?.let(Disposer::dispose)
-
-        // Sem isto a aba fica apontando para uma sessão morta, e as ações do cabeçalho param de
-        // achar sessão até o usuário clicar em alguma pane.
-        firstWidget(sibling)?.let { survivor ->
-            content.putUserData(SESSION_WIDGET, survivor)
-            survivor.requestFocus()
-        }
+        handOverTo(content, sibling)
 
         return true
     }
 
-    /** Primeira sessão viva sob [component] — usada para reassumir o foco após um fechamento. */
-    private fun firstWidget(component: JComponent): TerminalWidget? {
-        (component.getClientProperty(PANE_WIDGET) as? TerminalWidget)?.let { return it }
+    /**
+     * Passa a sessão de referência da aba para uma pane sobrevivente (RF-42, DEF-05).
+     *
+     * `preferredFocusableComponent` é o ponto que DEF-05 expôs: ele é definido na criação da aba
+     * e apontava para o componente da pane original. Fechando **essa** pane, a aba passava a
+     * apontar para um componente descartado e fora da árvore — o foco não ia a lugar nenhum, o
+     * `DataContext` da toolbar ficava sem projeto, e **todo** o cabeçalho parava, inclusive
+     * "Nova sessão". Trocar de aba consertava porque o foco caía num componente válido.
+     */
+    private fun handOverTo(content: Content, sibling: JComponent) {
+        val pane = ClaudeSessionSplitter.firstPane(sibling) ?: return
+        val survivor = pane.getClientProperty(PANE_WIDGET) as? TerminalWidget ?: return
 
-        return component.components
-            .filterIsInstance<JComponent>()
-            .firstNotNullOfOrNull { firstWidget(it) }
+        content.putUserData(SESSION_WIDGET, survivor)
+        content.preferredFocusableComponent = survivor.component
+        survivor.requestFocus()
+    }
+
+    /** Fecha a aba selecionada e **todas** as sessões dela (RF-46). */
+    fun closeSelectedTab() {
+        val contentManager = findToolWindow()?.contentManager ?: return
+        val content = contentManager.selectedContent
+            ?: return notify("Nenhuma aba aberta para fechar.", NotificationType.WARNING)
+
+        // O `Disposable` da aba é pai de todas as panes: cai a árvore inteira (RF-40).
+        contentManager.removeContent(content, true)
     }
 
     /**
@@ -255,6 +326,7 @@ class ClaudeDockSessions(private val project: Project) :
             "Iniciando o Claude Code…",
         )
         // Propriedades de cliente em vez de mapa: morrem junto com o componente (D-18, D-36).
+        ClaudeSessionSplitter.markPane(component)
         component.putClientProperty(PANE_DISPOSABLE, paneDisposable)
         component.putClientProperty(PANE_WIDGET, widget)
 
@@ -400,6 +472,9 @@ class ClaudeDockSessions(private val project: Project) :
 
         /** Sessão da pane, pendurada no mesmo lugar — permite achar quem sobreviveu (RF-41). */
         private const val PANE_WIDGET = "ClaudeDockPaneWidget"
+
+        /** Título base da aba, sem o sufixo de encerrada — evita "(encerrado) (encerrado)". */
+        private val TAB_TITLE = Key.create<String>("ClaudeDockTabTitle")
 
         private val LOG = Logger.getInstance(ClaudeDockSessions::class.java)
 

@@ -1,8 +1,8 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.7.2
+- **Versão:** 1.8.2
 - **Data:** 2026-08-03
-- **Status:** Especificação — v1.7 acrescenta a divisão da aba; v1.7.1 nomeia o fechamento; v1.7.2 corrige DEF-02
+- **Status:** Especificação — v1.8 reposiciona panes (Q-28); v1.8.1 corrige DEF-03; v1.8.2 corrige DEF-05/DEF-06
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -20,6 +20,9 @@
 > | 1.7    | 2026-08-03 | RF-36 a RF-39 (dividir a aba em várias sessões); D-33 (o gatilho nativo já existia), D-34 (foco define a sessão ativa); Achado 27 corrige a premissa de engine de CB-26/CB-36/R-15 |
 > | 1.7.1  | 2026-08-03 | RF-41 (fechar a divisão pelo cabeçalho) após uso real: a capacidade já existia sob o rótulo "Close Tab" da plataforma, que numa aba dividida diz o oposto do que faz (Achado 29)   |
 > | 1.7.2  | 2026-08-03 | DEF-02 corrigido: "Select Previous/Next Tab" com uma aba só disparava assertion da plataforma — `selectNextContent`/`selectPreviousContent` exigem mais de uma aba                 |
+> | 1.8    | 2026-08-03 | RF-43 (trocar de lado e girar a divisão); DnD de panes **avaliado e recusado** por custo de UI, não de mecanismo — registrado em Q-28                                              |
+> | 1.8.1  | 2026-08-03 | DEF-03 (aba marcada "encerrado" com sessão viva ao lado) e DEF-04 (menu "Dividir" vazio); RF-44 e RF-45 especificam o comportamento correto                                        |
+> | 1.8.2  | 2026-08-03 | DEF-05 (cabeçalho inteiro morria ao fechar a primeira pane — `preferredFocusableComponent` órfão) e DEF-06 (nome ambíguo); RF-46. **Revoga o diagnóstico de DEF-04** (Achado 30)   |
 
 ---
 
@@ -150,8 +153,17 @@ Explicitamente **não** serão construídos nesta tarefa:
 - _(v1.7)_ **Persistência do layout de divisão.** Fechar o projeto descarta as divisões, como já
   descarta as abas (Q-07). Restaurar exigiria persistir a árvore de panes e recriar sessões —
   contra D-02, que deixa o histórico com o CLI.
-- _(v1.7)_ **Arrastar panes para reorganizar a divisão.** O divisor é ajustável com o mouse; mover
-  uma pane de lugar, não. Dividir e fechar cobrem o uso pedido.
+- _(v1.7, reavaliado em v1.8)_ **Arrastar panes com o mouse para reorganizá-las.** Reposicionar
+  passou a existir por ações (RF-43); o que continua fora é o **arraste**. A recusa não é por
+  dificuldade de DnD — a plataforma tem `DnDSupport` e o framework `DockManager`/`DockContainer`
+  que o editor usa. É por falta de onde agarrar:
+
+  > O editor arrasta o **rótulo da aba** (`TabInfo.DragOutDelegate`), nunca o corpo do editor.
+  > As nossas panes não têm aba, e a superfície delas já é do terminal: arrastar dentro da pane
+  > **é** selecionar texto, que é o mecanismo de RF-26/RF-33. Logo, DnD exigiria antes uma barra
+  > de título por pane — UI permanente, roubando altura de todas, para servir uma ação ocasional.
+  > Sinal de custo: o terminal da própria JetBrains tem split e **não** implementa DnD de panes
+  > (nenhuma classe de DnD em `terminal.jar`). Ver Q-28.
 - _(v1.7)_ **Limite de panes por aba.** Não há teto artificial: a divisão é recursiva e aninha à
   vontade. O limite prático é a legibilidade, e quem decide é quem divide (mesma postura de
   RNF-18 para abas).
@@ -486,6 +498,110 @@ plataforma usa a convenção **oposta**: `true` empilha um sobre o outro. Os doi
 chamam parecido e significam o contrário, o que é exatamente como se envia um recurso invertido —
 por isso a conversão é explícita no código e há teste de geometria (T-1.34, T-1.35).
 
+### DEF-03 — "encerrado" dizia respeito à sessão errada _(v1.8.1)_
+
+Primeiro uso do "Fechar divisão" com duas panes: uma fechou, a outra continuou viva — e a **aba
+inteira** apareceu como `Claude (2) (encerrado)`.
+
+**Causa.** O callback de término era registrado só para a sessão **original** da aba:
+
+```kotlin
+pane.widget.addTerminationCallback({ content.displayName = "$title (encerrado)" }, tabDisposable)
+```
+
+Fechar a divisão descarta o `Disposable` daquela pane, o que mata o PTY, o que dispara o
+callback. Se a pane fechada fosse a original — e é a que está em foco na maioria das vezes —, a
+aba era marcada como encerrada com uma sessão trabalhando ao lado.
+
+**Correção (RF-44).** O callback passa a ser registrado **por pane**, com duas guardas:
+
+| Guarda                          | Por quê                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| A pane ainda está na árvore     | Fechar deliberadamente destaca a pane antes de matar o processo — não é "encerrada", é fechada |
+| É a última pane da aba          | Numa aba dividida, uma sessão que acaba não encerra a aba; a vizinha segue  |
+
+A segunda guarda responde **Q-26**, que a v1.7 deixou em aberto justamente por não saber o que
+"(encerrado)" deveria significar numa aba dividida. O uso real respondeu.
+
+**O segundo defeito, que só o teste encontrou.** A primeira versão da guarda usava
+`paneOf(...) == null` para detectar o fechamento deliberado — e **não funcionava**. `close()`
+desanexa o *splitter* da árvore, mas a pane fechada continua sendo filha dele; como `paneOf`
+devolvia assim que encontrasse um `Splitter` acima, ela ainda parecia estar na aba. O conserto
+teria sido publicado sem efeito nenhum.
+
+A correção foi em `paneOf`, e não na guarda: ele passou a exigir
+`SwingUtilities.isDescendingFrom(component, root)` antes de subir a árvore. Assim **todos** os
+chamadores ficam protegidos, e não só o caso que o defeito relatou.
+
+### DEF-05 — a aba inteira morria ao fechar a primeira pane _(v1.8.2)_
+
+Sintoma relatado com quatro sessões (`aaaaa` a `ddddd`): fechar uma delas deixava as outras três
+no ar, mas **nenhuma ação do cabeçalho funcionava mais naquela aba** — nem dividir, nem "Nova
+sessão". Clicar em outra aba devolvia tudo ao normal.
+
+**Causa.** `addSession` define o alvo de foco da aba na criação:
+
+```kotlin
+content.preferredFocusableComponent = pane.widget.component
+```
+
+Fechando **essa** pane — a primeira, que é a que costuma estar em foco —, a aba passa a apontar
+para um componente descartado e fora da árvore. A tool window tenta focá-lo, o foco não vai a
+lugar nenhum, e o `DataContext` da toolbar fica sem projeto: todas as ações do cabeçalho param.
+Trocar de aba consertava porque o foco caía num componente válido.
+
+**Correção (RF-42, ampliado):** ao fechar uma pane, a aba passa a apontar para a sobrevivente —
+`SESSION_WIDGET`, **`preferredFocusableComponent`** e o foco efetivo, os três. A v1.8.1 já
+trocava a chave e pedia foco, mas deixava o `preferredFocusableComponent` para trás, que era
+justamente o que quebrava.
+
+> ⚠️ **Isto revoga o diagnóstico de DEF-04.** A v1.8.1 atribuiu o "menu vazio" a
+> `ActionUpdateThread`/`update()` ausentes, por comparação com o `AudioMenuAction`. A hipótese
+> era plausível e **estava errada**: o menu não aparecia porque a toolbar inteira estava sem
+> contexto, pelo motivo acima. As mudanças de thread foram mantidas — ler a árvore Swing fora da
+> EDT era incorreto de qualquer forma —, mas não eram a correção. Ver o Achado 30.
+
+### DEF-06 — "Fechar divisão" foi lido como "fechar as divisões" _(v1.8.2)_
+
+O mesmo relato mostrou o item sendo acionado com a expectativa de encerrar a aba inteira, e não
+uma pane. O nome permitia as duas leituras: "divisão" tanto é *a pane* quanto *o arranjo*.
+
+**É o mesmo erro que o DEF-04 diagnosticou na plataforma** — "Close Tab" fechando uma pane —,
+repetido em rótulo escrito por este projeto uma rodada depois de a lição ter sido registrada.
+
+**Correção (RF-46):** os dois nomes passam a dizer **quantas sessões morrem**:
+
+| Antes              | Agora                       | O que faz                                 |
+| ------------------ | --------------------------- | ----------------------------------------- |
+| "Fechar divisão"   | **"Fechar esta sessão"**    | fecha a pane em foco, a vizinha ocupa      |
+| _(não existia)_    | **"Fechar todas as sessões"** | fecha a aba com todas as divisões         |
+
+O `X` da aba já fazia o segundo, mas quem está no menu de divisões procura ali — e foi a
+ausência do item que abriu espaço para a leitura errada.
+
+### Achado 30 — uma hipótese plausível publicada como conserto _(v1.8.2)_
+
+A v1.8.1 não conseguiu reproduzir DEF-04 (menu vazio) e mesmo assim mexeu no código: atribuiu a
+causa a `ActionUpdateThread`/`update()` ausentes, por comparação com o `AudioMenuAction`, que
+funciona. O raciocínio era razoável e **a conclusão estava errada** — o menu não aparecia porque
+a toolbar inteira estava sem contexto, por causa do `preferredFocusableComponent` órfão de
+DEF-05, que só o exemplo com quatro sessões deixou visível.
+
+**O que salvou o registro:** o SPEC e o HANDOFF disseram, na hora, que era hipótese pendente de
+confirmação (T-3.48), e não conserto. Foi por isso que a correção real pôde ser encontrada em
+vez de o defeito ser dado por fechado.
+
+**O que teria evitado o erro:** o sintoma relatado — "só funciona depois de clicar em outra aba"
+— aponta para **contexto/foco**, não para cálculo de menu. Um menu mal atualizado não impede
+"Nova sessão" de funcionar; um `DataContext` sem projeto impede tudo. A informação que
+distinguia as duas hipóteses estava no relato original, e eu segui a pista errada por ela ser a
+que eu sabia comparar (havia um menu vizinho funcionando).
+
+**Lição registrada:** quando um defeito não é reproduzível, escolher a hipótese que explica
+**todos** os sintomas, não a que é mais fácil de testar. "Nem criar aba nova eu consigo" já
+excluía a explicação de menu na primeira leitura — e só apareceu no segundo relato porque o
+primeiro não foi lido com essa pergunta em mente.
+
 ### DEF-02 — herdar um item de menu é herdar as precondições dele _(v1.7.2)_
 
 O menu de contexto que o listener acendeu (D-33) traz também "Select Previous Tab" e "Select Next
@@ -627,7 +743,11 @@ reimplementação frágil.**
 | **RF-39**     | _(v1.7)_ Fechar uma sessão dividida DEVE colapsar a divisão, com a irmã ocupando o espaço das duas, e encerrar **apenas** o processo daquela pane. Sendo a última sessão da aba, fechar a sessão DEVE fechar a aba.                                   |
 | **RF-40**     | _(v1.7)_ Fechar a aba DEVE encerrar **todas** as sessões dela, sem deixar PTY órfão, qualquer que seja a profundidade das divisões.                                                                                                                   |
 | **RF-41**     | _(v1.7.1)_ O menu "Dividir" do cabeçalho DEVE oferecer "Fechar divisão", que fecha a sessão em foco e devolve o espaço à vizinha, **sem** fechar a aba. Sem divisão, a ação DEVE avisar em vez de fechar a aba.                                        |
-| **RF-42**     | _(v1.7.1)_ Fechada uma pane, a aba DEVE passar a apontar para uma sessão **viva**, que recebe o foco — sem isso as ações do cabeçalho (RF-38) ficam sem sessão até o usuário clicar em alguma pane.                                                    |
+| **RF-42**     | _(v1.7.1, ampliado em v1.8.2)_ Fechada uma pane, a aba DEVE passar a apontar para uma sessão **viva** em **três** lugares: a chave da sessão selecionada, o `preferredFocusableComponent` do `Content` e o foco efetivo. Deixar qualquer um apontando para a pane fechada derruba o cabeçalho inteiro (DEF-05). |
+| **RF-44**     | _(v1.8.1)_ O sufixo "(encerrado)" no título da aba DEVE significar que a aba não tem mais nenhuma sessão viva. Fechar uma divisão deliberadamente NÃO DEVE marcar a aba, e uma sessão que acaba numa aba dividida também não, enquanto restar vizinha (DEF-03). |
+| **RF-46**     | _(v1.8.2)_ O menu "Dividir" DEVE distinguir, **pelo nome**, quantas sessões cada fechamento encerra: "Fechar esta sessão" (a pane em foco) e "Fechar todas as sessões" (a aba inteira, com todas as divisões).                                                 |
+| **RF-45**     | _(v1.8.1)_ As ações que exigem divisão ("Trocar de lado", "Girar divisão", "Fechar divisão") DEVEM aparecer **desabilitadas** quando a aba não está dividida, em vez de avisar depois do clique.                                                              |
+| **RF-43**     | _(v1.8)_ O menu "Dividir" DEVE oferecer "Trocar de lado" (inverte a sessão em foco com a vizinha) e "Girar divisão" (alterna lado a lado ↔ empilhado). Sem divisão, as duas DEVEM avisar em vez de agir.                                              |
 
 ---
 
@@ -1460,6 +1580,13 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.38**     | `ClaudeSessionSplitter`           | _(v1.7.1)_ `close` devolve **o irmão sobrevivente**, e não só um booleano — é dele que sai a sessão que reassume o foco (RF-42) |
 | **T-1.39**     | `ClaudeSessionSplitter`           | _(v1.7.1)_ Fechar em cadeia devolve a árvore ao estado de uma sessão só, sem splitter pendurado, e a última pane devolve `null` (RF-41) |
 | **T-1.40**     | `ClaudeTabNavigation`             | _(v1.7.2)_ Navegar exige mais de uma aba: `canNavigate` é falso com 0 e com 1, verdadeiro de 2 em diante — o limite que DEF-02 violava |
+| **T-1.41**     | `ClaudeSessionSplitter`           | _(v1.8)_ `swap` inverte as duas panes, e trocar duas vezes volta ao arranjo original (RF-43) |
+| **T-1.42**     | `ClaudeSessionSplitter`           | _(v1.8)_ `rotate` leva de lado a lado a empilhado — verificado por **geometria depois do layout**, como T-1.34/T-1.35 (RF-43) |
+| **T-1.43**     | `ClaudeSessionSplitter`           | _(v1.8)_ `swap` e `rotate` sem divisão devolvem `false` **sem tocar na árvore** (RF-43) |
+| **T-1.44**     | `ClaudeSessionSplitter`           | _(v1.8.1)_ `isSplit` distingue a pane sozinha da dividida — é o que habilita/desabilita as ações (RF-45) |
+| **T-1.46**     | `ClaudeSessionSplitter`           | _(v1.8.2)_ `firstPane` acha a sobrevivente sob splitter aninhado — é dela que saem a chave, o `preferredFocusableComponent` e o foco (RF-42, DEF-05) |
+| **T-1.47**     | `ClaudeSessionSplitter`           | _(v1.8.2)_ `countPanes` acompanha divisões e fechamentos, e componente sem marca não conta — é o que decide se a aba ainda tem sessão viva (RF-44) |
+| **T-1.45**     | `ClaudeSessionSplitter`           | _(v1.8.1)_ **`paneOf` devolve `null` para pane já fechada.** Foi este teste que pegou DEF-03: `close` desanexa o splitter, mas a pane removida continua filha dele, então sem checar `isDescendingFrom` ela ainda "estava" na aba — e a guarda de RF-44 não teria efeito nenhum |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
 executada após cada implementação.
@@ -1552,6 +1679,15 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.42**     | _(v1.7.1)_ Menu "Dividir" → "Fechar divisão": a pane em foco sai, a vizinha ocupa o espaço, e a aba continua aberta (RF-41) |
 | **T-3.43**     | _(v1.7.1)_ Depois de "Fechar divisão", acionar "Copiar Conversa" **sem clicar em nada**: a ação encontra a sessão sobrevivente, já com o foco (RF-42) |
 | **T-3.44**     | _(v1.7.1)_ "Fechar divisão" numa aba sem divisão: aparece o aviso e a aba **não** é fechada (RF-41) |
+| **T-3.45**     | _(v1.8)_ "Trocar de lado": as duas sessões trocam de posição **sem reiniciar** — o scrollback e o processo de cada uma seguem intactos (RF-43) |
+| **T-3.46**     | _(v1.8)_ "Girar divisão": lado a lado vira empilhado e vice-versa, e o CLI redesenha para o novo tamanho sem quebrar o rodapé (RF-43, CB-54) |
+| **T-3.47**     | _(v1.8)_ Numa aba com três panes aninhadas, trocar e girar agem sobre a divisão **da pane em foco**, não sobre a externa (RF-43) |
+| **T-3.48**     | _(v1.8.2)_ Com quatro sessões numa aba, "Fechar esta sessão" na **primeira**: as outras três seguem, e **sem trocar de aba** o cabeçalho continua inteiro — dividir, nova sessão e o menu abrem normalmente (DEF-05, DEF-04) |
+| **T-3.52**     | _(v1.8.2)_ "Fechar todas as sessões" numa aba com quatro divisões: a aba some e `ps aux \| grep claude` não mostra processo sobrando (RF-46, RF-40) |
+| **T-3.53**     | _(v1.8.2)_ Ler os dois itens do menu sem contexto e conferir que o nome já diz quantas sessões cada um encerra (RF-46, DEF-06) |
+| **T-3.49**     | _(v1.8.1)_ "Fechar divisão" numa aba com duas sessões: a aba **não** ganha o sufixo "(encerrado)", e a sessão sobrevivente segue viva (RF-44, DEF-03) |
+| **T-3.50**     | _(v1.8.1)_ Numa aba dividida, encerrar uma sessão pelo `/exit`: a aba **não** é marcada enquanto a vizinha viver; encerrando as duas, aí sim aparece "(encerrado)" (RF-44, Q-26) |
+| **T-3.51**     | _(v1.8.1)_ Numa aba sem divisão, o menu "Dividir" mostra "Trocar de lado", "Girar divisão" e "Fechar divisão" **cinzas**, e as duas de dividir habilitadas (RF-45) |
 
 ### Testes de regressão
 
@@ -1807,7 +1943,8 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-23** | _(v1.6)_ Vale lembrar o último diretório usado, em vez de sempre sugerir a raiz do projeto?                                  | Adiado. A raiz do projeto é o palpite certo na maioria dos casos e não custa persistência nenhuma. Guardar o último diretório significa mais um campo em settings — só com demanda real                                                                                          |
 | **Q-24** | _(v1.7)_ A divisão deveria oferecer "retomar sessão" (`--resume`), e não só sessão nova?                                     | Adiado. Dividir hoje abre sempre uma sessão nova. Retomar dentro da divisão exigiria um submenu por direção (4 itens) — reavaliar se o uso mostrar que dividir para retomar é comum                                                                                             |
 | **Q-25** | _(v1.7)_ Vale navegar entre panes por teclado (`gotoNextSplitTerminal` do listener)?                                          | Adiado deliberadamente. O `default` da interface devolve `false`, então a ação nem aparece — custo zero por não implementar. Implementar exige ordenar as panes, que a árvore não dá de graça                                                                                   |
-| **Q-26** | _(v1.7)_ Com a aba dividida, o que o título "(encerrado)" deveria significar?                                                | Em aberto. Hoje só a sessão original da aba renomeia o título; uma pane dividida que encerra não marca nada. Marcar por qualquer pane diria menos do que parece ("qual delas?"), e marcar todas exigiria contar sessões vivas. Decidir com uso real (CB-52)                     |
+| **Q-26** | ~~_(v1.7)_ Com a aba dividida, o que o título "(encerrado)" deveria significar?~~                                            | ✅ **RESOLVIDO em v1.8.1 pelo uso real.** Significa "não há mais sessão viva nesta aba" — contando as panes na árvore, que era a saída descartada como cara em v1.7 e custou seis linhas. Virou RF-44, depois de DEF-03 mostrar o oposto na prática                              |
+| **Q-28** | _(v1.8)_ Vale arrastar panes com o mouse para reorganizá-las, como o editor faz com as abas?                                 | **Avaliado e adiado, com o levantamento feito.** Mecanismo existe (`DnDSupport`; `DockManager`/`DockContainer`). O que falta é **onde agarrar**: o editor arrasta o rótulo da aba, e as nossas panes não têm aba — a superfície delas é do terminal, onde arrastar é selecionar texto (RF-26). Exigiria barra de título por pane, UI permanente para ação ocasional. RF-43 cobre o uso de 2–4 panes por ações. Reabrir se o uso mostrar aninhamento profundo, onde trocar/girar não bastam |
 | **Q-27** | _(v1.7)_ As degradações graciosas de engine (CB-26, CB-36, CB-47, R-15) deveriam ser removidas agora que o Achado 27 provou que a sessão é sempre CLASSIC? | Não. Custam uma linha (`?: return`) e protegem contra a plataforma mudar o retorno de `createTerminalWidget` num upgrade. O que mudou foi a **probabilidade** de R-15, não a decisão                                                                                             |
 
 ---
@@ -2278,6 +2415,10 @@ Toda afirmação técnica sobre o estado atual remonta a uma verificação diret
 | _(v1.7.1)_ O item "Close Tab" do menu de contexto chama `listener.onSessionClosed()` — ou seja, a v1.7 **já** fechava a pane, sob o nome errado                       | `javap -c -p` de `ShellTerminalWidget`: o lambda de `getActions` invoca `JBTerminalWidgetListener.onSessionClosed`; o rótulo vem de `getCloseTabActionPresentation()`        |
 | _(v1.7.2)_ `ContentManagerImpl.selectNextContent()` e `selectPreviousContent()` começam com `LOG.assertTrue(getContentCount() > 1)`                                   | `javap -c -p` de `ContentManagerImpl`: `getContentCount` → `if_icmple` → `Logger.assertTrue` nas primeiras instruções de **ambos** (base de DEF-02)                          |
 | _(v1.7.2)_ `ContentManagerImpl.removeContent(Content, boolean)` **não** tem assertion equivalente                                                                     | `javap -c -p` da mesma classe: nenhum `Logger.assertTrue` no método — auditado junto com DEF-02, para não corrigir só o caso relatado                                        |
+| _(v1.8)_ `Splitter.swapComponents()` troca as duas referências internas e já faz `revalidate`/`repaint`, sem reparentar                                               | `javap -c -p` de `com.intellij.openapi.ui.Splitter`: troca `myFirstComponent`/`mySecondComponent` e chama `revalidate()`+`repaint()` — 27 instruções                         |
+| _(v1.8)_ `Splitter.setOrientation(boolean)` e `getOrientation()` são públicos                                                                                        | `javap` da mesma classe                                                                                                                                                      |
+| _(v1.8)_ O editor arrasta o **rótulo da aba**, não o corpo: `TabInfo.setDragOutDelegate` + `JBEditorTabs`, sobre `DockManager`/`DockContainer`                       | `javap -p` de `EditorTabbedContainer` (campo `dragOutDelegate`, `JBEditorTabs`) e `javap` de `TabInfo` e `DockContainer` (base de Q-28)                                      |
+| _(v1.8)_ O plugin de terminal da JetBrains **não** implementa DnD de panes                                                                                           | listagem de `terminal.jar`: nenhuma classe com `dnd`/`DragAndDrop` no nome                                                                                                   |
 
 **Não verificado (declarado como suposição):** semântica de
 `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` (Q-03); comportamento de builds anteriores a `262`

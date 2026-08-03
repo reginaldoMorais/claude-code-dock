@@ -6,6 +6,7 @@ import java.awt.BorderLayout
 import java.awt.Component
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.SwingUtilities
 
 /**
  * Divide uma aba em várias sessões lado a lado (RF-36).
@@ -26,6 +27,9 @@ object ClaudeSessionSplitter {
     /** Metade para cada lado; o usuário arrasta o divisor a partir daí. */
     private const val PROPORTION = 0.5f
 
+    /** Marca que identifica um bloco de sessão na árvore. */
+    private const val PANE_MARK = "ClaudeDockPaneMark"
+
     /**
      * Painel raiz da aba: um único filho, trocado por um splitter quando a sessão se divide.
      *
@@ -43,6 +47,11 @@ object ClaudeSessionSplitter {
      * [component] não estiver sob [root], o que acontece com aba já fechada.
      */
     fun paneOf(component: Component, root: Component): JComponent? {
+        // Sem esta verificação, uma pane **fechada** ainda seria encontrada: `close` desanexa o
+        // splitter da árvore, mas a pane removida continua filha dele — e o laço abaixo pararia
+        // no primeiro `Splitter` que achasse, sem nunca confirmar que ele leva à aba (DEF-03).
+        if (!SwingUtilities.isDescendingFrom(component, root)) return null
+
         var current: Component = component
 
         while (true) {
@@ -70,6 +79,66 @@ object ClaudeSessionSplitter {
         }
 
         place(splitter, parent, wasFirst)
+        return true
+    }
+
+    /** Se [pane] faz parte de uma divisão — ou seja, se há o que trocar, girar ou fechar. */
+    fun isSplit(pane: JComponent): Boolean = pane.parent is Splitter
+
+    /**
+     * Marca [component] como uma pane, para as buscas na árvore.
+     *
+     * A marca vive no próprio componente (`putClientProperty`), então morre junto com ele — a
+     * mesma razão de D-36 para não manter estrutura paralela.
+     */
+    fun markPane(component: JComponent) {
+        component.putClientProperty(PANE_MARK, true)
+    }
+
+    /** Primeira pane sob [component], contando o próprio — de onde sai o foco após um fechamento. */
+    fun firstPane(component: JComponent): JComponent? {
+        if (component.getClientProperty(PANE_MARK) == true) return component
+
+        return component.components
+            .filterIsInstance<JComponent>()
+            .firstNotNullOfOrNull { firstPane(it) }
+    }
+
+    /** Quantas panes há sob [component] — é o que decide se a aba ainda tem sessão viva. */
+    fun countPanes(component: JComponent): Int {
+        if (component.getClientProperty(PANE_MARK) == true) return 1
+
+        return component.components.filterIsInstance<JComponent>().sumOf { countPanes(it) }
+    }
+
+    /**
+     * Troca [pane] de lado com a irmã (RF-43).
+     *
+     * `Splitter.swapComponents()` é da plataforma e troca as duas referências internas, sem
+     * reparentar nada — o que evita a armadilha de fazer isso à mão: `setFirstComponent` remove
+     * o componente que estava naquele lado, então trocar em dois passos derruba o que o primeiro
+     * passo acabou de pôr.
+     *
+     * @return `false` quando não há divisão — nada a trocar.
+     */
+    fun swap(pane: JComponent): Boolean {
+        val splitter = pane.parent as? Splitter ?: return false
+
+        splitter.swapComponents()
+        return true
+    }
+
+    /**
+     * Gira a divisão que contém [pane]: lado a lado ↔ empilhado (RF-43).
+     *
+     * @return `false` quando não há divisão — nada a girar.
+     */
+    fun rotate(pane: JComponent): Boolean {
+        val splitter = pane.parent as? Splitter ?: return false
+
+        splitter.orientation = !splitter.orientation
+        splitter.revalidate()
+        splitter.repaint()
         return true
     }
 
