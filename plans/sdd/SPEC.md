@@ -1,8 +1,8 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.6
+- **Versão:** 1.7.2
 - **Data:** 2026-08-03
-- **Status:** Especificação — v1.6 acrescenta a exportação do trecho selecionado, ao lado da cópia por seleção
+- **Status:** Especificação — v1.7 acrescenta a divisão da aba; v1.7.1 nomeia o fechamento; v1.7.2 corrige DEF-02
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -17,6 +17,9 @@
 > | 1.5    | 2026-08-02 | RF-31/RF-32 (pause/stop via Piper TTS); detecção de Piper + modelo; configuração de executável e caminho do modelo; ações no menu do cabeçalho                                      |
 > | 1.5.1  | 2026-08-03 | RF-30 (botão play no popup) **descartado** — complexidade UX no popup para pouco ganho vs. menu de cabeçalho já existente (RF-31)                                                   |
 > | 1.6    | 2026-08-03 | RF-33/RF-34 (exportar o trecho selecionado para arquivo, pelo popup de seleção); D-30 registra por que isso **não** passa pelo `/export` do CLI                                     |
+> | 1.7    | 2026-08-03 | RF-36 a RF-39 (dividir a aba em várias sessões); D-33 (o gatilho nativo já existia), D-34 (foco define a sessão ativa); Achado 27 corrige a premissa de engine de CB-26/CB-36/R-15 |
+> | 1.7.1  | 2026-08-03 | RF-41 (fechar a divisão pelo cabeçalho) após uso real: a capacidade já existia sob o rótulo "Close Tab" da plataforma, que numa aba dividida diz o oposto do que faz (Achado 29)   |
+> | 1.7.2  | 2026-08-03 | DEF-02 corrigido: "Select Previous/Next Tab" com uma aba só disparava assertion da plataforma — `selectNextContent`/`selectPreviousContent` exigem mais de uma aba                 |
 
 ---
 
@@ -61,6 +64,8 @@ na JetBrains Marketplace**.
 11. _(v1.6)_ Permitir **gravar em arquivo apenas o trecho selecionado**, sem passar pelo CLI —
     o complemento natural da cópia por seleção (RF-26), para quando o destino é um arquivo e
     não a área de transferência.
+12. _(v1.7)_ Permitir **dividir uma aba em duas ou mais sessões visíveis ao mesmo tempo**, lado a
+    lado ou empilhadas, para acompanhar mais de um Claude Code sem alternar de aba.
 
 ---
 
@@ -142,6 +147,14 @@ Explicitamente **não** serão construídos nesta tarefa:
 - _(v1.6)_ **Exportação do trecho pelo `/export` do CLI.** Não é uma escolha de simplicidade, é
   uma impossibilidade: o `/export` é executado pelo Claude Code e exporta **a conversa**, sem
   qualquer forma de restringi-lo a um trecho da tela. Ver D-30.
+- _(v1.7)_ **Persistência do layout de divisão.** Fechar o projeto descarta as divisões, como já
+  descarta as abas (Q-07). Restaurar exigiria persistir a árvore de panes e recriar sessões —
+  contra D-02, que deixa o histórico com o CLI.
+- _(v1.7)_ **Arrastar panes para reorganizar a divisão.** O divisor é ajustável com o mouse; mover
+  uma pane de lugar, não. Dividir e fechar cobrem o uso pedido.
+- _(v1.7)_ **Limite de panes por aba.** Não há teto artificial: a divisão é recursiva e aninha à
+  vontade. O limite prático é a legibilidade, e quem decide é quem divide (mesma postura de
+  RNF-18 para abas).
 
 ---
 
@@ -442,6 +455,96 @@ Três consequências para o desenho:
 > exatamente a armadilha já registrada no `HANDOFF.md` da rodada de 2026-08-01 — e ela pegou de
 > novo. Com `grep -a`, as classes apareceram.
 
+### O gatilho do split já existia na plataforma _(verificado em v1.7)_
+
+A suposição natural era que dividir a aba exigiria inventar a ação, o atalho e o menu. Não
+exige: **o widget de terminal já pede a divisão a quem o hospeda**, e até agora não havia
+ninguém atendendo.
+
+A cadeia, conferida por `javap` sobre `terminal.jar` da 2026.2:
+
+```
+ShellTerminalWidget.getActions()
+  └─ TerminalSplitAction.create(vertically, getListener())     // duas: right e down
+       ├─ isEnabled(KeyEvent)      → listener.canSplit(vertically)
+       └─ actionPerformed(KeyEvent) → listener.split(vertically)
+```
+
+`getActions()` é o que alimenta o menu de contexto do JediTerm e o tratamento de teclas do
+painel. Como o nosso widget nunca teve `listener`, as duas ações simplesmente não apareciam.
+Implementar `JBTerminalWidgetListener` faz surgirem "Split Right" e "Split Down" no botão
+direito, com os atalhos do keymap — **sem uma linha de UI nossa** (D-33).
+
+De quebra, o mesmo listener entrega outros itens que já estavam mortos pelo mesmo motivo:
+`onNewSession`, `onSessionClosed`, `onPreviousTabSelected` e `onNextTabSelected`.
+
+**Semântica da direção (fácil de inverter, então foi verificada).** Em
+`TerminalSplitAction$Companion.create`, `vertically = true` é pareado com o texto
+`action.SplitVertically.text` e o atalho `TW.SplitRight` — ou seja, **divisor vertical, panes
+lado a lado**. `vertically = false` é o `TW.SplitDown`. Já o `Splitter(boolean vertical)` da
+plataforma usa a convenção **oposta**: `true` empilha um sobre o outro. Os dois booleanos se
+chamam parecido e significam o contrário, o que é exatamente como se envia um recurso invertido —
+por isso a conversão é explícita no código e há teste de geometria (T-1.34, T-1.35).
+
+### DEF-02 — herdar um item de menu é herdar as precondições dele _(v1.7.2)_
+
+O menu de contexto que o listener acendeu (D-33) traz também "Select Previous Tab" e "Select Next
+Tab". Ligá-los ao `ContentManager` parecia trivial — e com **uma aba só** produz um stack trace
+inteiro no log do IDE:
+
+```
+java.lang.Throwable: Assertion failed
+  at com.intellij.ui.content.impl.ContentManagerImpl.selectPreviousContent(ContentManagerImpl.java:616)
+  at dev.reginaldomorais.claudedock.ClaudeDockSessions.selectSiblingTab(...)
+```
+
+**Causa, lida no bytecode.** Os dois métodos começam pela mesma linha:
+
+```java
+int count = getContentCount();
+LOG.assertTrue(count > 1);      // <- antes de qualquer outra coisa
+```
+
+Ou seja, navegar sem ter para onde ir **não é operação inócua**: é assertion. E o menu mostra os
+itens sempre — `getActions()` os monta a partir de presentations, sem consultar o listener —,
+então quem precisa segurar a chamada é o plugin.
+
+**Correção:** uma guarda no ponto por onde as duas direções passam (`selectSiblingTab`), com o
+limite em objeto puro (`ClaudeTabNavigation`) para ficar testável sem subir o IDE. Guardar em
+cada direção seria duplicar a mesma regra em dois lugares.
+
+**O que isto ensina sobre a rodada anterior.** O Achado 28 comemorou "o listener acende quatro
+itens de graça", e o Achado 29 já havia descontado o vocabulário herdado. Este desconta a
+terceira parcela: **as precondições**. Um item de menu herdado traz comportamento, nome **e**
+contrato — e o contrato não estava escrito em lugar nenhum, só no `assertTrue` da implementação.
+
+### Um só engine importa: as nossas sessões são sempre CLASSIC _(corrigido em v1.7)_
+
+Várias hipóteses antigas — CB-26, CB-36, CB-47 e R-15 — hedgeiam contra "e se a sessão não for
+JediTerm?". A pergunta foi levada a sério porque o `TerminalEngine` do IDE tem `CLASSIC`,
+`REWORKED` e `NEW_TERMINAL`, e o `HANDOFF.md` chegou a registrar "REWORKED no IntelliJ".
+
+**Essa premissa estava errada, e agora está verificada.** `AbstractTerminalRunner.startShellTerminalWidget`
+faz, em sequência (`javap -c`):
+
+```
+createTerminalWidget(Disposable, String, boolean) → com.intellij.terminal.JBTerminalWidget
+JBTerminalWidget.asNewWidget()                    → com.intellij.terminal.ui.TerminalWidget
+```
+
+O tipo de retorno de `createTerminalWidget` **é** `JBTerminalWidget`, o widget JediTerm — nenhuma
+subclasse pode devolver outra coisa. Quem escolhe entre engines é o `TerminalToolWindowManager`
+da tool window nativa, **acima** do ponto de entrada que usamos.
+
+**Consequência:** toda sessão criada por este plugin é JediTerm clássico, em qualquer IDE da
+família e independentemente do que o usuário configurou em Settings → Tools → Terminal. O
+"REWORKED no IntelliJ" do HANDOFF descrevia o Terminal nativo do usuário, não as nossas abas.
+
+Isso **não** é motivo para apagar as degradações graciosas: elas custam uma linha (`?: return`) e
+protegem contra a plataforma mudar esse retorno num upgrade. Mas a redação que sugeria "o recurso
+pode não estar disponível para você hoje" era falsa, e a probabilidade de R-15 cai de "Média"
+para "Baixa". Ver o Achado 27.
+
 ### Correção de uma premissa do documento de origem
 
 O plano inicial afirma que _"a Anthropic inviabiliza plugins de terceiros rodarem o Claude Code"_.
@@ -518,6 +621,13 @@ reimplementação frágil.**
 | **RF-33**     | _(v1.6)_ O popup flutuante de seleção (RF-26) DEVE oferecer, **ao lado** do botão de copiar, um botão que grava em arquivo **apenas o trecho selecionado**, com o destino escolhido pelo usuário no diálogo nativo de salvar do IDE.                  |
 | **RF-34**     | _(v1.6)_ O diálogo de RF-33 DEVE abrir na raiz do projeto, com nome sugerido distinguível e extensão `.md`. Cancelar o diálogo NÃO DEVE gravar nada nem notificar; falha de gravação DEVE virar notificação, nunca exceção.                           |
 | **RF-35**     | _(v1.6)_ A ação "Exportar Conversa" do cabeçalho (RF-22) DEVE permanecer inalterada: o trecho e a conversa inteira são destinos distintos, e nenhum substitui o outro.                                                                                |
+| **RF-36**     | _(v1.7)_ O plugin DEVE permitir dividir uma aba em duas ou mais sessões visíveis ao mesmo tempo, **à direita** (lado a lado) ou **abaixo** (empilhadas), acionável tanto pelo menu de contexto da sessão quanto por um menu "Dividir" no cabeçalho.   |
+| **RF-37**     | _(v1.7)_ Cada pane DEVE ser uma sessão independente, com processo, `CLAUDE_CODE_SSE_PORT` e ciclo de vida próprios — dividir é abrir uma sessão nova, não espelhar a existente.                                                                       |
+| **RF-38**     | _(v1.7)_ As ações do cabeçalho que operam sobre "a sessão selecionada" (RF-22, RF-24, RF-31, RF-36) DEVEM agir sobre a **sessão em foco** da aba, e não sobre uma pane arbitrária.                                                                    |
+| **RF-39**     | _(v1.7)_ Fechar uma sessão dividida DEVE colapsar a divisão, com a irmã ocupando o espaço das duas, e encerrar **apenas** o processo daquela pane. Sendo a última sessão da aba, fechar a sessão DEVE fechar a aba.                                   |
+| **RF-40**     | _(v1.7)_ Fechar a aba DEVE encerrar **todas** as sessões dela, sem deixar PTY órfão, qualquer que seja a profundidade das divisões.                                                                                                                   |
+| **RF-41**     | _(v1.7.1)_ O menu "Dividir" do cabeçalho DEVE oferecer "Fechar divisão", que fecha a sessão em foco e devolve o espaço à vizinha, **sem** fechar a aba. Sem divisão, a ação DEVE avisar em vez de fechar a aba.                                        |
+| **RF-42**     | _(v1.7.1)_ Fechada uma pane, a aba DEVE passar a apontar para uma sessão **viva**, que recebe o foco — sem isso as ações do cabeçalho (RF-38) ficam sem sessão até o usuário clicar em alguma pane.                                                    |
 
 ---
 
@@ -630,6 +740,21 @@ reimplementação frágil.**
 - **RNF-26** _(v1.6, novo)_ — A montagem do nome sugerido e a normalização do texto DEVEM ficar
   em objeto puro, testável sem subir o IDE — mesma regra que já vale para `ClaudeSessionText`,
   `ClaudeCommand` e `ClaudeTabTitle`.
+
+### Requisitos novos em v1.7 — divisão da aba
+
+- **RNF-27** _(v1.7, novo)_ — O acoplamento com `JBTerminalWidgetListener` DEVE ficar dentro de
+  `ClaudeTerminalSessionFactory`, como qualquer outro contato com a API de terminal (RNF-15). A
+  camada de cima conversa por uma interface própria, sem importar tipos do terminal.
+- **RNF-28** _(v1.7, novo)_ — O ciclo de vida DEVE ser hierárquico: cada pane tem um `Disposable`
+  filho do `Disposable` da aba. Fechar uma pane encerra **só** o processo dela; fechar a aba
+  encerra todos (RF-39, RF-40).
+- **RNF-29** _(v1.7, novo)_ — A árvore de divisões NÃO DEVE ser espelhada em estrutura de dados
+  própria: a hierarquia de componentes Swing é a única fonte de verdade. Um mapa paralelo
+  precisaria ser limpo em todo caminho de fechamento, e é exatamente aí que vazam referências
+  para panes mortas (mesma razão de D-18).
+- **RNF-30** _(v1.7, novo)_ — A lógica de divisão DEVE ficar em objeto puro de Swing, sem
+  conhecer `Project`, terminal ou tool window, para poder ser testada sem subir o IDE (RNF-26).
 
 ---
 
@@ -774,6 +899,27 @@ reimplementação frágil.**
 5. O `/export` do CLI **não é acionado em momento algum**: o texto já estava na mão do plugin,
    e o CLI não tem como exportar um trecho (D-30).
 
+### Fluxo alternativo L — dividir a aba _(v1.7, RF-36/RF-37)_
+
+1. O usuário aciona a divisão, por um de dois caminhos equivalentes:
+   a. botão direito na sessão → "Split Right" / "Split Down" (nativo do widget, D-33);
+   b. menu "Dividir" no cabeçalho → "À direita" / "Abaixo".
+2. Descobre-se a aba dona da sessão percorrendo a árvore de componentes — sem mapa (RNF-29).
+3. Cria-se um `Disposable` filho do disposable da aba, e nele uma sessão nova, pelo mesmo
+   caminho do Fluxo principal (mesmo working dir, mesmo `CLAUDE_CONFIG_DIR`, mesmos customizers).
+4. O bloco da sessão de origem é substituído por um splitter contendo os dois blocos.
+5. O foco vai para a sessão nova: quem dividiu quer digitar nela.
+6. Dividir de novo repete o processo dentro de qualquer pane, aninhando à vontade.
+
+### Fluxo alternativo M — fechar uma sessão dividida _(v1.7, RF-39)_
+
+1. O usuário aciona "Close Session" no menu de contexto da pane.
+2. Havendo divisão, o splitter é colapsado e a **irmã** ocupa o espaço das duas.
+3. O `Disposable` daquela pane é descartado: só aquele processo morre (RNF-28).
+4. Se a pane fechada era a que a aba apontava como "em foco", a marca é limpa — quem receber o
+   foco assume (RF-38).
+5. Sendo a única sessão da aba, não há divisão a colapsar: a **aba** é fechada, encerrando tudo.
+
 ### Fluxo de erro J — falha ao gravar o trecho _(v1.6, RF-34/RNF-25)_
 
 1. O destino escolhido está em diretório sem permissão de escrita, o disco está cheio, ou o
@@ -812,6 +958,7 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
 ├── ClaudeSessionExport.kt          # (v1.3) puro-ish: destino, comando e espera do /export (RF-24, RF-25)
 ├── ClaudeSelectionCopyButton.kt    # (v1.3) popup flutuante na seleção: copiar (RF-26) e exportar (RF-33)
 ├── ClaudeSelectionExport.kt        # (v1.6) puro: nome sugerido e gravação do trecho (RF-33, RF-34)
+├── ClaudeSessionSplitter.kt        # (v1.7) puro (Swing): árvore de panes da aba (RF-36, RF-39)
 ├── ClaudeSessionPadding.kt         # (v1.4) borda que se pinta com o fundo do terminal (RF-28)
 ├── ClaudeSessionLoading.kt         # (v1.4) capa sobreposta enquanto o CLI sobe (RF-29)
 ├── ClaudePiperPlayback.kt          # (v1.5) ÚNICO ponto de acoplamento com Piper + Java Sound (RNF-19)
@@ -830,6 +977,7 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
     ├── AudioMenuAction.kt           # (v1.5) menu "Áudio" no cabeçalho com ações de TTS (RF-31)
     ├── AudioPauseResumeAction.kt    # (v1.5) toggle pause/resume na menu "Áudio"
     ├── AudioStopAction.kt           # (v1.5) parar reprodução e fechar mixer
+    ├── SplitSessionAction.kt        # (v1.7) menu "Dividir" no cabeçalho (RF-36)
     └── OpenClaudeDockAction.kt
 src/main/resources/META-INF/
 ├── plugin.xml
@@ -1091,6 +1239,63 @@ foi descartado em v1.5.1 justamente para não transformá-lo em barra de ferrame
 que separa os casos é capacidade, não simetria: exportar o trecho **não existe** em outro lugar
 da UI, enquanto o play já existia no menu do cabeçalho. Ver R-23 e o Achado 25.
 
+### Divisão da aba em várias sessões _(v1.7)_
+
+**A árvore de componentes é a estrutura de dados (RNF-29).**
+
+Cada aba tem um painel raiz com um filho só. Dividir troca esse filho por um `OnePixelSplitter`
+que contém o bloco antigo e o novo. Dividir de novo repete o processo dentro de qualquer lado —
+daí "duas ou mais" sem limite artificial e sem código de aninhamento.
+
+```
+Aba (Content)                       Depois de dividir à direita, e a de baixo abaixo:
+└── raiz (BorderLayout)             └── raiz
+    └── pane A                          └── Splitter(lado a lado)
+                                            ├── pane A
+                                            └── Splitter(empilhado)
+                                                ├── pane B
+                                                └── pane C
+```
+
+Não há mapa de panes, pelo mesmo motivo de D-18: um mapa paralelo precisaria ser limpo em todo
+caminho de fechamento — e é exatamente aí que sobra referência para pane morta. As três consultas
+necessárias saem da própria árvore:
+
+| Pergunta                          | Como é respondida                                                        |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| Qual aba contém esta sessão?      | `SwingUtilities.isDescendingFrom(widget.component, content.component)`   |
+| Qual bloco divisível é este?      | sobe pelos pais até achar o painel raiz ou um `Splitter`                 |
+| Qual o `Disposable` desta pane?   | `putClientProperty` no próprio componente — morre junto com ele          |
+
+**`ClaudeSessionSplitter` — objeto puro de Swing (RNF-30).** Quatro funções: `root` (embrulha a
+primeira pane), `paneOf` (sobe até o bloco divisível), `split` (troca a pane por um splitter com
+as duas) e `close` (colapsa o splitter, promovendo a irmã). Não conhece `Project`, terminal nem
+tool window, e por isso a árvore inteira é testável sem subir o IDE.
+
+**Ciclo de vida hierárquico (RNF-28).** O `Disposable` da aba é pai dos `Disposable` das panes:
+
+```
+tabDisposable                 → Content.setDisposer(...)  : fechar a aba mata todos (RF-40)
+├── paneDisposable A          → widget A, capa, popup de seleção
+└── paneDisposable B          → widget B, capa, popup de seleção   : fechar B mata só B (RF-39)
+```
+
+**Quem é "a sessão selecionada" (D-34).** Antes, a aba tinha uma sessão e a chave
+`SESSION_WIDGET` apontava para ela. Com o split, a chave passa a significar **a última sessão com
+foco naquela aba**, reescrita por um `FocusListener` no painel de cada pane. `selectedWidget()`
+não mudou uma linha — mudou o que a chave quer dizer, e com isso RF-22, RF-24 e RF-31 passaram a
+respeitar o foco sem saberem que o split existe.
+
+**O gatilho não foi construído (D-33).** Ver
+[O gatilho do split já existia na plataforma](#o-gatilho-do-split-já-existia-na-plataforma-verificado-em-v17):
+implementar `JBTerminalWidgetListener` faz o próprio widget mostrar "Split Right"/"Split Down".
+O menu "Dividir" do cabeçalho é o segundo caminho, pedido pelo usuário (D-35).
+
+**A conversão de direção é explícita, e testada.** `listener.split(vertically = true)` significa
+lado a lado; `Splitter(vertical = true)` significa empilhado. Os dois booleanos têm nome parecido
+e sentido oposto, então o código converte num ponto só (`stacked = !vertically`) e T-1.34/T-1.35
+verificam **geometria**, não a flag: depois do layout, a segunda pane está à direita ou abaixo.
+
 ### Itens não aplicáveis
 
 Registrados por exigência do roteiro de SDD:
@@ -1161,6 +1366,15 @@ Registrados por exigência do roteiro de SDD:
 | **CB-47** | _(v1.6)_ Engine sem JediTerm (`REWORKED`/`NEW_TERMINAL`) | O popup inteiro não é instalado, exportar o trecho junto com copiar — mesma degradação de R-15. O export da conversa no cabeçalho (RF-22) continua valendo |
 | **CB-48** | _(v1.6)_ Projeto sem `basePath` (raro, mas possível) | O diálogo abre no diretório padrão da plataforma em vez da raiz do projeto; a gravação segue funcionando |
 | **CB-49** | _(v1.6)_ Aba fechada com o popup aberto | O popup é filho do `Disposable` da aba desde RF-26: cai junto, e o diálogo nem chega a existir |
+| **CB-50** | _(v1.7)_ Aba fechada entre o clique em "Dividir" e a criação da pane | `split` devolve `false` quando o componente não tem pai; a sessão recém-criada é descartada e nada fica pendurado (T-1.37) |
+| **CB-51** | _(v1.7)_ Falha ao criar a sessão da divisão (executável sumiu, PTY negado) | A pane nova é descartada com seu `Disposable`, a divisão **não** acontece e a aba continua como estava (RNF-10) |
+| **CB-52** | _(v1.7)_ Sessão de uma pane encerra (`/exit`) sem fechar a pane | A pane continua no ar com o shell vivo, como qualquer aba encerrada (RF-11, D-09). Só a sessão original da aba renomeia o título — ver Q-26 |
+| **CB-53** | _(v1.7)_ Fechar a aba com várias divisões abertas | O `Disposable` da aba é pai de todos: cai a árvore inteira, sem PTY órfão (RF-40, RNF-28) |
+| **CB-54** | _(v1.7)_ Divisão em janela estreita: as panes ficam com poucas colunas | Cada terminal recebe seu tamanho real e o CLI redesenha para ele; o divisor é arrastável. Legibilidade é escolha de quem divide, não limite do plugin |
+| **CB-55** | _(v1.7)_ Ação do cabeçalho acionada sem nenhuma pane jamais focada | `selectedWidget()` cai na sessão registrada na criação da aba — a chave nasce preenchida e só é reescrita pelo foco (RF-38) |
+| **CB-56** | _(v1.7)_ Várias sessões da mesma aba conectadas ao mesmo servidor MCP do plugin oficial | É a Q-02 de sempre, agora mais provável: nada garante qual sessão "possui" um diff aberto. Não regride nada — duas abas já produziam o mesmo — mas passa a acontecer com mais frequência |
+| **CB-57** | _(v1.7.2)_ "Select Previous/Next Tab" acionado com uma aba só | A guarda de `ClaudeTabNavigation` segura a chamada: sem ela a plataforma dispara assertion, não um no-op (DEF-02). Os itens continuam visíveis no menu, porque quem os monta não nos consulta |
+| **CB-58** | _(v1.7.2)_ "Show Tabs" acionado no menu de contexto | No-op deliberado: as abas já estão visíveis no cabeçalho da tool window, e não há painel de abas a revelar como no terminal nativo |
 
 ---
 
@@ -1182,7 +1396,7 @@ Registrados por exigência do roteiro de SDD:
 | **R-12** | ~~_(v1.2)_ Escrever `"/export\r"` no PTY é digitação simulada~~ ✅ **FECHADO em 2026-08-01** — T-3.11 aprovado: o `/export` executou e gerou o arquivo                                                               | ~~Baixo~~   | —     | Validado no IDE real: o `\r` é aceito como Enter e o autocomplete não interfere. Como RF-24 passa a depender disso em todo uso, revalidar a cada upgrade do CLI                                                                                                                                                                                                  |
 | **R-13** | ~~_(v1.3)_ O argumento `[filename]` do `/export` não foi verificado~~ ✅ **FECHADO em 2026-08-01** — lido na implementação embutida no binário `claude` 2.1.220                                                      | ~~Alto~~    | —     | Grava direto e sem UI, sobrescreve, cria diretórios, e acrescenta `.txt` se faltar extensão. O destino de RF-24 termina em `.md` por causa disso. Revalidar a cada upgrade do CLI, junto de R-11                                                                                                                                                                 |
 | **R-14** | _(v1.3)_ RF-24 grava a conversa em arquivo temporário — código-fonte e possíveis segredos passam por disco, ainda que por segundos                                                                                   | Médio       | Alta  | Arquivo com permissão exclusiva do usuário e apagado em `finally` (RF-25). Liability real, aceita porque a alternativa (buffer) não entrega o recurso. Registrada em RNF-19                                                                                                                                                                                      |
-| **R-15** | _(v1.3)_ O botão flutuante (RF-26) depende de `TerminalPanel.addSelectionListener`, específico do engine CLASSIC — mesma exposição de R-09                                                                           | Baixo       | Média | Degrada igual: sem `asJediTermWidget` o botão não é instalado, e `Ctrl+C`/`Ctrl+Shift+C` seguem copiando a seleção. Perde-se conveniência, não capacidade                                                                                                                                                                                                        |
+| **R-15** | _(v1.3, revisto em v1.7)_ O popup de seleção (RF-26/RF-33) e o listener de split (RF-36) dependem de o widget ser JediTerm — mesma exposição de R-09                                                                 | Baixo       | ~~Média~~ **Baixa** | **Probabilidade revista pelo Achado 27:** a sessão criada por este plugin é sempre JediTerm, porque `createTerminalWidget` devolve `JBTerminalWidget` por assinatura. O que resta é a plataforma mudar isso num upgrade. As guardas continuam (Q-27): sem `asJediTermWidget` nada é instalado, `Ctrl+C` segue copiando, e o menu "Dividir" do cabeçalho não depende do listener |
 | **R-16** | _(v1.4)_ O prazo da capa (RF-29) é fixo. Máquina mais lenta, hook de sessão pesado ou CLI atualizando deixam o eco escapar quando a capa sai                                                                         | Baixo       | Média | Constante única em `ClaudeSessionLoading`, ajustável em um lugar. Falha é cosmética e passageira, nunca funcional. Q-16 registra o caminho para trocar prazo por detecção                                                                                                                                                                                        |
 | **R-17** | _(v1.4)_ A verificação do executável usa o `PATH` do `EnvironmentUtil`, que **não** enxerga o que o `.zshrc`/`.bashrc` acrescenta — falso negativo observado com o CLI funcionando                                   | Baixo       | Alta  | Consulta `~/.local/bin` e `/usr/local/bin` antes de desistir, e a notificação nunca bloqueia a abertura da aba. Quem instala fora disso tem o campo de configuração                                                                                                                                                                                              |
 | **R-18** | _(v1.5)_ Piper depende de um arquivo `.onnx` cuja localização e nomenclatura não é padronizada (sem registro central de modelos)                                                                                    | Médio       | Alta  | Decisão de design: o usuário configura manualmente o caminho do modelo desejado, sem autodetecção. Documentar no README dicas de onde obter modelos (ex.: Hugging Face da oma/piper) e convenção de armazená-los em `~/.claude/piper-voices/` |
@@ -1192,6 +1406,9 @@ Registrados por exigência do roteiro de SDD:
 | **R-22** | _(v1.5)_ Dois projetos abertos com configurações diferentes de `piperModel` — sem sincronização entre `ClaudeTtsSessions` | Baixo       | Baixa | Cada projeto tem sua própria instância de `ClaudeTtaSessions` (via `project.service()`). Não há compartilhamento; cada um usa seu próprio modelo configurado. Esperado e correto |
 | **R-23** | _(v1.6)_ O popup de seleção vira barra de ferramentas: cada rodada acrescenta "só mais um botão" até ele atrapalhar a leitura do que foi selecionado | Baixo | Média | Teto declarado de dois botões, e o critério registrado (capacidade que não existe em outro lugar, não simetria com o cabeçalho). RF-30 já foi recusado por esse critério em v1.5.1. Ver Achado 25 |
 | **R-24** | _(v1.6)_ O trecho gravado é o render do terminal, com quebras de linha na largura da aba — o arquivo pode não conter o texto como o autor o escreveu | Baixo | Alta | Inerente a exportar de um terminal, e o mesmo que a cópia por seleção (RF-26) já entrega há rodadas sem reclamação. Declarado em [Fora de Escopo](#fora-de-escopo); Q-22 registra a alternativa se incomodar |
+| **R-25** | _(v1.7)_ `JBTerminalWidgetListener` não tem contrato de estabilidade: um upgrade pode acrescentar método abstrato ou mudar a semântica de `split(vertically)` | Médio | Média | O acoplamento está num arquivo só (RNF-27), e a semântica da direção tem teste de **geometria** (T-1.34/T-1.35) — inverter a flag lá em cima quebra o teste em vez de sair invertido na tela. O menu do cabeçalho não depende do listener e continuaria funcionando |
+| **R-26** | _(v1.7)_ Várias sessões por aba multiplicam processos `claude`, cada um com seu consumo de memória e sua conexão ao servidor MCP | Baixo | Alta | É o custo pedido: dividir é para rodar mais de um Claude Code. Mesmo custo de abrir mais abas, que já não tem limite (RNF-18). Fechar a pane encerra o processo (RF-39) |
+| **R-27** | _(v1.7)_ Com mais sessões simultâneas, a ambiguidade de Q-02 (qual sessão "possui" um diff) deixa de ser hipótese e vira rotina | Médio | Alta | Não é regressão — duas abas já bastavam. O split apenas torna o caso comum, o que **ajuda**: Q-02 passa a ser observável no uso real, que é a condição que faltava para decidi-la (CB-56) |
 
 ---
 
@@ -1234,6 +1451,15 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.29**     | `ClaudeSelectionExport`           | _(v1.6)_ `write` grava o texto em UTF-8 e o round-trip devolve exatamente o que entrou, inclusive acentuação e quebras de linha (RF-33) |
 | **T-1.30**     | `ClaudeSelectionExport`           | _(v1.6)_ `write` em diretório inexistente lança `IOException` em vez de falhar em silêncio — é o que o chamador converte em notificação (CB-46, Fluxo J) |
 | **T-1.31**     | `ClaudeSessionText`               | _(v1.6)_ Seleção só de espaços normaliza para `null`, e é o que impede o diálogo de abrir (CB-43) — reuso verificado, não função nova |
+| **T-1.32**     | `ClaudeSessionSplitter`           | _(v1.7)_ A raiz nasce com a sessão ocupando tudo; dividir troca a pane por um splitter contendo as duas, na ordem certa (RF-36) |
+| **T-1.33**     | `ClaudeSessionSplitter`           | _(v1.7)_ Dividir de novo **aninha** dentro do lado escolhido, sem mexer no splitter externo — é o que sustenta "duas ou mais" (RF-36) |
+| **T-1.34**     | `ClaudeSessionSplitter`           | _(v1.7)_ "À direita" põe a segunda pane com `x` maior e mesmo `y` — asserção de **geometria depois do layout**, não da flag, porque é a flag que se inverte |
+| **T-1.35**     | `ClaudeSessionSplitter`           | _(v1.7)_ "Abaixo" põe a segunda pane com `y` maior e mesmo `x` — o par de T-1.34 é o que prova que a conversão `stacked = !vertically` não está trocada |
+| **T-1.36**     | `ClaudeSessionSplitter`           | _(v1.7)_ Fechar uma pane promove a irmã ao lugar do splitter; fechando a de dentro, só o splitter interno colapsa; fechando a única, devolve `false` para a aba ser fechada (RF-39) |
+| **T-1.37**     | `ClaudeSessionSplitter`           | _(v1.7)_ `paneOf` sobe do terminal até o bloco divisível, devolve `null` fora da aba, e dividir componente sem pai devolve `false` em vez de lançar (CB-50) |
+| **T-1.38**     | `ClaudeSessionSplitter`           | _(v1.7.1)_ `close` devolve **o irmão sobrevivente**, e não só um booleano — é dele que sai a sessão que reassume o foco (RF-42) |
+| **T-1.39**     | `ClaudeSessionSplitter`           | _(v1.7.1)_ Fechar em cadeia devolve a árvore ao estado de uma sessão só, sem splitter pendurado, e a última pane devolve `null` (RF-41) |
+| **T-1.40**     | `ClaudeTabNavigation`             | _(v1.7.2)_ Navegar exige mais de uma aba: `canNavigate` é falso com 0 e com 1, verdadeiro de 2 em diante — o limite que DEF-02 violava |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
 executada após cada implementação.
@@ -1315,6 +1541,17 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.31**     | _(v1.6)_ Escolher destino em diretório sem permissão (ex.: `/`): a notificação de erro aparece e a sessão continua utilizável (CB-46, Fluxo J) |
 | **T-3.32**     | _(v1.6)_ Exportar duas vezes seguidas sem renomear: os nomes sugeridos diferem pelo carimbo de tempo, sem sobrescrever o primeiro arquivo (RF-34) |
 | **T-3.33**     | _(v1.6)_ Conferir que "Exportar Conversa" no cabeçalho continua exportando a conversa inteira, inalterada (RF-35) |
+| **T-3.34**     | _(v1.7)_ Botão direito na sessão: conferir que "Split Right" e "Split Down" **aparecem** no menu de contexto (não apareciam antes do listener) e que dividem na direção certa (RF-36, D-33) |
+| **T-3.35**     | _(v1.7)_ Menu "Dividir" no cabeçalho: "À direita" e "Abaixo" produzem o mesmo resultado do menu de contexto (RF-36) |
+| **T-3.36**     | _(v1.7)_ Cada pane roda um Claude Code independente: pedir algo em uma não afeta a outra, e as duas mantêm a integração (diff abre no IDE) (RF-37) |
+| **T-3.37**     | _(v1.7)_ Dividir três ou mais vezes, aninhando: as panes se acomodam e os divisores são arrastáveis (RF-36, CB-54) |
+| **T-3.38**     | _(v1.7)_ Clicar numa pane e acionar "Copiar Conversa"/"Exportar Conversa" no cabeçalho: a ação age sobre a pane **em foco**, não sobre outra (RF-38) |
+| **T-3.39**     | _(v1.7)_ "Close Session" numa pane dividida: a irmã ocupa o espaço, o processo daquela pane morre e o da irmã **continua vivo** (RF-39, RNF-28) |
+| **T-3.40**     | _(v1.7)_ "Close Session" na última pane fecha a aba inteira (RF-39) |
+| **T-3.41**     | _(v1.7)_ Fechar a aba com várias divisões: conferir com `ps aux \| grep claude` que **nenhum** processo sobrou (RF-40, CB-53) |
+| **T-3.42**     | _(v1.7.1)_ Menu "Dividir" → "Fechar divisão": a pane em foco sai, a vizinha ocupa o espaço, e a aba continua aberta (RF-41) |
+| **T-3.43**     | _(v1.7.1)_ Depois de "Fechar divisão", acionar "Copiar Conversa" **sem clicar em nada**: a ação encontra a sessão sobrevivente, já com o foco (RF-42) |
+| **T-3.44**     | _(v1.7.1)_ "Fechar divisão" numa aba sem divisão: aparece o aviso e a aba **não** é fechada (RF-41) |
 
 ### Testes de regressão
 
@@ -1479,6 +1716,24 @@ abre no visualizador do IDE de ponta a ponta.
 - **When** o usuário aciona "Exportar Conversa" no cabeçalho
 - **Then** a conversa inteira é exportada pelo `/export`, exatamente como antes — o botão do popup não o substituiu
 
+**CA-28 — Duas sessões visíveis ao mesmo tempo** _(v1.7, RF-36, RF-37)_
+
+- **Given** uma aba com uma sessão do Claude Code
+- **When** o usuário divide à direita (pelo menu de contexto ou pelo cabeçalho)
+- **Then** a aba passa a mostrar duas sessões lado a lado, cada uma com seu próprio Claude Code rodando e com a integração ativa
+
+**CA-29 — A ação segue o foco** _(v1.7, RF-38)_
+
+- **Given** uma aba dividida em duas sessões
+- **When** o usuário clica em uma delas e aciona "Copiar Conversa" no cabeçalho
+- **Then** a conversa copiada é a da sessão em que ele clicou
+
+**CA-30 — Fechar uma pane não derruba a irmã** _(v1.7, RF-39, RF-40)_
+
+- **Given** uma aba dividida em duas sessões
+- **When** o usuário fecha uma delas
+- **Then** a outra ocupa o espaço inteiro e continua rodando; fechando a aba depois, nenhum processo `claude` sobra
+
 ---
 
 ## Plano de Rollout
@@ -1550,6 +1805,10 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-21** | _(v1.6)_ Depois de gravar o trecho, vale abrir o arquivo no editor?                                                          | Adiado. `FileEditorManager.openFile` custa duas linhas, mas gravar e abrir são intenções diferentes — quem exporta para colar em outro lugar não quer uma aba nova. Reavaliar se o uso real mostrar que abrir é o que sempre se faz em seguida                                    |
 | **Q-22** | _(v1.6)_ O trecho deveria sair envolvido em cerca de código markdown, já que o destino é `.md`?                              | Adiado. O `.md` é sufixo de conveniência, herdado de RF-24, não uma promessa de formatação. Envolver em cerca exigiria decidir a linguagem e quebraria quem exporta prosa. Ver R-24                                                                                               |
 | **Q-23** | _(v1.6)_ Vale lembrar o último diretório usado, em vez de sempre sugerir a raiz do projeto?                                  | Adiado. A raiz do projeto é o palpite certo na maioria dos casos e não custa persistência nenhuma. Guardar o último diretório significa mais um campo em settings — só com demanda real                                                                                          |
+| **Q-24** | _(v1.7)_ A divisão deveria oferecer "retomar sessão" (`--resume`), e não só sessão nova?                                     | Adiado. Dividir hoje abre sempre uma sessão nova. Retomar dentro da divisão exigiria um submenu por direção (4 itens) — reavaliar se o uso mostrar que dividir para retomar é comum                                                                                             |
+| **Q-25** | _(v1.7)_ Vale navegar entre panes por teclado (`gotoNextSplitTerminal` do listener)?                                          | Adiado deliberadamente. O `default` da interface devolve `false`, então a ação nem aparece — custo zero por não implementar. Implementar exige ordenar as panes, que a árvore não dá de graça                                                                                   |
+| **Q-26** | _(v1.7)_ Com a aba dividida, o que o título "(encerrado)" deveria significar?                                                | Em aberto. Hoje só a sessão original da aba renomeia o título; uma pane dividida que encerra não marca nada. Marcar por qualquer pane diria menos do que parece ("qual delas?"), e marcar todas exigiria contar sessões vivas. Decidir com uso real (CB-52)                     |
+| **Q-27** | _(v1.7)_ As degradações graciosas de engine (CB-26, CB-36, CB-47, R-15) deveriam ser removidas agora que o Achado 27 provou que a sessão é sempre CLASSIC? | Não. Custam uma linha (`?: return`) e protegem contra a plataforma mudar o retorno de `createTerminalWidget` num upgrade. O que mudou foi a **probabilidade** de R-15, não a decisão                                                                                             |
 
 ---
 
@@ -1869,6 +2128,77 @@ Registrado em R-23 com teto explícito de dois botões. O próximo pedido de bot
 pela mesma pergunta antes de virar RF: **isso existe em algum outro lugar?** Se existir, o lugar
 certo já tem dono.
 
+### Achado 27 — Uma premissa carregada por seis rodadas estava errada _(v1.7)_
+
+Desde a v1.2 o documento hedgeia contra "e se a sessão não for JediTerm?": CB-26 ("fora do
+CLASSIC o `getText()` devolve vazio"), CB-36, CB-47 e R-15, este último com probabilidade
+**Média**. O `HANDOFF.md` chegou a registrar "REWORKED no IntelliJ 2026.2", e Q-04/Q-10 passaram
+rodadas em aberto por causa disso.
+
+**Nada disso alcança o nosso caminho.** `AbstractTerminalRunner.startShellTerminalWidget` chama
+`createTerminalWidget(...)`, cujo **tipo de retorno é `JBTerminalWidget`** — o widget JediTerm.
+Quem escolhe entre `CLASSIC`, `REWORKED` e `NEW_TERMINAL` é o `TerminalToolWindowManager` da tool
+window nativa, acima do ponto de entrada que usamos desde a v1.0.
+
+A confusão tem uma explicação simples: o usuário **realmente** roda o Terminal nativo do IntelliJ
+em REWORKED. A observação estava certa; o que estava errado foi concluir que isso valia para as
+nossas abas. O engine é propriedade da tool window que cria o widget, não do IDE.
+
+**O que muda:** R-15 cai de "Média" para "Baixa"; a redação que sugeria "o recurso pode não estar
+disponível para você" era falsa e foi corrigida. **O que não muda:** as guardas continuam, porque
+custam uma linha e protegem contra upgrade (Q-27).
+
+**Lição registrada:** uma premissa não verificada não fica mais verdadeira por ser repetida em
+seis versões do documento — fica mais **cara**, porque passa a sustentar requisitos, riscos e
+perguntas em aberto. Esta atravessou cinco rodadas e só caiu quando um recurso novo dependeu
+dela para existir. Vale reler os hedges antigos perguntando "isto ainda é hipótese ou virou fato
+não verificado?".
+
+### Achado 28 — O recurso já estava pedindo para ser implementado _(v1.7)_
+
+Split parecia a feature mais cara desta série: divisor, ação, atalho, gerência de layout. A
+investigação mostrou o contrário — `ShellTerminalWidget.getActions()` **já cria** as ações de
+split, a partir de `getListener()`, e o `JBTerminalWidgetListener` já tem `canSplit`/`split` como
+métodos default. Como o nosso widget nunca teve listener, as ações simplesmente não apareciam no
+menu de contexto.
+
+Ou seja: o plugin vinha ignorando um pedido que o widget fazia desde a v1.0. Implementar o
+listener acendeu de uma vez o split, o "New Session", o "Close Session" e a navegação entre abas
+pelo menu de contexto — quatro itens que estavam mortos pelo mesmo motivo.
+
+**Padrão que se repete neste projeto:** a versão barata do recurso costuma ser "descobrir quem
+na plataforma já faz isso e ligar o fio". Foi assim em RF-24 (`getText()` já lia o scrollback
+inteiro), em RF-33 (o texto já estava na mão) e agora aqui. O contraexemplo é o `Esc` (RF-17),
+onde a plataforma trabalhava **contra** — e foi o único que exigiu código de verdade.
+
+**Lição registrada:** antes de desenhar UI para um recurso, procurar se o componente que já
+hospedamos tem um ponto de extensão esperando por ele. O custo da busca é de minutos; o de errar
+é um recurso inteiro reimplementado ao lado do que a plataforma daria pronto.
+
+### Achado 29 — Entregue e invisível é quase o mesmo que não entregue _(v1.7.1)_
+
+No primeiro uso real do split, o usuário pediu "uma opção de fechar esses splits". **A opção já
+existia e estava na tela dele**: o item "Close Tab" (`Ctrl+W`) do menu de contexto chama
+`onSessionClosed()`, que a v1.7 já ligava ao fechamento da pane com colapso do splitter — está
+inclusive visível na captura que ele mandou.
+
+O problema é o rótulo, e ele não é nosso: "Close Tab" vem da plataforma, pensado para um terminal
+em que aba e sessão são a mesma coisa. Numa aba dividida, o nome diz **o oposto** do que a ação
+faz. Ninguém arrisca `Ctrl+W` em quatro sessões abertas para descobrir o que acontece.
+
+Isso conecta com o Achado 28 da mesma rodada, que festejou "o listener acende quatro itens de
+graça". Metade da comemoração era falsa: os itens acenderam com os **nomes da plataforma**, e um
+deles descreve mal o que passou a fazer. Herdar comportamento é de graça; herdar vocabulário não.
+
+**O que mudou:** RF-41 dá o nome honesto ("Fechar divisão") no lugar onde o usuário procura, e
+RF-42 conserta o efeito colateral que só apareceu ao olhar de perto — a aba ficava apontando para
+a sessão morta, e as ações do cabeçalho paravam de achar sessão até alguém clicar numa pane.
+
+**Lição registrada:** "a plataforma já oferece" responde se a **capacidade** existe, não se o
+usuário a encontra. Ao ligar um ponto de extensão herdado, ler os rótulos que vêm junto e
+perguntar se descrevem o que a ação faz **no nosso contexto** — no do terminal nativo, "Close
+Tab" estava certo.
+
 ---
 
 ## Anexo — Rastreabilidade das evidências
@@ -1937,6 +2267,17 @@ Toda afirmação técnica sobre o estado atual remonta a uma verificação diret
 | _(v1.6)_ `save(...)` devolve `null` quando o usuário cancela                                                                                                          | assinatura anulável de `FileSaverDialog.save` + contrato do `FileSaverDialogImpl`; é o que sustenta CB-44                                                                    |
 | _(v1.6)_ O `/export` do CLI exporta **a conversa**, sem forma de restringi-lo a um trecho                                                                              | funções `azb`/`u0n` já lidas do binário `claude` 2.1.220 em v1.3 — o único argumento é o caminho do arquivo, e o conteúdo vem de `lZo(t.messages, …)` (base de D-30)         |
 | _(v1.6)_ O texto do trecho já está disponível ao plugin sem passar pelo CLI                                                                                           | `JBTerminalWidget.getSelectedText()`, em uso desde RF-26 em `ClaudeSelectionCopyButton.selectedText()`                                                                       |
+| _(v1.7)_ `ShellTerminalWidget.getActions()` cria as ações de split a partir de `getListener()`                                                                        | `javap -c` de `ShellTerminalWidget`: duas chamadas a `TerminalSplitAction.create(Z, JBTerminalWidgetListener)` logo após `getListener()`                                     |
+| _(v1.7)_ As ações de split delegam ao listener                                                                                                                       | `javap -c` de `TerminalSplitAction`: `isEnabled` → `canSplit(Z)`, `actionPerformed` → `split(Z)`                                                                            |
+| _(v1.7)_ `vertically = true` é "Split Right" (lado a lado)                                                                                                            | `javap -c` de `TerminalSplitAction$Companion.create`: pareia `vertically` com `action.SplitVertically.text` e o atalho `TW.SplitRight`                                       |
+| _(v1.7)_ `JBTerminalWidgetListener` tem `canSplit`/`split` como métodos **default**                                                                                   | `javap` da interface: `public default boolean canSplit(boolean)` e `public default void split(boolean)`                                                                     |
+| _(v1.7)_ `JBTerminalWidget.setListener` é público                                                                                                                    | `javap` de `com.intellij.terminal.JBTerminalWidget`                                                                                                                          |
+| _(v1.7)_ **A sessão criada por este plugin é sempre JediTerm (CLASSIC)**, qualquer que seja o `TerminalEngine` configurado                                            | `javap -c` de `AbstractTerminalRunner.startShellTerminalWidget`: chama `createTerminalWidget(…)`, cujo tipo de retorno é `com.intellij.terminal.JBTerminalWidget` (Achado 27) |
+| _(v1.7)_ `Content.getDisposer()`, `ContentManager.selectNextContent()/selectPreviousContent()` existem na 262                                                        | `javap` de `com.intellij.ui.content.Content` e `ContentManager` em `intellij.platform.ide.core.jar`                                                                          |
+| _(v1.7)_ `OnePixelSplitter(boolean vertical, float proportion)` empilha quando `vertical = true`                                                                      | **teste de geometria** T-1.34/T-1.35: depois do layout, a segunda pane tem `y` maior (empilhado) ou `x` maior (lado a lado)                                                  |
+| _(v1.7.1)_ O item "Close Tab" do menu de contexto chama `listener.onSessionClosed()` — ou seja, a v1.7 **já** fechava a pane, sob o nome errado                       | `javap -c -p` de `ShellTerminalWidget`: o lambda de `getActions` invoca `JBTerminalWidgetListener.onSessionClosed`; o rótulo vem de `getCloseTabActionPresentation()`        |
+| _(v1.7.2)_ `ContentManagerImpl.selectNextContent()` e `selectPreviousContent()` começam com `LOG.assertTrue(getContentCount() > 1)`                                   | `javap -c -p` de `ContentManagerImpl`: `getContentCount` → `if_icmple` → `Logger.assertTrue` nas primeiras instruções de **ambos** (base de DEF-02)                          |
+| _(v1.7.2)_ `ContentManagerImpl.removeContent(Content, boolean)` **não** tem assertion equivalente                                                                     | `javap -c -p` da mesma classe: nenhum `Logger.assertTrue` no método — auditado junto com DEF-02, para não corrigir só o caso relatado                                        |
 
 **Não verificado (declarado como suposição):** semântica de
 `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` (Q-03); comportamento de builds anteriores a `262`
@@ -1962,3 +2303,12 @@ _(v1.4)_ ~~**Código sem teste:** os diretórios de fallback da verificação do
 _(v1.6)_ **Não verificado:** o comportamento do diálogo nativo de salvar sob Wayland com o
 _native file chooser_ do IDE ligado (T-3.29); e se o nome sugerido chega preenchido em todos os
 IDEs da família (T-3.5 cobre o resto do plugin, não este campo).
+
+_(v1.7)_ **Não verificado:** se as ações "Split Right"/"Split Down" de fato aparecem no menu de
+contexto com o listener instalado (T-3.34) — a cadeia foi lida no bytecode, mas não exercitada no
+IDE; se duas sessões da mesma aba mantêm a integração do plugin oficial simultaneamente (T-3.36,
+ligado a Q-02/CB-56); e o comportamento do foco ao fechar uma pane (T-3.38, T-3.39).
+
+_(v1.7)_ ~~**Premissa não verificada carregada desde a v1.2:** o engine da sessão criada por este
+plugin~~ ✅ **RESOLVIDA** — é sempre JediTerm/CLASSIC, ver Achado 27. Q-04 e Q-10 já haviam sido
+fechadas por outro motivo (Achado 21); esta é a razão estrutural.

@@ -18,6 +18,9 @@ build/
 # code-review-graph
 .code-review-graph/
 
+# Claude Code (worktrees locais de sessão)
+.claude/worktrees/
+
 # OS
 .DS_Store
 Thumbs.db

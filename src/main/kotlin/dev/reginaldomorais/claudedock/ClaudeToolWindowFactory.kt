@@ -11,6 +11,7 @@ import dev.reginaldomorais.claudedock.actions.CopySessionAction
 import dev.reginaldomorais.claudedock.actions.ExportSessionAction
 import dev.reginaldomorais.claudedock.actions.NewSessionAction
 import dev.reginaldomorais.claudedock.actions.ResumeSessionAction
+import dev.reginaldomorais.claudedock.actions.SplitSessionMenuAction
 import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
 
 /**
@@ -26,6 +27,7 @@ class ClaudeToolWindowFactory : ToolWindowFactory, DumbAware {
             listOf(
                 NewSessionAction(),
                 ResumeSessionAction(),
+                SplitSessionMenuAction(),
                 CopySessionAction(),
                 ExportSessionAction(),
                 AudioMenuAction(),
