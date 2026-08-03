@@ -4,19 +4,19 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-02
+- **Última atualização:** 2026-08-03
 
 ---
 
 ## Estado atual
 
-**Fase: implementação (v1.5). Piper TTS implementado e testado — RF-30/RF-31/RF-32 completos; 82 testes verdes.**
+**Fase: pós-implementação (v1.5.1). Piper TTS com RF-31/RF-32 finalizados; RF-30 descartado por UX redundante; 82 testes verdes.**
 
 | Artefato                                                         | Estado                                                                  |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                            |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.5 — RF-30/31/32 (Piper TTS), 4 novos CBs, Achado 24 registrado   |
-| `HANDOFF.md`                                                     | ✅ Este arquivo, com novo log de 2026-08-02                             |
+| [SPEC.md](SPEC.md)                                               | ✅ v1.5.1 — RF-31/32 (menu Áudio + config); RF-30 descartado (Fora de Escopo) |
+| `HANDOFF.md`                                                     | ✅ Este arquivo, com novo log de 2026-08-03                             |
 | Código do plugin                                                 | ✅ **82 testes passando** (69 + 13 novos), sem warnings                 |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente               |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                 |
@@ -27,15 +27,16 @@
 | RF-29 (capa de carregamento)                                     | ✅ Implementado e **validado no IDE**, prazo de 3 s                     |
 | Tela de configurações                                            | ✅ Reescrita em Kotlin UI DSL; v1.5 adiciona Piper fields               |
 | T-1.21 (teste dos diretórios de fallback)                        | ✅ Implementado, com controle contra passar pelo motivo errado          |
-| **RF-30/RF-31/RF-32 (Piper TTS)**                                | ✅ **COMPLETOS** — 4 classes novas, 13 novos testes, todos verdes      |
+| **RF-31/RF-32 (Piper TTS)**                                      | ✅ **COMPLETOS** — menu "Áudio" no cabeçalho; config executável + modelo |
 | `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23               |
+| **RF-30 (play no popup)**                                        | ⚰️ **DESCARTADO em v1.5.1** — UX redundante; menu Áudio (RF-31) já cobre |
 | Testes de integração T-2.\*                                      | ⏳ Nunca implementados                                                  |
-| Roteiros T-3.21-27 (Piper manual)                                | ⏳ Pendentes — aguardando IDE real com Piper                            |
+| Roteiros T-3.21-23 (Piper manual)                                | ⏳ Pendentes — aguardando IDE real com Piper                            |
 
-**Estado do repositório:** branch `feature/tts` com código compilado e 82 testes. SPEC.md v1.5 e HANDOFF.md 
-atualizados. Pronto para testes de integração manual (T-3.21-27).
+**Estado do repositório:** branch `feature/tts` com código compilado e 82 testes. SPEC.md v1.5.1 e HANDOFF.md 
+atualizados com descarte de RF-30. Pronto para merge após testes manuais (T-3.21-23).
 
-**Próximos passos:** roteiros manuais T-3.21-27 com Piper instalado e modelo configurado.
+**Próximos passos:** roteiros manuais T-3.21-23 com Piper instalado e modelo configurado.
 
 ---
 
@@ -650,4 +651,33 @@ suspenso no cabeçalho; play desabilitado se Piper não disponível. Executável
 
 **Resultado:** SPEC.md + HANDOFF.md atualizados. Nenhum código Kotlin alterado. Pendente: aprovação
 da comunidade/usuário. Próximo: implementação de Fase 2.
+
+### 2026-08-03 (manhã) — Descarte de RF-30, SPEC v1.5.1 finalizado
+
+**Contexto:** Após validação do SPEC.md v1.5, usuário decidiu descartar RF-30 (botão de play no 
+popup de seleção). Razão: UX redundante — o menu "Áudio" no cabeçalho (RF-31) já oferece 
+play/pause/stop durante reprodução; adicionar segundo caminho (play no popup, junto com cópia) 
+seria UI paralela sem capacidade nova.
+
+**Mudanças ao SPEC.md:**
+
+- Objetivo #11 removido (v1.5 → v1.5.1)
+- RF-30 movido de "Requisitos Funcionais" para "Fora de Escopo" com justificativa
+- Fluxo principal J (tocar seleção no popup) removido; fluxo J2 (pausar/retomar) passa a ser J
+- Fluxos de erro G/H/I ajustados: referências a "botão play no popup" → "menu Áudio no cabeçalho"
+- Testes T-3.21/T-3.24 removidos (específicos de RF-30); T-3.22/T-3.25 renumerados para T-3.21/T-3.22
+- Casos de aceitação CA-20/CA-21 removidos (específicos de RF-30); CA-22 renumerado para CA-20
+- Histórico de versões atualizado: v1.5.1 com nota de descarte
+- `AudioPlayAction.kt` permanece no código (pode ser reutilizado), mas removido da estrutura documentada
+
+**Decisão registrada:**
+
+- D-29: RF-30 descartado em favor de padrão único (menu no cabeçalho). Simplicidade > redundância.
+
+**Código:** `AudioPlayAction.kt` implementado mas não integrado ao popup — fique no repositório 
+para futura reutilização ou descarte deliberado no cleanup final. Compilação e testes (82) 
+continuam passando.
+
+**Estado:** SPEC.md v1.5.1, HANDOFF.md e repositório alinhados. Branch `feature/tts` pronto para 
+merge após validação final dos testes manuais T-3.21-23 (Piper no IDE real).
 
