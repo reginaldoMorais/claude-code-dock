@@ -213,7 +213,8 @@ class ClaudeDockSessions(private val project: Project) {
             .notify(project)
     }
 
-    private fun notify(message: String, type: NotificationType) {
+    /** `internal` para o popup de seleção reusar o mesmo grupo, em vez de duplicar a chamada. */
+    internal fun notify(message: String, type: NotificationType) {
         NotificationGroupManager.getInstance()
             .getNotificationGroup(NOTIFICATION_GROUP)
             .createNotification("Claude Code Dock", message, type)

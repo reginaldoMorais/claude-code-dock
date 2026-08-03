@@ -4,18 +4,19 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-03
+- **Última atualização:** 2026-08-03 (tarde)
 
 ---
 
 ## Estado atual
 
-**Fase: pós-implementação (v1.5.1). Piper TTS com RF-31/RF-32 finalizados; RF-30 descartado por UX redundante; 82 testes verdes.**
+**Fase: implementação da v1.6 — exportação do trecho selecionado (RF-33/RF-34/RF-35).**
+**Base: v1.5.1 mergeada em `main` (`83df28b`), Piper TTS entregue, 82 testes verdes.**
 
 | Artefato                                                         | Estado                                                                  |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                            |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.5.1 — RF-31/32 (menu Áudio + config); RF-30 descartado (Fora de Escopo) |
+| [SPEC.md](SPEC.md)                                               | ✅ v1.6 — RF-33/34/35 (exportar o trecho selecionado); D-30 e Achados 25/26 |
 | `HANDOFF.md`                                                     | ✅ Este arquivo, com novo log de 2026-08-03                             |
 | Código do plugin                                                 | ✅ **82 testes passando** (69 + 13 novos), sem warnings                 |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente               |
@@ -30,13 +31,17 @@
 | **RF-31/RF-32 (Piper TTS)**                                      | ✅ **COMPLETOS** — menu "Áudio" no cabeçalho; config executável + modelo |
 | `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23               |
 | **RF-30 (play no popup)**                                        | ⚰️ **DESCARTADO em v1.5.1** — UX redundante; menu Áudio (RF-31) já cobre |
+| **RF-33/34/35 (export do trecho)**                               | ✅ Especificados em v1.6 e implementados                                |
+| `ClaudeSelectionExport`                                          | ✅ Objeto puro: nome sugerido + gravação (RNF-26)                       |
 | Testes de integração T-2.\*                                      | ⏳ Nunca implementados                                                  |
 | Roteiros T-3.21-23 (Piper manual)                                | ⏳ Pendentes — aguardando IDE real com Piper                            |
+| Roteiros T-3.28-33 (export do trecho)                            | ⏳ Pendentes — aguardando IDE real                                      |
 
-**Estado do repositório:** branch `feature/tts` com código compilado e 82 testes. SPEC.md v1.5.1 e HANDOFF.md 
-atualizados com descarte de RF-30. Pronto para merge após testes manuais (T-3.21-23).
+**Estado do repositório:** `main` com a v1.5.1 mergeada (`83df28b`). A v1.6 acrescenta
+`ClaudeSelectionExport.kt` e o segundo botão no popup de seleção.
 
-**Próximos passos:** roteiros manuais T-3.21-23 com Piper instalado e modelo configurado.
+**Próximos passos:** roteiros manuais T-3.28-33 (export do trecho) e T-3.21-23 (Piper), os dois
+dependendo de IDE real.
 
 ---
 
@@ -207,6 +212,22 @@ sobre aparência. Qualquer mudança nessa linha começa medindo o ambiente resul
 | `Box.setLayout` lança `AWTError("Illegal request")`                                                          | três testes vermelhos de uma vez                            |
 | `IconUtil.scale(Icon, Double)` está depreciado; usar `scale(Icon, Component?, Float)`                        | warning de compilação                                       |
 
+### Gravar arquivo pelo diálogo nativo (2026-08-03, tarde)
+
+| Fato                                                                                                                    | Como foi descoberto                                                             |
+| ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `FileSaverDescriptor(String title, String description, String... extensions)` é construtor público                       | `javap` sobre `intellij.platform.ide.jar` da distribuição `idea-2026.2` do build |
+| `FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)` devolve `FileSaverDialog`                   | mesma inspeção                                                                    |
+| `FileSaverDialog.save(Path, String)` existe — dispensa converter o diretório inicial em `VirtualFile`                   | mesma inspeção; há também `save(VirtualFile, String)` e `save(String)`           |
+| `save(...)` devolve `null` no cancelamento; `VirtualFileWrapper.getFile()` dá o `java.io.File`                          | assinatura + `javap` de `VirtualFileWrapper` (classe `final`, 5 métodos)         |
+| **O `/export` do CLI não aceita "um trecho"** — o argumento é só o caminho, e o conteúdo vem de `lZo(t.messages, …)`   | leitura do binário já feita na v1.3 (funções `azb`/`u0n`), reaproveitada         |
+
+> ⚠️ **A armadilha do `grep` binário pegou de novo.** A primeira busca pelas classes do diálogo
+> nos jars da plataforma não achou **nada** — nem um controle conhecido (`Messages.class`). Causa:
+> `grep` sem `-a` trata `.class` como binário e não reporta as linhas. Está registrado neste
+> mesmo arquivo desde 2026-08-01 e mesmo assim custou quatro tentativas. **Em busca sobre jar,
+> `grep -a` desde a primeira chamada, e sempre com um controle conhecido junto.**
+
 ### API de terminal disponível na build 262
 
 `AbstractTerminalRunner.startShellTerminalWidget` · `LocalTerminalDirectRunner.createTerminalRunner`
@@ -245,6 +266,9 @@ sobre aparência. Qualquer mudança nessa linha começa medindo o ambiente resul
 | **D-23** | _(v1.4)_ A capa fica **sobreposta** (`JLayeredPane`), nunca substituindo o terminal | Componente escondido não recebe dimensão: o CLI desenharia para um tamanho inventado e redesenharia ao aparecer, quebrando o rodapé. Sobreposto, o terminal conta como visível para `deferSessionStartUntilUiShown` e renderiza uma única vez |
 | **D-24** | _(v1.4)_ A verificação do executável é **advisória** e não bloqueia a abertura da aba | Ela enxerga menos que o shell da sessão, e um bloqueio por falso negativo custou a sessão inteira num teste real. Falso negativo agora custa só uma notificação supérflua — e os diretórios de fallback tornam isso raro |
 | **D-25** | _(v1.4)_ A tela de configurações usa Kotlin UI DSL + `BoundConfigurable` | Títulos de seção, separadores e alinhamento vêm prontos da plataforma — é de onde o plugin oficial tira os dele. E as ligações (`bindText`/`bindIntValue`) dispensam `isModified`/`apply`/`reset` escritos à mão: 110 linhas viraram 79 |
+| **D-30** | _(v1.6)_ Exportar o trecho selecionado **não passa pelo `/export` do CLI**: grava direto o texto que o plugin já tem em mãos | Não é escolha de simplicidade, é impossibilidade. O `/export` roda dentro do Claude Code e exporta **a conversa** (`lZo(t.messages, …)`, lido do binário na v1.3); o único argumento que aceita é o caminho do destino. Não há como pedir a ele um trecho da tela. Já o trecho está disponível desde RF-26, no mesmo `widget.selectedText` que alimenta o botão de copiar. Resultado: sem PTY, sem temporário, sem sondagem, sem prazo — a exportação mais nova é a de menos peças, e a única que funciona com a sessão ocupada ou encerrada |
+| **D-31** | _(v1.6)_ O diálogo de destino é o **nativo da plataforma** (`FileChooserFactory.createSaveFileDialog`), não um construído por nós | Traz de graça a confirmação de sobrescrita (CB-45), o filtro por extensão e o comportamento que o usuário já conhece de _File → Save As_. Cancelar devolve `null`, o que faz do cancelamento um caminho normal em vez de um erro a tratar |
+| **D-32** | _(v1.6)_ O popup de seleção fica com **teto de dois botões**, e o critério para um terceiro é declarado | Este foi o segundo pedido de "mais um botão junto ao de copiar"; o primeiro (play, RF-30) foi recusado em v1.5.1. O critério que separa os casos é **capacidade, não simetria**: exportar o trecho não existe em nenhum outro lugar da UI, enquanto o play já existia no menu do cabeçalho. Registrado em R-23 e no Achado 26 para que a próxima rodada não precise redecidir |
 
 ### Correção registrada
 
@@ -331,6 +355,49 @@ Concluído também: ~~RF-24/RF-26~~ · ~~T-3.14~~ · ~~T-3.17 (conclusivo: RF-27
 ---
 
 ## Log
+
+### 2026-08-03 (tarde) — SPEC v1.6 e exportação do trecho selecionado
+
+Rodada de SDD **e** implementação na mesma sessão, a pedido do usuário — as cinco anteriores
+pararam na especificação. O pedido: `plans/20260803-export-selected-button.md`, um botão para
+exportar só o trecho selecionado, ao lado do de copiar que já existe no popup.
+
+- **O achado que definiu tudo, e que quase passou batido (Achado 25).** Havia duas ações
+  chamadas "export" no plugin (RF-22 e RF-24), **as duas pelo `/export` do CLI**. O caminho de
+  menor resistência era escrever a terceira igual. Não funcionaria: **`/export` exporta a
+  conversa** — roda dentro do Claude Code, sobre `lZo(t.messages, …)`, e o único argumento que
+  aceita é o caminho do destino. Isso já estava lido do binário desde a v1.3, neste documento.
+  O que mudou a resposta foi perguntar **de onde vem o texto**, e não como as outras exportações
+  funcionam: o trecho já está na mão do plugin desde RF-26, no mesmo `widget.selectedText` do
+  botão de copiar. Virou D-30.
+- **Consequência boa:** sem PTY, sem arquivo temporário, sem sondagem, sem prazo de 20 s. Das
+  três saídas do plugin, a mais nova é a de menos peças — e a única que funciona com a sessão
+  ocupada, encerrada ou no meio de uma resposta.
+- **O diálogo não foi construído (D-31).** `FileChooserFactory.createSaveFileDialog` +
+  `FileSaverDescriptor` são a plataforma; deles vêm de graça o filtro por extensão e a
+  confirmação de sobrescrita (CB-45). `save(...)` devolvendo `null` no cancelamento é o que faz
+  do cancelamento um caminho normal em vez de erro a tratar (CB-44).
+- **O critério do segundo botão ficou registrado (D-32, Achado 26).** Este é o segundo pedido
+  seguido de "mais um botão junto ao de copiar"; o primeiro (play, RF-30) foi **recusado** em
+  v1.5.1. Aceitar um e recusar o outro exigia critério declarado, senão vira gosto: **capacidade,
+  não simetria** — exportar o trecho não existe em nenhum outro lugar da UI, o play já existia no
+  menu do cabeçalho. Teto de dois botões em R-23.
+- **Código:** `ClaudeSelectionExport.kt` novo (objeto puro, ~50 linhas com KDoc: nome sugerido e
+  gravação em UTF-8) e o popup de `ClaudeSelectionCopyButton` passando de um `JBLabel` a um
+  `JPanel` com dois. `ClaudeDockSessions.notify` virou `internal` em vez de ganhar um clone —
+  quatro linhas duplicadas evitadas com uma palavra.
+- **A armadilha do `grep` binário pegou de novo.** A busca pelas classes do diálogo nos jars da
+  plataforma não achou nada — **nem o controle conhecido** (`Messages.class`). Causa: `grep` sem
+  `-a` sobre `.class`. Está registrado neste arquivo desde 2026-08-01 e mesmo assim custou quatro
+  tentativas. O controle é o que salvou: sem ele, a conclusão teria sido "a API não existe na
+  262" e o desenho inteiro teria ido para o lado errado.
+- **Um teste meu estava errado, não a produção.** Assumi que `ClaudeSessionText.normalize`
+  aparava os dois lados; ela apara só a direita. A produção é que está certa — a indentação à
+  esquerda **precisa** sobreviver, senão o trecho exportado deixa de ser código válido. O teste
+  virou a asserção desse comportamento, em vez de esconder o mal-entendido.
+- Resultado: **89 testes, 0 falhas** (eram 82), sem warnings. ZIP de 100 KB às 13:37.
+- **Ainda não validado:** T-3.28 a T-3.33. Em especial o diálogo nativo sob Wayland e se o nome
+  sugerido chega preenchido nos outros IDEs da família.
 
 ### 2026-08-02 (manhã) — Implementação de Piper TTS, SPEC v1.5 aprovado
 

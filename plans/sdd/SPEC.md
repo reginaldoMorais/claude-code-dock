@@ -1,8 +1,8 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.5
-- **Data:** 2026-08-02
-- **Status:** Especificação — v1.5 acrescenta suporte a TTS via Piper com play/pause/stop na tool window
+- **Versão:** 1.6
+- **Data:** 2026-08-03
+- **Status:** Especificação — v1.6 acrescenta a exportação do trecho selecionado, ao lado da cópia por seleção
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -16,6 +16,7 @@
 > | 1.4    | 2026-08-01 | RF-27 (saída plana) **removido** após uso real; RF-28 (respiro nas bordas) e RF-29 (tela de carregamento) especificados; D-09 reconfirmado com a alternativa `exec` medida e recusada |
 > | 1.5    | 2026-08-02 | RF-31/RF-32 (pause/stop via Piper TTS); detecção de Piper + modelo; configuração de executável e caminho do modelo; ações no menu do cabeçalho                                      |
 > | 1.5.1  | 2026-08-03 | RF-30 (botão play no popup) **descartado** — complexidade UX no popup para pouco ganho vs. menu de cabeçalho já existente (RF-31)                                                   |
+> | 1.6    | 2026-08-03 | RF-33/RF-34 (exportar o trecho selecionado para arquivo, pelo popup de seleção); D-30 registra por que isso **não** passa pelo `/export` do CLI                                     |
 
 ---
 
@@ -57,6 +58,9 @@ na JetBrains Marketplace**.
 10. _(v1.2)_ Permitir **tirar o conteúdo da sessão de dentro da janela** em um clique — como o
     ícone de cópia da extensão de VS Code —, tanto na forma bruta (o que está na tela) quanto na
     forma de transcrição (via o `/export` do próprio CLI).
+11. _(v1.6)_ Permitir **gravar em arquivo apenas o trecho selecionado**, sem passar pelo CLI —
+    o complemento natural da cópia por seleção (RF-26), para quando o destino é um arquivo e
+    não a área de transferência.
 
 ---
 
@@ -129,6 +133,15 @@ Explicitamente **não** serão construídos nesta tarefa:
   (junto com cópia) adicionaria UI paralela sem capacidade nova, apenas um segundo caminho para
   a mesma ação. Decisão: manter play só no cabeçalho (RF-31) e cópia no popup (RF-26). RF-30
   descartado em v1.5.1.
+- _(v1.6)_ **Conversão de formato na exportação do trecho.** O que sai no arquivo é o texto do
+  terminal como está, apenas com os espaços à direita aparados (`ClaudeSessionText.normalize`).
+  Sem envolver em cerca de código markdown, sem detectar linguagem, sem converter as sequências
+  ANSI que a seleção já não traz. Ver Q-22.
+- _(v1.6)_ **Abrir no editor o arquivo exportado.** Gravar e abrir são intenções diferentes; o
+  usuário que quer ver o resultado tem o arquivo no caminho que ele mesmo escolheu. Ver Q-21.
+- _(v1.6)_ **Exportação do trecho pelo `/export` do CLI.** Não é uma escolha de simplicidade, é
+  uma impossibilidade: o `/export` é executado pelo Claude Code e exporta **a conversa**, sem
+  qualquer forma de restringi-lo a um trecho da tela. Ver D-30.
 
 ---
 
@@ -403,6 +416,32 @@ embutidos, o **Piper é obrigatoriamente configurável**. "Piper instalado" = ex
 **E** caminho válido para um modelo `.onnx` configurado. A ausência de qualquer um disso disable
 o botão play.
 
+### Gravar um trecho em arquivo: o que a plataforma já dá _(verificado em v1.6)_
+
+O diálogo de "salvar como" não precisa ser construído — a plataforma tem o nativo, e ele é o
+mesmo que o IDE usa em _File → Save As_. Assinaturas conferidas por `javap` sobre
+`intellij.platform.ide.jar` da distribuição 2026.2 (build `IU-262.8665.337`):
+
+| Símbolo                                                                    | Assinatura verificada                                            |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `FileSaverDescriptor(String title, String description, String... ext)`     | construtor público — as extensões filtram e sugerem o sufixo     |
+| `FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)` | devolve `FileSaverDialog`                                        |
+| `FileSaverDialog.save(Path baseDir, String filename)`                      | sobrecarga com `java.nio.file.Path` — dispensa achar o `VirtualFile` |
+| `VirtualFileWrapper.getFile()`                                             | devolve `java.io.File`; `null` do `save(...)` significa cancelado |
+
+Três consequências para o desenho:
+
+| O que a API mostra                              | Efeito em RF-33/RF-34                                                          |
+| ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `save(...)` devolve `null` no cancelamento       | Cancelar é caminho normal, não erro: nada a gravar e nada a notificar (CB-44)  |
+| O diálogo nativo já trata arquivo existente      | A confirmação de sobrescrita vem de graça; não escrevemos essa pergunta (CB-45) |
+| A sobrecarga aceita `Path`                       | O diretório inicial sai direto de `project.basePath`, sem passar pelo VFS      |
+
+> ⚠️ **Nota de método.** A primeira busca por essas classes nos jars da plataforma deu
+> **falso negativo**: `grep` sem `-a` trata `.class` como binário e não reporta as linhas. É
+> exatamente a armadilha já registrada no `HANDOFF.md` da rodada de 2026-08-01 — e ela pegou de
+> novo. Com `grep -a`, as classes apareceram.
+
 ### Correção de uma premissa do documento de origem
 
 O plano inicial afirma que _"a Anthropic inviabiliza plugins de terceiros rodarem o Claude Code"_.
@@ -476,6 +515,9 @@ reimplementação frágil.**
 | **RF-29**     | _(v1.4)_ Ao abrir uma aba, o plugin DEVE cobrir a sessão enquanto o CLI sobe, escondendo o prompt do shell e o eco do comando; a capa DEVE sair sozinha e NÃO DEVE impedir a sessão de receber o tamanho real da aba.                          |
 | **RF-31**     | _(v1.5)_ Durante a reprodução de áudio, o plugin DEVE oferecer, **no cabeçalho da tool window**, um menu suspenso "Áudio" contendo ações para pausar/retomar e parar a fala em curso.                                                             |
 | **RF-32**     | _(v1.5)_ O plugin DEVE permitir configurar, em Settings > Tools > Claude Code Dock, o caminho do executável `piper` (valor padrão: `piper`) e o caminho para um arquivo `.onnx` de modelo de voz (padrão: vazio; desabilita síntese até configurado). |
+| **RF-33**     | _(v1.6)_ O popup flutuante de seleção (RF-26) DEVE oferecer, **ao lado** do botão de copiar, um botão que grava em arquivo **apenas o trecho selecionado**, com o destino escolhido pelo usuário no diálogo nativo de salvar do IDE.                  |
+| **RF-34**     | _(v1.6)_ O diálogo de RF-33 DEVE abrir na raiz do projeto, com nome sugerido distinguível e extensão `.md`. Cancelar o diálogo NÃO DEVE gravar nada nem notificar; falha de gravação DEVE virar notificação, nunca exceção.                           |
+| **RF-35**     | _(v1.6)_ A ação "Exportar Conversa" do cabeçalho (RF-22) DEVE permanecer inalterada: o trecho e a conversa inteira são destinos distintos, e nenhum substitui o outro.                                                                                |
 
 ---
 
@@ -572,6 +614,22 @@ reimplementação frágil.**
 - **RNF-23** _(v1.5, novo)_ — Uma única síntese/reprodução deve estar ativa por vez. Um novo
   play durante uma reprodução em curso DEVE pausar/parar a anterior e iniciar a nova (sem
   fila).
+
+### Requisitos novos em v1.6 — exportação do trecho
+
+- **RNF-24** _(v1.6, novo)_ — O trecho selecionado pode conter código-fonte e segredos do
+  projeto, pelo mesmo motivo de RNF-06 e RNF-19. A gravação DEVE ser **sempre iniciada pelo
+  usuário**, ir **apenas** para o arquivo que ele escolheu, e o conteúdo NÃO DEVE ser
+  registrado em log nem enviado a lugar algum.
+  > Diferente de RF-24/RF-25, aqui **não há arquivo temporário**: o destino é o definitivo,
+  > escolhido no diálogo. Some com ele a concessão que RNF-19 precisou abrir — não há nada a
+  > apagar depois, porque nada foi escrito às escondidas.
+- **RNF-25** _(v1.6, novo)_ — A escrita em disco DEVE ocorrer fora da EDT (mesma regra de
+  RNF-03), e qualquer falha de E/S DEVE virar notificação pelo `NotificationGroup` próprio
+  (RNF-13), nunca exceção propagada para a plataforma.
+- **RNF-26** _(v1.6, novo)_ — A montagem do nome sugerido e a normalização do texto DEVEM ficar
+  em objeto puro, testável sem subir o IDE — mesma regra que já vale para `ClaudeSessionText`,
+  `ClaudeCommand` e `ClaudeTabTitle`.
 
 ---
 
@@ -702,6 +760,28 @@ reimplementação frágil.**
 2. O menu "Áudio" no cabeçalho fica desabilitado; tooltip: "Configure um modelo de voz".
 3. Configuração é feita em Settings > Tools > Claude Code Dock > "Caminho do modelo Piper".
 
+### Fluxo alternativo K — exportar o trecho selecionado _(v1.6, RF-33/RF-34)_
+
+1. O usuário seleciona texto com o mouse na sessão.
+2. O popup flutuante aparece com dois botões: copiar (RF-26) e exportar.
+3. Clicado em exportar:
+   a. o texto selecionado é normalizado por `ClaudeSessionText.normalize` — o mesmo tratamento
+   que a cópia recebe, aparando os espaços à direita do render do TUI;
+   b. abre-se o diálogo nativo de salvar, com diretório inicial em `project.basePath` e nome
+   sugerido `claude-selection-<AAAAMMDD-HHmmss>.md`;
+   c. escolhido o destino, o popup se fecha e a gravação acontece fora da EDT (RNF-25).
+4. Gravado o arquivo, nada é exibido — sucesso silencioso, como o botão de copiar.
+5. O `/export` do CLI **não é acionado em momento algum**: o texto já estava na mão do plugin,
+   e o CLI não tem como exportar um trecho (D-30).
+
+### Fluxo de erro J — falha ao gravar o trecho _(v1.6, RF-34/RNF-25)_
+
+1. O destino escolhido está em diretório sem permissão de escrita, o disco está cheio, ou o
+   caminho deixou de existir entre a escolha e a gravação.
+2. A `IOException` é capturada, registrada em `Logger.warn` **sem o conteúdo** (RNF-24) e
+   convertida em notificação de erro.
+3. A sessão não é afetada: nada foi enviado ao PTY, nenhum processo foi tocado.
+
 ### Fluxo de erro I — síntese falha _(v1.5, RF-31/RNF-21)_
 
 1. O `piper` é lançado, mas retorna código de erro ou nenhum PCM é produzido.
@@ -730,7 +810,8 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
 ├── ClaudeCommand.kt                # puro: montagem e escapamento do comando
 ├── ClaudeSessionText.kt            # puro: normaliza o texto copiado (RF-21; revisto em RF-24)
 ├── ClaudeSessionExport.kt          # (v1.3) puro-ish: destino, comando e espera do /export (RF-24, RF-25)
-├── ClaudeSelectionCopyButton.kt    # (v1.3) botão flutuante na seleção (RF-26)
+├── ClaudeSelectionCopyButton.kt    # (v1.3) popup flutuante na seleção: copiar (RF-26) e exportar (RF-33)
+├── ClaudeSelectionExport.kt        # (v1.6) puro: nome sugerido e gravação do trecho (RF-33, RF-34)
 ├── ClaudeSessionPadding.kt         # (v1.4) borda que se pinta com o fundo do terminal (RF-28)
 ├── ClaudeSessionLoading.kt         # (v1.4) capa sobreposta enquanto o CLI sobe (RF-29)
 ├── ClaudePiperPlayback.kt          # (v1.5) ÚNICO ponto de acoplamento com Piper + Java Sound (RNF-19)
@@ -949,6 +1030,67 @@ group("Piper TTS") {
 }
 ```
 
+### Exportação do trecho selecionado _(v1.6)_
+
+**A decisão que define a seção: o CLI não participa (D-30).**
+
+A ação de exportar do cabeçalho (RF-22) e a cópia da conversa (RF-24) passam ambas pelo
+`/export`, escrito no `TtyConnector`. É tentador supor que "exportar o trecho" seja a mesma
+coisa com um argumento a mais — e é aí que a suposição quebra: **`/export` exporta a conversa**.
+Ele é executado dentro do Claude Code, sobre as mensagens que o CLI tem em memória
+(`lZo(t.messages, …)`, lido do binário na v1.3), e o único argumento que aceita é o **nome do
+arquivo de destino**. Não existe forma de pedir a ele um trecho da tela.
+
+O trecho, por outro lado, **já está na mão do plugin**: é o mesmo `widget.selectedText` que
+RF-26 usa para copiar. Exportá-lo é gravar um texto que já temos.
+
+Consequência prática — o caminho de RF-33 é o mais curto dos três, e por isso o mais confiável:
+
+| Etapa                     | RF-24 (conversa → clipboard) | RF-22 (conversa → arquivo) | **RF-33 (trecho → arquivo)** |
+| ------------------------- | ---------------------------- | -------------------------- | ---------------------------- |
+| Escreve no PTY            | sim                          | sim                        | **não**                      |
+| Depende do CLI vivo       | sim                          | sim                        | **não**                      |
+| Arquivo temporário        | sim (RF-25)                  | não                        | **não**                      |
+| Espera/sondagem em disco  | sim, até 20 s                | não                        | **não**                      |
+| Pode estourar prazo       | sim (CB-29)                  | —                          | **não**                      |
+
+**`ClaudeSelectionExport` — objeto puro (RNF-26).**
+
+Duas responsabilidades, nenhuma delas ligada a UI:
+
+- `suggestedFileName(now: LocalDateTime): String` — `claude-selection-<AAAAMMDD-HHmmss>.md`.
+  O carimbo de tempo é o que distingue exportações sucessivas sem perguntar nada ao usuário; o
+  `.md` acompanha o que RF-24/RF-25 já usam para o mesmo tipo de conteúdo.
+- `write(target: Path, text: String)` — grava em UTF-8, deixando a `IOException` subir para
+  quem sabe notificar. O objeto não conhece `Project`, `Notification` nem `Logger`.
+
+A normalização **não** ganha código novo: é `ClaudeSessionText.normalize`, a mesma função que a
+cópia usa desde RF-21. Trecho que normaliza para `null` (só espaços, ou só bordas do TUI) não
+chega a abrir o diálogo (CB-43).
+
+**O popup ganha o segundo botão (RF-33).**
+
+`ClaudeSelectionCopyButton` passa a montar um `JPanel` com dois `JBLabel` — copiar e exportar —
+em vez de um único label. O resto do mecanismo é o que já existe e já foi validado no uso real:
+aparece no `mouseReleased`, some no `selectionChanged`, `setRequestFocus(false)` para não roubar
+o foco da sessão, e nada é instalado fora do engine CLASSIC (R-15).
+
+O diálogo é o nativo da plataforma, não um construído por nós:
+
+```kotlin
+// Extensão sugerida no descritor: o diálogo cuida de sufixo e de sobrescrita (CB-45).
+val descriptor = FileSaverDescriptor("Exportar Seleção", "Grava o trecho selecionado", "md")
+val wrapper = FileChooserFactory.getInstance()
+    .createSaveFileDialog(descriptor, project)
+    .save(baseDir, ClaudeSelectionExport.suggestedFileName())
+    ?: return  // Cancelou: caminho normal, nada a fazer nem a avisar (CB-44).
+```
+
+**Teto deliberado de dois botões.** O popup nasceu com um (RF-26) e agora tem dois. RF-30 (play)
+foi descartado em v1.5.1 justamente para não transformá-lo em barra de ferramentas. O critério
+que separa os casos é capacidade, não simetria: exportar o trecho **não existe** em outro lugar
+da UI, enquanto o play já existia no menu do cabeçalho. Ver R-23 e o Achado 25.
+
 ### Itens não aplicáveis
 
 Registrados por exigência do roteiro de SDD:
@@ -1012,6 +1154,13 @@ Registrados por exigência do roteiro de SDD:
 | **CB-40** | _(v1.5)_ Reprodução em curso e usuário fecha a aba | O `Disposable` da aba dispara, `ClaudeTtaSessions` para a reprodução e libera recursos (RNF-22) |
 | **CB-41** | _(v1.5)_ Reprodução pausada e usuário sai do IDE | Nenhum evento especial — o proceso `piper` já terminou (síntese é fora da EDT), só o `Clip` fica em pausa. Fechamento normal do IDE libera tudo |
 | **CB-42** | _(v1.5)_ Dois modelos diferentes configurados (ex.: português e inglês) e usuário alterna | Nenhum problema — cada chamada a `playText()` usa o `piperModel` atual da configuração |
+| **CB-43** | _(v1.6)_ Seleção contém só espaços ou só bordas do TUI | `ClaudeSessionText.normalize` devolve `null` e o diálogo não chega a abrir; notificação explica que não há o que exportar (RF-34) |
+| **CB-44** | _(v1.6)_ Usuário cancela o diálogo de salvar | `save(...)` devolve `null`. É caminho normal, não erro: nada é gravado e **nada é notificado** (RF-34) |
+| **CB-45** | _(v1.6)_ Destino escolhido já existe | A confirmação de sobrescrita é do diálogo nativo — não escrevemos essa pergunta, e não a contornamos |
+| **CB-46** | _(v1.6)_ Diretório sem permissão de escrita, disco cheio, ou caminho removido entre a escolha e a gravação | `IOException` capturada, logada sem o conteúdo (RNF-24) e convertida em notificação de erro (Fluxo J) |
+| **CB-47** | _(v1.6)_ Engine sem JediTerm (`REWORKED`/`NEW_TERMINAL`) | O popup inteiro não é instalado, exportar o trecho junto com copiar — mesma degradação de R-15. O export da conversa no cabeçalho (RF-22) continua valendo |
+| **CB-48** | _(v1.6)_ Projeto sem `basePath` (raro, mas possível) | O diálogo abre no diretório padrão da plataforma em vez da raiz do projeto; a gravação segue funcionando |
+| **CB-49** | _(v1.6)_ Aba fechada com o popup aberto | O popup é filho do `Disposable` da aba desde RF-26: cai junto, e o diálogo nem chega a existir |
 
 ---
 
@@ -1041,6 +1190,8 @@ Registrados por exigência do roteiro de SDD:
 | **R-20** | _(v1.5)_ Reprodução de áudio via `javax.sound.sampled` é bloqueante (thread do mixer aguarda buffer ficar vazio)   | Médio       | Média | Linha de áudio é reproduzida em thread separada (mixer nativo do SO), a UI fica responsiva. Se o mixer travar ou estiver indisponível, a thread de reprodução congela, não a EDT. Risco aceitável |
 | **R-21** | _(v1.5)_ Modelo `.onnx` pode ser muito grande (63 MB) e o carregamento na primeira síntese causa latência            | Baixo       | Média | Piper já cacheia o modelo em memória entre chamadas. Primeira síntese tem latência de carregamento (~2-3s); as seguintes são rápidas. Documentar e aceitar |
 | **R-22** | _(v1.5)_ Dois projetos abertos com configurações diferentes de `piperModel` — sem sincronização entre `ClaudeTtsSessions` | Baixo       | Baixa | Cada projeto tem sua própria instância de `ClaudeTtaSessions` (via `project.service()`). Não há compartilhamento; cada um usa seu próprio modelo configurado. Esperado e correto |
+| **R-23** | _(v1.6)_ O popup de seleção vira barra de ferramentas: cada rodada acrescenta "só mais um botão" até ele atrapalhar a leitura do que foi selecionado | Baixo | Média | Teto declarado de dois botões, e o critério registrado (capacidade que não existe em outro lugar, não simetria com o cabeçalho). RF-30 já foi recusado por esse critério em v1.5.1. Ver Achado 25 |
+| **R-24** | _(v1.6)_ O trecho gravado é o render do terminal, com quebras de linha na largura da aba — o arquivo pode não conter o texto como o autor o escreveu | Baixo | Alta | Inerente a exportar de um terminal, e o mesmo que a cópia por seleção (RF-26) já entrega há rodadas sem reclamação. Declarado em [Fora de Escopo](#fora-de-escopo); Q-22 registra a alternativa se incomodar |
 
 ---
 
@@ -1079,6 +1230,10 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.25**     | `ClaudeDockSettings`              | _(v1.5)_ `piperExecutable` e `piperModel` nascem em padrão, persistem via `loadState`, `effectivePiperExecutable()` e `effectivePiperModel()` fazem trim (RF-32) |
 | **T-1.26**     | `ClaudeTtaSessions`               | _(v1.5)_ Estado alterna Idle → Playing → (Paused ↔ Playing) → Idle corretamente; listeners de update disparam em cada mudança (RNF-23) |
 | **T-1.27**     | `ClaudeTtaSessions`               | _(v1.5)_ `playText(text)` novo durante reprodução prévia para e inicia nova, sem fila; recurso anterior é liberado (RNF-23) |
+| **T-1.28**     | `ClaudeSelectionExport`           | _(v1.6)_ O nome sugerido termina em `.md`, começa pelo prefixo do plugin e carrega o carimbo de tempo formatado; dois instantes diferentes produzem nomes diferentes (RF-34) |
+| **T-1.29**     | `ClaudeSelectionExport`           | _(v1.6)_ `write` grava o texto em UTF-8 e o round-trip devolve exatamente o que entrou, inclusive acentuação e quebras de linha (RF-33) |
+| **T-1.30**     | `ClaudeSelectionExport`           | _(v1.6)_ `write` em diretório inexistente lança `IOException` em vez de falhar em silêncio — é o que o chamador converte em notificação (CB-46, Fluxo J) |
+| **T-1.31**     | `ClaudeSessionText`               | _(v1.6)_ Seleção só de espaços normaliza para `null`, e é o que impede o diálogo de abrir (CB-43) — reuso verificado, não função nova |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
 executada após cada implementação.
@@ -1154,6 +1309,12 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.23**     | _(v1.5)_ Abrir Settings > Tools > Claude Code Dock, verificar novos campos "Executável do Piper" e "Modelo de voz (.onnx)", alterá-los, aplicar, e verificar que menu "Áudio" se habilita/desabilita conforme modelo (RF-32) |
 | **T-3.26**     | _(v1.5)_ Selecionar e reproduzir um grande trecho (páginas de código): síntese demora mas UI fica responsiva (RNF-20); timeout após 20s e notificação se síntese não terminar (CB-38) |
 | **T-3.27**     | _(v1.5)_ Iniciar síntese de trecho A, e antes de terminar selecionar e iniciar trecho B: síntese de A é cancelada, B começa novo (RNF-23) |
+| **T-3.28**     | _(v1.6)_ Selecionar texto e conferir que o popup mostra **dois** botões, copiar e exportar, sem cobrir a seleção nem roubar o foco da sessão (RF-33) |
+| **T-3.29**     | _(v1.6)_ Clicar em exportar: o diálogo abre na raiz do projeto com o nome sugerido preenchido; salvar e conferir que o arquivo tem **só o trecho**, sem banner nem barra de status (RF-33, RF-34) |
+| **T-3.30**     | _(v1.6)_ Cancelar o diálogo: nada é gravado e **nenhuma** notificação aparece (CB-44) |
+| **T-3.31**     | _(v1.6)_ Escolher destino em diretório sem permissão (ex.: `/`): a notificação de erro aparece e a sessão continua utilizável (CB-46, Fluxo J) |
+| **T-3.32**     | _(v1.6)_ Exportar duas vezes seguidas sem renomear: os nomes sugeridos diferem pelo carimbo de tempo, sem sobrescrever o primeiro arquivo (RF-34) |
+| **T-3.33**     | _(v1.6)_ Conferir que "Exportar Conversa" no cabeçalho continua exportando a conversa inteira, inalterada (RF-35) |
 
 ### Testes de regressão
 
@@ -1300,6 +1461,24 @@ abre no visualizador do IDE de ponta a ponta.
 - **When** usuário altera "Executável do Piper" ou "Modelo de voz"
 - **Then** as mudanças são persistidas, e o botão play responde à nova configuração na próxima seleção
 
+**CA-25 — Exportação do trecho selecionado** _(v1.6, RF-33)_
+
+- **Given** uma sessão com texto selecionado pelo mouse
+- **When** o usuário clica no botão de exportar do popup e confirma o destino
+- **Then** o arquivo contém **apenas o trecho selecionado**, normalizado, e nada foi enviado à sessão
+
+**CA-26 — Cancelamento é caminho normal** _(v1.6, RF-34, CB-44)_
+
+- **Given** o diálogo de salvar aberto
+- **When** o usuário cancela
+- **Then** nenhum arquivo é criado e nenhuma notificação é exibida
+
+**CA-27 — Os dois destinos convivem** _(v1.6, RF-35)_
+
+- **Given** o plugin instalado com a v1.6
+- **When** o usuário aciona "Exportar Conversa" no cabeçalho
+- **Then** a conversa inteira é exportada pelo `/export`, exatamente como antes — o botão do popup não o substituiu
+
 ---
 
 ## Plano de Rollout
@@ -1368,6 +1547,9 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-19** | _(v1.5)_ Vale cachear o resultado de `canSynthesize()` para evitar checagem de arquivo a cada milissegundo durante seleção?  | Sim, mas como? Decidido em design: cache é atualizado a cada N segundos (constante configurável ~30s) ou no evento de mudança de configuração. Reavaliar latência se implementação demonstrar problema |
 | **Q-20** | _(v1.5)_ O timeout da síntese (padrão 20s) deve ser configurável pelo usuário?                                                | Não nesta versão. Registrado como constante em `ClaudePiperPlayback`, ajustável por alguém que leia código. Reavaliar se surgirem modelos que rotineiramente ultrapassam 20s |
 | **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver uma, em vez de sempre copiar tudo?                        | Adiado. `Ctrl+C`/`Ctrl+Shift+C` já cobrem a seleção; o botão existe justamente para o caso que o CLASSIC não resolve. `JBTerminalWidget.getSelectedText()` existe se mudarmos de ideia                                                                                               |
+| **Q-21** | _(v1.6)_ Depois de gravar o trecho, vale abrir o arquivo no editor?                                                          | Adiado. `FileEditorManager.openFile` custa duas linhas, mas gravar e abrir são intenções diferentes — quem exporta para colar em outro lugar não quer uma aba nova. Reavaliar se o uso real mostrar que abrir é o que sempre se faz em seguida                                    |
+| **Q-22** | _(v1.6)_ O trecho deveria sair envolvido em cerca de código markdown, já que o destino é `.md`?                              | Adiado. O `.md` é sufixo de conveniência, herdado de RF-24, não uma promessa de formatação. Envolver em cerca exigiria decidir a linguagem e quebraria quem exporta prosa. Ver R-24                                                                                               |
+| **Q-23** | _(v1.6)_ Vale lembrar o último diretório usado, em vez de sempre sugerir a raiz do projeto?                                  | Adiado. A raiz do projeto é o palpite certo na maioria dos casos e não custa persistência nenhuma. Guardar o último diretório significa mais um campo em settings — só com demanda real                                                                                          |
 
 ---
 
@@ -1643,6 +1825,50 @@ A integração de Piper foi implementada com 4 classes novas (~350 linhas totais
 
 **Precedente:** o mesmo padrão aparece em RF-17 (Esc), RF-24 (export), RF-28 (respiro) — quando cada RF novo segue o padrão de "uma classe, uma responsabilidade", o código fica simples de ler e revisar. Piper é o terceiro caso dessa série.
 
+### Achado 25 — O nome do recurso sugeria o mecanismo errado _(v1.6)_
+
+O pedido diz "exportar só o trecho selecionado", e no documento já existiam duas ações chamadas
+export, **as duas passando pelo `/export` do CLI** (RF-22 e RF-24). O caminho de menor
+resistência era escrever a terceira igual às outras: mandar um comando pelo `TtyConnector` e
+esperar um arquivo aparecer.
+
+Isso não teria funcionado, e o motivo não é sutil: **o `/export` exporta a conversa**. É o CLI
+quem o executa, sobre as mensagens que ele tem em memória, e o único argumento que aceita é o
+caminho do destino — verificado no binário ainda na v1.3, quando as funções `azb`/`u0n` foram
+lidas para escrever RF-24. A informação necessária já estava neste documento há três rodadas.
+
+O que mudou a resposta foi perguntar **de onde vem o texto**, e não **como as outras exportações
+funcionam**. O trecho selecionado já está na mão do plugin desde RF-26 — é o mesmo
+`widget.selectedText` que alimenta o botão de copiar. Com o texto em mãos, exportar é gravar um
+arquivo: sem PTY, sem temporário, sem sondagem, sem prazo. Das três exportações do plugin, a
+mais nova é a de menos peças.
+
+**Lição registrada:** quando um pedido novo usa o nome de um mecanismo que já existe, a primeira
+verificação é se ele é mesmo o mecanismo — e não como reusá-lo. A semelhança estava no nome do
+recurso ("exportar"), não na natureza do dado. É o mesmo erro de forma do Achado 14 (uma ação
+registrada no IDE não é uma capacidade disponível), agora do lado do CLI.
+
+**Efeito colateral bom:** por não escrever no PTY, RF-33 é a primeira função de saída do plugin
+que funciona com a sessão ocupada, encerrada, ou com o CLI no meio de uma resposta. As outras
+duas dependem de um CLI vivo e responsivo.
+
+### Achado 26 — O critério que segura o popup em dois botões _(v1.6)_
+
+Este é o segundo pedido seguido de "mais um botão junto ao de copiar" — o primeiro foi o play
+(RF-30), **recusado** em v1.5.1. Aceitar um e recusar o outro precisa de critério declarado,
+senão a decisão vira gosto e o popup cresce até atrapalhar.
+
+O critério que separou os dois casos é **capacidade, não simetria**:
+
+| Pedido                 | Já existia em outro lugar da UI?                | Decisão            |
+| ---------------------- | ----------------------------------------------- | ------------------ |
+| Play do trecho (RF-30) | Sim — menu "Áudio" no cabeçalho (RF-31)         | Recusado (v1.5.1)  |
+| Export do trecho (RF-33) | Não — o do cabeçalho exporta a conversa inteira | Aceito (v1.6)      |
+
+Registrado em R-23 com teto explícito de dois botões. O próximo pedido de botão no popup passa
+pela mesma pergunta antes de virar RF: **isso existe em algum outro lugar?** Se existir, o lugar
+certo já tem dono.
+
 ---
 
 ## Anexo — Rastreabilidade das evidências
@@ -1707,6 +1933,10 @@ Toda afirmação técnica sobre o estado atual remonta a uma verificação diret
 | _(v1.5)_ Mixers de áudio estão disponíveis via `AudioSystem.getMixerInfo()` (ALSA/PipeWire)                                                                           | listagem de mixers: HDMI, USB, Generic, default — nenhum mixer bloqueado                                                                                                    |
 | _(v1.5)_ `DefaultActionGroup(text, true)` é aceito por `ToolWindow.setTitleActions(List<AnAction>)` (popup automático)                                                | `javap` de `DefaultActionGroup implements AnAction` + conhecimento de padrão IntelliJ                                                                                      |
 | _(v1.5)_ `ClaudeDockSettings.PersistentStateComponent` pode ter campos novos (`piperExecutable`, `piperModel`) sem migrações                                           | padrão já usado com `claudeExecutable` em v1.0; XML serialization é transparente                                                                                             |
+| _(v1.6)_ `FileSaverDescriptor(String, String, String...)`, `FileChooserFactory.createSaveFileDialog(descriptor, project)`, `FileSaverDialog.save(Path, String)` e `VirtualFileWrapper.getFile()` existem na 262 | `javap` sobre `intellij.platform.ide.jar` da distribuição `idea-2026.2` usada no build (IDE local: `IU-262.8665.337`)                                                       |
+| _(v1.6)_ `save(...)` devolve `null` quando o usuário cancela                                                                                                          | assinatura anulável de `FileSaverDialog.save` + contrato do `FileSaverDialogImpl`; é o que sustenta CB-44                                                                    |
+| _(v1.6)_ O `/export` do CLI exporta **a conversa**, sem forma de restringi-lo a um trecho                                                                              | funções `azb`/`u0n` já lidas do binário `claude` 2.1.220 em v1.3 — o único argumento é o caminho do arquivo, e o conteúdo vem de `lZo(t.messages, …)` (base de D-30)         |
+| _(v1.6)_ O texto do trecho já está disponível ao plugin sem passar pelo CLI                                                                                           | `JBTerminalWidget.getSelectedText()`, em uso desde RF-26 em `ClaudeSelectionCopyButton.selectedText()`                                                                       |
 
 **Não verificado (declarado como suposição):** semântica de
 `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` (Q-03); comportamento de builds anteriores a `262`
@@ -1728,3 +1958,7 @@ T-3.20).
 
 _(v1.4)_ ~~**Código sem teste:** os diretórios de fallback da verificação do executável (R-17)~~
 ✅ **COBERTO** — T-1.21 implementado, com o par aceito/recusado servindo de controle.
+
+_(v1.6)_ **Não verificado:** o comportamento do diálogo nativo de salvar sob Wayland com o
+_native file chooser_ do IDE ligado (T-3.29); e se o nome sugerido chega preenchido em todos os
+IDEs da família (T-3.5 cobre o resto do plugin, não este campo).
