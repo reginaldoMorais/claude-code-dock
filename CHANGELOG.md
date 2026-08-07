@@ -7,6 +7,46 @@ segue [SemVer](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [0.8.0] — 2026-08-07
+
+Versão da **velocidade da fala**: o áudio do Piper deixa de sair sempre no ritmo do modelo.
+Acompanha a correção de um item do menu que existia desde a v0.6 e nunca funcionou.
+
+### Adicionado
+
+- **Velocidade da fala configurável** — 0,25x / 0,5x / 0,75x / 1x / 1,25x / 1,5x / 1,75x / 2x —
+  em dois lugares ligados ao mesmo valor: um submenu **"Velocidade"** dentro do menu "Áudio" e um
+  seletor em _Settings > Tools > Claude Code Dock_. Os dois mostram a mesma lista, e escolher em
+  um marca o outro. A escolha vale para todos os projetos e persiste entre reinícios do IDE.
+- O rótulo do submenu mostra a velocidade em vigor sem precisar abri-lo ("Velocidade (1,5x)").
+
+### Corrigido
+
+- **"Tocar seleção" nunca tocou nada.** O item está no menu "Áudio" desde a v0.6, mas procurava
+  o terminal no lugar errado e desistia em silêncio a cada clique. Agora toca o trecho
+  selecionado na sessão em foco — e avisa quando não há sessão aberta ou nada selecionado, em
+  vez de não fazer nada.
+
+### Notas
+
+- O padrão continua sendo **o do próprio modelo de voz**, e não 1.0: em 100% o plugin não passa
+  `--length-scale` ao Piper, deixando valer o que o autor da voz calibrou no `config.json` dela.
+  Por isso o preset se chama "1x (padrão do modelo)".
+- A velocidade se aplica à **próxima** fala. O Piper sintetiza o áudio inteiro antes de tocar,
+  então mudar o valor no meio de uma reprodução não a altera.
+
+### Documentação
+
+- `plans/sdd/SPEC.md` evoluiu de 1.8.2 para 1.9: RF-47 e RF-48, RNF-31 (formatação numérica
+  independente de locale em argumentos de processo), DEF-07, decisões D-39 e D-40, Q-29 e o
+  Achado 31.
+- Registrado nos Fatos verificados o que a CLI do Piper aceita e de onde vêm os seus defaults —
+  incluindo a medição que confirma que `--length-scale` é o **inverso** da velocidade.
+- **Achado 31:** o SPEC prometia desde a v1.5 um timeout de 20 s na síntese que nunca foi
+  implementado. A documentação foi corrigida; o timeout continua pendente.
+
+---
+
 ## [0.7.0] — 2026-08-03
 
 Versão da **divisão de abas**: uma aba passa a hospedar várias sessões do Claude Code lado a
@@ -87,5 +127,6 @@ As versões `0.5.x` e anteriores são anteriores a este arquivo e não estão de
 histórico completo, com as decisões de projeto e as descobertas de cada rodada, está em
 [`plans/sdd/HANDOFF.md`](plans/sdd/HANDOFF.md).
 
+[0.8.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.5.2...v0.6.0
