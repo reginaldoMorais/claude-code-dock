@@ -57,4 +57,41 @@ class ClaudeDockSettingsTest {
             ClaudeDockSettings().apply { sessionPadding = -10 }.effectivePadding(),
         )
     }
+
+    /** T-1.48: velocidade nasce no padrão e sobrevive ao loadState. */
+    @Test
+    fun `velocidade nasce no padrao e persiste`() {
+        assertEquals(ClaudeDockSettings.DEFAULT_SPEECH_SPEED, ClaudeDockSettings().speechSpeed)
+
+        val source = ClaudeDockSettings().apply { speechSpeed = 150 }
+        val target = ClaudeDockSettings()
+
+        target.loadState(source.state)
+
+        assertEquals(150, target.effectiveSpeechSpeed())
+    }
+
+    /**
+     * T-1.49: o XML é editável à mão, e o seletor da tela não pode ficar sem item selecionado —
+     * por isso aproxima em vez de só limitar a faixa (CB-59).
+     */
+    @Test
+    fun `velocidade fora da tabela vira a mais proxima`() {
+        assertEquals(200, ClaudeDockSettings().apply { speechSpeed = 9999 }.effectiveSpeechSpeed())
+        assertEquals(25, ClaudeDockSettings().apply { speechSpeed = 0 }.effectiveSpeechSpeed())
+        assertEquals(100, ClaudeDockSettings().apply { speechSpeed = 110 }.effectiveSpeechSpeed())
+        assertEquals(125, ClaudeDockSettings().apply { speechSpeed = 130 }.effectiveSpeechSpeed())
+    }
+
+    /** T-1.54: a tabela é a fonte única do menu e da tela — as duas UIs não podem divergir. */
+    @Test
+    fun `tabela de velocidades cobre de 0,25x a 2x`() {
+        assertEquals(
+            listOf(25, 50, 75, 100, 125, 150, 175, 200),
+            ClaudeDockSettings.SPEECH_SPEEDS.keys.toList(),
+        )
+        assertEquals("0,25x", ClaudeDockSettings.speechSpeedLabel(25))
+        assertEquals("1,75x", ClaudeDockSettings.speechSpeedLabel(175))
+        assertEquals("110%", ClaudeDockSettings.speechSpeedLabel(110))
+    }
 }

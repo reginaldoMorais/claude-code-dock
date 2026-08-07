@@ -14,6 +14,7 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowManager
+import com.intellij.terminal.JBTerminalWidget
 import com.intellij.terminal.ui.TerminalWidget
 import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentFactory
@@ -348,6 +349,24 @@ class ClaudeDockSessions(private val project: Project) :
         val component: JComponent,
         val disposable: Disposable,
     )
+
+    /**
+     * Toca o trecho selecionado da sessão em foco (RF-48, corrige DEF-07).
+     *
+     * Passa pelo serviço como todas as outras ações do cabeçalho: a `AudioPlayAction` lia
+     * `CONTEXT_COMPONENT`, que numa ação de título é a barra de ferramentas — nunca o terminal.
+     */
+    fun playSelectedSession() {
+        val widget = selectedWidget()
+            ?: return notify("Nenhuma sessão aberta para ouvir.", NotificationType.WARNING)
+
+        val selected = ClaudeSessionText.normalize(JBTerminalWidget.asJediTermWidget(widget)?.selectedText)
+        if (selected.isNullOrBlank()) {
+            return notify("Selecione um trecho da sessão para ouvir.", NotificationType.INFORMATION)
+        }
+
+        ClaudeTtaSessions.getInstance(project).playText(selected)
+    }
 
     /**
      * Copia a conversa da aba selecionada para a área de transferência (RF-24).

@@ -4,8 +4,10 @@ import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
 import com.intellij.openapi.options.BoundConfigurable
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogPanel
+import com.intellij.ui.dsl.listCellRenderer.textListCellRenderer
 import com.intellij.ui.dsl.builder.AlignX
 import com.intellij.ui.dsl.builder.bindIntValue
+import com.intellij.ui.dsl.builder.bindItem
 import com.intellij.ui.dsl.builder.bindText
 import com.intellij.ui.dsl.builder.panel
 
@@ -102,6 +104,22 @@ class ClaudeDockConfigurable(private val project: Project) :
                         .comment(
                             "Caminho absoluto para a voz desejada. Obrigatório para ativar síntese. " +
                                 "Vale para todos os projetos.",
+                        )
+                }
+
+                row("Velocidade da fala:") {
+                    comboBox(
+                        ClaudeDockSettings.SPEECH_SPEEDS.keys.toList(),
+                        textListCellRenderer("") { ClaudeDockSettings.speechSpeedLabel(it) },
+                    )
+                        .bindItem(
+                            { settings.effectiveSpeechSpeed() },
+                            { settings.speechSpeed = it ?: ClaudeDockSettings.DEFAULT_SPEECH_SPEED },
+                        )
+                        .comment(
+                            "Mesmos valores do submenu \"Velocidade\" no menu \"Áudio\". " +
+                                "\"1x\" mantém o padrão do próprio modelo de voz. " +
+                                "Vale para todos os projetos. Aplica-se à próxima fala.",
                         )
                 }
             }

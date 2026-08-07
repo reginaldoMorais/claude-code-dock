@@ -1,8 +1,8 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.8.2
-- **Data:** 2026-08-03
-- **Status:** Especificação — v1.8 reposiciona panes (Q-28); v1.8.1 corrige DEF-03; v1.8.2 corrige DEF-05/DEF-06
+- **Versão:** 1.9
+- **Data:** 2026-08-07
+- **Status:** Especificação — v1.9 abre a velocidade da fala (RF-47) e corrige DEF-07
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -23,6 +23,7 @@
 > | 1.8    | 2026-08-03 | RF-43 (trocar de lado e girar a divisão); DnD de panes **avaliado e recusado** por custo de UI, não de mecanismo — registrado em Q-28                                              |
 > | 1.8.1  | 2026-08-03 | DEF-03 (aba marcada "encerrado" com sessão viva ao lado) e DEF-04 (menu "Dividir" vazio); RF-44 e RF-45 especificam o comportamento correto                                        |
 > | 1.8.2  | 2026-08-03 | DEF-05 (cabeçalho inteiro morria ao fechar a primeira pane — `preferredFocusableComponent` órfão) e DEF-06 (nome ambíguo); RF-46. **Revoga o diagnóstico de DEF-04** (Achado 30)   |
+> | 1.9    | 2026-08-07 | RF-47 (velocidade da fala, 0,25x–2x, lista fechada em menu e tela) **revoga** parte da exclusão de v1.5 sobre `--length-scale`; RNF-31 (locale em argumento de processo); DEF-07 — "Tocar seleção" nunca tocou (RF-48); Achado 31 |
 
 ---
 
@@ -132,8 +133,13 @@ Explicitamente **não** serão construídos nesta tarefa:
 - _(v1.5)_ **Gerência de modelos de voz do Piper.** O usuário configura manualmente o caminho
   para o arquivo `.onnx` do modelo desejado. Sem seletor de voz, sem download automatizado de
   modelos, sem lista pública de vozes disponíveis.
-- _(v1.5)_ **Controle de qualidade de síntese.** Sem suporte a `--length-scale`, `--noise-scale`,
-  `--volume`, `--speaker` — só o padrão de cada modelo.
+- _(v1.5, ~~parcialmente revogado~~ em v1.9)_ **Controle de qualidade de síntese.** ~~Sem suporte a
+  `--length-scale`~~, `--noise-scale`, `--volume`, `--speaker` — só o padrão de cada modelo.
+  > **v1.9:** `--length-scale` sai da exclusão e vira RF-47. A velocidade é a única destas que o
+  > usuário pediu depois de conviver com a feature, e é a única cujo efeito ele consegue julgar de
+  > ouvido sem entender o modelo. As outras três continuam fora: `--noise-scale`/`--noise-w-scale`
+  > são parâmetros de treino expostos, `--volume` duplica o mixer do sistema, e `--speaker` só
+  > existe em modelos multi-voz, que a exclusão de gerência de vozes já mantém fora.
 - _(v1.5)_ **Fila de reprodução.** Uma única fala por vez; um novo play interrompe o que estiver
   tocando sem oferecer fila.
 - _(v1.5)_ **Botão de play no popup de seleção (RF-30).** O menu "Áudio" no cabeçalho já oferece
@@ -579,6 +585,57 @@ repetido em rótulo escrito por este projeto uma rodada depois de a lição ter 
 O `X` da aba já fazia o segundo, mas quem está no menu de divisões procura ali — e foi a
 ausência do item que abriu espaço para a leitura errada.
 
+### DEF-07 — "Tocar seleção" nunca tocou nada _(v1.9)_
+
+O item existe no menu "Áudio" desde a v1.5 (`AudioMenuAction` o adiciona no `init`). Ele nunca
+funcionou, e nunca reclamou: `actionPerformed` lia
+
+```kotlin
+val widget = e.getData(PlatformDataKeys.CONTEXT_COMPONENT) as? JBTerminalWidget ?: return
+```
+
+Numa ação de **título de tool window**, o componente de contexto é a barra de ferramentas do
+cabeçalho — não o terminal. O cast dá `null`, o `?: return` engole, e o clique é um no-op mudo.
+
+**O que o torna um defeito de arquitetura, e não um descuido:** é o **único** ponto do cabeçalho
+que não passa pelo `ClaudeDockSessions`. Copiar, exportar, dividir, fechar — todos chamam um
+método do serviço, que resolve a sessão em foco por `selectedWidget()`. Este quis atalhar pelo
+`DataContext` e pegou o objeto errado. O caminho certo já estava provado no `ClaudeSelectionCopyButton`,
+que lê a seleção com `JBTerminalWidget.asJediTermWidget(widget)?.selectedText` — mas ali o widget
+vem instalado por baixo, não adivinhado pelo contexto.
+
+**Por que passou despercebido tanto tempo:** as duas camadas de `update()` desabilitam o item
+quando o Piper não está configurado, então "não acontece nada" tinha uma explicação pronta e
+plausível para quem ainda não tinha terminado de configurar o modelo. Um no-op silencioso é
+indistinguível de uma pré-condição não atendida — e é exatamente por isso que RF-48 exige aviso
+nos dois casos negativos.
+
+**Correção (RF-48):** `ClaudeDockSessions.playSelectedSession()`, junto de `copySelectedSession()`,
+reusando `selectedWidget()`, o `notify(...)` do serviço e o `ClaudeSessionText.normalize`. A ação
+volta a ser uma linha, como as irmãs.
+
+### Achado 31 — o SPEC afirmava um timeout que nunca existiu _(v1.9)_
+
+Ao abrir `ClaudePiperPlayback` para acrescentar `--length-scale`, a documentação não bateu com o
+código. O SPEC dizia "Processo é destruído se timeout ou erro" e o KDoc do método dizia
+"Timeout 20s". O código chamava `process.waitFor()`, **sem argumento** — espera indefinida. E o
+`stopCurrent()` chama `currentProcess?.destroy()` sobre um campo que nunca recebe atribuição:
+código morto guardando uma promessa que ninguém cumpriu.
+
+Não houve regressão. O timeout **nunca** foi implementado, e o SPEC descreveu a intenção como se
+fosse o estado. Nada quebrou porque o piper local termina rápido e o único chamador está fora da
+EDT — o custo ficou latente, não ausente: um modelo corrompido ou um `.onnx` gigante travaria a
+pooled thread para sempre.
+
+**O que isto ensina sobre o formato:** uma seção de Design que descreve o que a classe *fará* e
+uma implementação que entrega parte disso divergem em silêncio, porque nenhum teste olha para a
+prosa. Os requisitos têm ID e são rastreados; as frases de Design não. A defesa barata é o que
+esta versão fez em outro ponto: quando a regra couber numa função pura, extrair e testar
+(`piperParameters`) — aí a prosa passa a ter uma asserção atrás.
+
+**Estado:** o KDoc foi corrigido para dizer a verdade ("sem timeout"). Implementar o timeout de
+fato fica em Próximos passos, fora do escopo de v1.9.
+
 ### Achado 30 — uma hipótese plausível publicada como conserto _(v1.8.2)_
 
 A v1.8.1 não conseguiu reproduzir DEF-04 (menu vazio) e mesmo assim mexeu no código: atribuiu a
@@ -748,6 +805,8 @@ reimplementação frágil.**
 | **RF-46**     | _(v1.8.2)_ O menu "Dividir" DEVE distinguir, **pelo nome**, quantas sessões cada fechamento encerra: "Fechar esta sessão" (a pane em foco) e "Fechar todas as sessões" (a aba inteira, com todas as divisões).                                                 |
 | **RF-45**     | _(v1.8.1)_ As ações que exigem divisão ("Trocar de lado", "Girar divisão", "Fechar divisão") DEVEM aparecer **desabilitadas** quando a aba não está dividida, em vez de avisar depois do clique.                                                              |
 | **RF-43**     | _(v1.8)_ O menu "Dividir" DEVE oferecer "Trocar de lado" (inverte a sessão em foco com a vizinha) e "Girar divisão" (alterna lado a lado ↔ empilhado). Sem divisão, as duas DEVEM avisar em vez de agir.                                              |
+| **RF-47**     | _(v1.9)_ O plugin DEVE permitir configurar a **velocidade da fala** do Piper em **dois lugares ligados ao mesmo valor e à mesma lista**: um submenu "Velocidade" dentro do menu "Áudio" e um seletor em Settings > Tools > Claude Code Dock. A lista é 0,25x / 0,5x / 0,75x / 1x / 1,25x / 1,5x / 1,75x / 2x, e os dois pontos DEVEM oferecer exatamente ela — sem campo numérico livre. O padrão, "1x", DEVE preservar o padrão **do próprio modelo**, não impor 1.0. A velocidade vale para a **próxima** fala. |
+| **RF-48**     | _(v1.9)_ O menu "Áudio" DEVE tocar o trecho **selecionado** na sessão em foco, obtendo a seleção pelo mesmo caminho das demais ações do cabeçalho. Sem sessão aberta, ou sem seleção, DEVE avisar em vez de não fazer nada em silêncio (DEF-07).      |
 
 ---
 
@@ -844,6 +903,14 @@ reimplementação frágil.**
 - **RNF-23** _(v1.5, novo)_ — Uma única síntese/reprodução deve estar ativa por vez. Um novo
   play durante uma reprodução em curso DEVE pausar/parar a anterior e iniciar a nova (sem
   fila).
+
+### Requisitos novos em v1.9 — velocidade da fala
+
+- **RNF-31** _(v1.9, novo)_ — Todo número que vire **argumento de linha de comando** DEVE ser
+  formatado com `Locale.ROOT`. O `--length-scale` do piper é `type=float` do argparse e recusa
+  vírgula decimal; numa JVM pt-BR — a do autor — o formato default produziria `0,667` e a síntese
+  morreria com exit code diferente de zero, sem nada audível e sem erro claro. Vale para qualquer
+  parâmetro numérico futuro, não só este.
 
 ### Requisitos novos em v1.6 — exportação do trecho
 
@@ -1096,7 +1163,9 @@ src/main/kotlin/dev/reginaldomorais/claudedock/
     ├── ExportSessionAction.kt       # (v1.2) RF-22
     ├── AudioMenuAction.kt           # (v1.5) menu "Áudio" no cabeçalho com ações de TTS (RF-31)
     ├── AudioPauseResumeAction.kt    # (v1.5) toggle pause/resume na menu "Áudio"
+    ├── AudioPlayAction.kt           # (v1.5) tocar a seleção; corrigido em v1.9 (RF-48, DEF-07)
     ├── AudioStopAction.kt           # (v1.5) parar reprodução e fechar mixer
+    ├── SpeechSpeedActions.kt        # (v1.9) submenu "Velocidade" e seus presets (RF-47)
     ├── SplitSessionAction.kt        # (v1.7) menu "Dividir" no cabeçalho (RF-36)
     └── OpenClaudeDockAction.kt
 src/main/resources/META-INF/
@@ -1228,12 +1297,15 @@ Responsabilidades:
    executável existe e modelo (arquivo `.onnx`) existe e é legível, sem lançar exceção.
    Chamado fora da EDT via `executeOnPooledThread`, resultado cacheado e atualizado a cada
    N segundos ou quando configuração muda.
-2. **Síntese:** `synthesize(text, executable, modelPath): ByteArray` — lança o `piper` via
-   `GeneralCommandLine`, passa `text` por stdin, lê stdout (PCM cru), retorna bytes.
-   Processo é destruído se timeout ou erro. Fora da EDT (RNF-20).
-3. **Reprodução:** `playBytes(pcmBytes, sampleRate=22050, channels=1)` — abre um `Clip` ou
+2. **Argumentos:** `piperParameters(modelPath, speedPercent): List<String>` _(v1.9)_ — função
+   pura, testável sem lançar o `piper`. Em 100% devolve só `-m … --output-raw`; fora disso
+   acrescenta `--length-scale`, formatado com `Locale.ROOT` (RNF-31). Ver D-40.
+3. **Síntese:** `synthesize(text, executable, modelPath, speedPercent): ByteArray` — lança o
+   `piper` via `GeneralCommandLine`, passa `text` por stdin, lê stdout (PCM cru), retorna bytes.
+   Fora da EDT (RNF-20). **Sem timeout** — ver Achado 31.
+4. **Reprodução:** `playBytes(pcmBytes, sampleRate=22050, channels=1)` — abre um `Clip` ou
    `SourceDataLine`, reproduz, libera recursos em `finally` (RNF-22).
-4. **Ciclo de vida:** `pause()` (guarda posição), `resume()` (restaura e reinicia), `stop()`
+5. **Ciclo de vida:** `pause()` (guarda posição), `resume()` (restaura e reinicia), `stop()`
    (fecha clip e processo). Estado é simples: Idle | Playing | Paused.
 
 Nenhum acoplamento a `Project`, serviços, UI, actions, ou listeners — é lógica pura.
@@ -1267,11 +1339,28 @@ Ambos chamam `ClaudeTtaSessions.getInstance(project).pause()`, `.resume()`, `.st
 O `DefaultActionGroup` é criado em `ClaudeToolWindowFactory` (onde já são adicionadas as ações
 de Nova/Retomar/Copiar/Exportar) e adicionado à lista `setTitleActions(...)`.
 
-**Campos de configuração novos (v1.5, RF-32).**
+**Submenu "Velocidade" (v1.9, RF-47).**
+
+`SpeechSpeedMenuAction` é um `DefaultActionGroup("Velocidade", true)` pendurado no fim do menu
+"Áudio", com um `SpeechSpeedAction` (`ToggleAction`) por entrada de `ClaudeDockSettings.SPEECH_SPEEDS`.
+Não há estado nem lista próprios: `isSelected` lê `effectiveSpeechSpeed()` e `setSelected` grava
+`speechSpeed`, e os itens saem da mesma tabela que a tela de configuração consome.
+
+**A tabela mora no `ClaudeDockSettings`, não nas actions.** É o domínio do valor, e é o que
+permite `effectiveSpeechSpeed()` aproximar para a velocidade oferecida mais próxima sem que o
+pacote de settings passe a depender do de ações (CB-59, CB-60).
+
+O `update()` do grupo reescreve o próprio rótulo para "Velocidade (…)", de modo que a velocidade
+em vigor apareça sem abrir o submenu. Desabilitar sem Piper é herdado — o `AudioMenuAction` já
+desabilita o grupo inteiro.
+
+**Campos de configuração novos (v1.5, RF-32; v1.9, RF-47).**
 
 `ClaudeDockSettings` (app-level) ganha:
 - `piperExecutable: String = "piper"` (default)
 - `piperModel: String = ""` (default vazio)
+- _(v1.9)_ `speechSpeed: Int = 100` — percentual, com `effectiveSpeechSpeed()` aproximando para a
+  entrada mais próxima de `SPEECH_SPEEDS`, a tabela que menu e tela compartilham (CB-59)
 
 Métodos:
 - `effectivePiperExecutable(): String` — trim, se vazio retorna default.
@@ -1294,6 +1383,12 @@ group("Piper TTS") {
         )
             .bindText(settings::piperModel)
             .comment("Caminho absoluto para a voz desejada. Obrigatório para ativar síntese.")
+    }
+    // v1.9 — RF-47
+    row("Velocidade da fala:") {
+        comboBox(SPEECH_SPEEDS.keys.toList(), textListCellRenderer("") { speechSpeedLabel(it) })
+            .bindItem({ settings.effectiveSpeechSpeed() }, { settings.speechSpeed = it ?: 100 })
+            .comment("Mesmos valores do submenu \"Velocidade\". \"1x\" mantém o padrão do modelo.")
     }
 }
 ```
@@ -1495,6 +1590,10 @@ Registrados por exigência do roteiro de SDD:
 | **CB-56** | _(v1.7)_ Várias sessões da mesma aba conectadas ao mesmo servidor MCP do plugin oficial | É a Q-02 de sempre, agora mais provável: nada garante qual sessão "possui" um diff aberto. Não regride nada — duas abas já produziam o mesmo — mas passa a acontecer com mais frequência |
 | **CB-57** | _(v1.7.2)_ "Select Previous/Next Tab" acionado com uma aba só | A guarda de `ClaudeTabNavigation` segura a chamada: sem ela a plataforma dispara assertion, não um no-op (DEF-02). Os itens continuam visíveis no menu, porque quem os monta não nos consulta |
 | **CB-58** | _(v1.7.2)_ "Show Tabs" acionado no menu de contexto | No-op deliberado: as abas já estão visíveis no cabeçalho da tool window, e não há painel de abas a revelar como no terminal nativo |
+| **CB-59** | _(v1.9)_ `speechSpeed` fora da tabela no `claude-code-dock.xml`, editado à mão (ex.: 110, 9999, 0) | `effectiveSpeechSpeed()` devolve a velocidade **mais próxima** das oferecidas — 110 vira 100, 9999 vira 200, 0 vira 25. Limitar a faixa não bastaria: um valor solto dentro dela deixaria o seletor da tela sem item selecionado, e o `apply` gravaria nulo |
+| **CB-60** | _(v1.9)_ Menu e tela oferecendo listas diferentes | Impossível por construção: as duas leem `ClaudeDockSettings.SPEECH_SPEEDS`, e T-1.54 fixa o conteúdo dela. A tabela mora no settings, e não nas actions, para que a tela não dependa do pacote de ações |
+| **CB-61** | _(v1.9)_ Velocidade trocada durante uma fala em curso | A fala atual segue na velocidade com que foi sintetizada; a nova vale a partir do próximo play. O piper sintetiza o áudio inteiro antes de tocar, então não há o que reajustar (Q-29) |
+| **CB-62** | _(v1.9)_ Modelo cujo `config.json` traz `length_scale` diferente de 1.0 | Em 100% a flag não é passada e o valor do modelo prevalece — é o comportamento correto, e é por isso que 100% se chama "padrão do modelo" e não "1x" (D-40) |
 
 ---
 
@@ -1528,6 +1627,7 @@ Registrados por exigência do roteiro de SDD:
 | **R-24** | _(v1.6)_ O trecho gravado é o render do terminal, com quebras de linha na largura da aba — o arquivo pode não conter o texto como o autor o escreveu | Baixo | Alta | Inerente a exportar de um terminal, e o mesmo que a cópia por seleção (RF-26) já entrega há rodadas sem reclamação. Declarado em [Fora de Escopo](#fora-de-escopo); Q-22 registra a alternativa se incomodar |
 | **R-25** | _(v1.7)_ `JBTerminalWidgetListener` não tem contrato de estabilidade: um upgrade pode acrescentar método abstrato ou mudar a semântica de `split(vertically)` | Médio | Média | O acoplamento está num arquivo só (RNF-27), e a semântica da direção tem teste de **geometria** (T-1.34/T-1.35) — inverter a flag lá em cima quebra o teste em vez de sair invertido na tela. O menu do cabeçalho não depende do listener e continuaria funcionando |
 | **R-26** | _(v1.7)_ Várias sessões por aba multiplicam processos `claude`, cada um com seu consumo de memória e sua conexão ao servidor MCP | Baixo | Alta | É o custo pedido: dividir é para rodar mais de um Claude Code. Mesmo custo de abrir mais abas, que já não tem limite (RNF-18). Fechar a pane encerra o processo (RF-39) |
+| **R-28** | _(v1.9)_ Nos extremos da faixa (25% e 200%) a inteligibilidade cai, e o ponto em que cai varia por modelo | Baixo | Média | É ajuste de gosto, reversível em dois cliques pelo menu, e o padrão continua sendo o do modelo. A lista é fechada e curta justamente para o usuário topar com o limite escolhendo, não digitando; quem quiser além disso está pedindo outra voz, não outra velocidade |
 | **R-27** | _(v1.7)_ Com mais sessões simultâneas, a ambiguidade de Q-02 (qual sessão "possui" um diff) deixa de ser hipótese e vira rotina | Médio | Alta | Não é regressão — duas abas já bastavam. O split apenas torna o caso comum, o que **ajuda**: Q-02 passa a ser observável no uso real, que é a condição que faltava para decidi-la (CB-56) |
 
 ---
@@ -1586,6 +1686,13 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.44**     | `ClaudeSessionSplitter`           | _(v1.8.1)_ `isSplit` distingue a pane sozinha da dividida — é o que habilita/desabilita as ações (RF-45) |
 | **T-1.46**     | `ClaudeSessionSplitter`           | _(v1.8.2)_ `firstPane` acha a sobrevivente sob splitter aninhado — é dela que saem a chave, o `preferredFocusableComponent` e o foco (RF-42, DEF-05) |
 | **T-1.47**     | `ClaudeSessionSplitter`           | _(v1.8.2)_ `countPanes` acompanha divisões e fechamentos, e componente sem marca não conta — é o que decide se a aba ainda tem sessão viva (RF-44) |
+| **T-1.48**     | `ClaudeDockSettings`              | _(v1.9)_ `speechSpeed` nasce em 100 e sobrevive ao `loadState` (RF-47) |
+| **T-1.49**     | `ClaudeDockSettings`              | _(v1.9)_ `effectiveSpeechSpeed()` aproxima para a velocidade oferecida mais próxima: 110 → 100, 9999 → 200, 0 → 25 (CB-59) |
+| **T-1.50**     | `ClaudePiperPlayback`             | _(v1.9)_ Em 100% os argumentos **não** trazem `--length-scale` — é o teste que protege o padrão do modelo (D-40, CB-62) |
+| **T-1.51**     | `ClaudePiperPlayback`             | _(v1.9)_ 200% → `0.500` e 50% → `2.000`: prova que a conversão é **inversa** e não está trocada de lado (RF-47) |
+| **T-1.52**     | `ClaudePiperPlayback`             | _(v1.9)_ Com `Locale` pt-BR imposto, 150% ainda sai `0.667` com **ponto**. É o teste que falha se alguém trocar `String.format(Locale.ROOT, …)` por `"%.3f".format(…)` (RNF-31) |
+| **T-1.53**     | `SpeechSpeedMenuAction`           | _(v1.9)_ O submenu monta **um item por velocidade oferecida**, e o rótulo de cada um vem da tabela compartilhada (CB-60) |
+| **T-1.54**     | `ClaudeDockSettings`              | _(v1.9)_ `SPEECH_SPEEDS` é exatamente `25…200` na ordem de exibição, e `speechSpeedLabel` cai em `"110%"` fora dela — é o teste que trava a lista contra divergir entre menu e tela |
 | **T-1.45**     | `ClaudeSessionSplitter`           | _(v1.8.1)_ **`paneOf` devolve `null` para pane já fechada.** Foi este teste que pegou DEF-03: `close` desanexa o splitter, mas a pane removida continua filha dele, então sem checar `isDescendingFrom` ela ainda "estava" na aba — e a guarda de RF-44 não teria efeito nenhum |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
@@ -1688,6 +1795,11 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.49**     | _(v1.8.1)_ "Fechar divisão" numa aba com duas sessões: a aba **não** ganha o sufixo "(encerrado)", e a sessão sobrevivente segue viva (RF-44, DEF-03) |
 | **T-3.50**     | _(v1.8.1)_ Numa aba dividida, encerrar uma sessão pelo `/exit`: a aba **não** é marcada enquanto a vizinha viver; encerrando as duas, aí sim aparece "(encerrado)" (RF-44, Q-26) |
 | **T-3.51**     | _(v1.8.1)_ Numa aba sem divisão, o menu "Dividir" mostra "Trocar de lado", "Girar divisão" e "Fechar divisão" **cinzas**, e as duas de dividir habilitadas (RF-45) |
+| **T-3.54**     | _(v1.9)_ Selecionar um trecho e acionar "Tocar seleção": **sai som**. Antes de v1.9 não saía nada e nada era avisado (RF-48, DEF-07) |
+| **T-3.55**     | _(v1.9)_ Trocar para 2x no menu e tocar o mesmo trecho: a fala sai visivelmente mais rápida; voltar a 1x devolve o ritmo original (RF-47) |
+| **T-3.56**     | _(v1.9)_ Trocar a velocidade **na tela de Settings** e conferir que o menu "Áudio" reflete a escolha, e vice-versa: as duas UIs mostram a mesma lista e o mesmo item marcado (RF-47) |
+| **T-3.57**     | _(v1.9)_ Fechar e reabrir o IDE: a velocidade escolhida persiste no `claude-code-dock.xml` (RF-47) |
+| **T-3.58**     | _(v1.9)_ Acionar "Tocar seleção" **sem seleção** e com a aba vazia: aparece aviso nos dois casos, nenhum silêncio (RF-48) |
 
 ### Testes de regressão
 
@@ -1870,6 +1982,13 @@ abre no visualizador do IDE de ponta a ponta.
 - **When** o usuário fecha uma delas
 - **Then** a outra ocupa o espaço inteiro e continua rodando; fechando a aba depois, nenhum processo `claude` sobra
 
+**CA-31 — A fala obedece à velocidade escolhida** _(v1.9, RF-47)_
+
+- **Given** o Piper configurado e a velocidade em 1x
+- **When** o usuário abre o menu "Áudio" → "Velocidade", escolhe 2x e toca um trecho selecionado
+- **Then** o item 2x aparece marcado, o rótulo do grupo passa a "Velocidade (2x)", a fala sai mais
+  rápida que antes, e a escolha continua valendo depois de reabrir o IDE
+
 ---
 
 ## Plano de Rollout
@@ -1944,6 +2063,7 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-24** | _(v1.7)_ A divisão deveria oferecer "retomar sessão" (`--resume`), e não só sessão nova?                                     | Adiado. Dividir hoje abre sempre uma sessão nova. Retomar dentro da divisão exigiria um submenu por direção (4 itens) — reavaliar se o uso mostrar que dividir para retomar é comum                                                                                             |
 | **Q-25** | _(v1.7)_ Vale navegar entre panes por teclado (`gotoNextSplitTerminal` do listener)?                                          | Adiado deliberadamente. O `default` da interface devolve `false`, então a ação nem aparece — custo zero por não implementar. Implementar exige ordenar as panes, que a árvore não dá de graça                                                                                   |
 | **Q-26** | ~~_(v1.7)_ Com a aba dividida, o que o título "(encerrado)" deveria significar?~~                                            | ✅ **RESOLVIDO em v1.8.1 pelo uso real.** Significa "não há mais sessão viva nesta aba" — contando as panes na árvore, que era a saída descartada como cara em v1.7 e custou seis linhas. Virou RF-44, depois de DEF-03 mostrar o oposto na prática                              |
+| **Q-29** | _(v1.9)_ Vale aplicar a nova velocidade à fala **em curso**, e não só à próxima?                                              | **Recusado, com o motivo no mecanismo.** O piper sintetiza o áudio inteiro antes de tocar (`synthesize` lê todo o stdout e só então o `Clip` abre): não há stream a reajustar. Aplicar no meio seria re-sintetizar do zero e reposicionar por frame — fila e posição, exatamente o que RNF-23 mantém fora. O custo real é baixo: a fala típica dura segundos, e parar e tocar de novo já resolve |
 | **Q-28** | _(v1.8)_ Vale arrastar panes com o mouse para reorganizá-las, como o editor faz com as abas?                                 | **Avaliado e adiado, com o levantamento feito.** Mecanismo existe (`DnDSupport`; `DockManager`/`DockContainer`). O que falta é **onde agarrar**: o editor arrasta o rótulo da aba, e as nossas panes não têm aba — a superfície delas é do terminal, onde arrastar é selecionar texto (RF-26). Exigiria barra de título por pane, UI permanente para ação ocasional. RF-43 cobre o uso de 2–4 panes por ações. Reabrir se o uso mostrar aninhamento profundo, onde trocar/girar não bastam |
 | **Q-27** | _(v1.7)_ As degradações graciosas de engine (CB-26, CB-36, CB-47, R-15) deveriam ser removidas agora que o Achado 27 provou que a sessão é sempre CLASSIC? | Não. Custam uma linha (`?: return`) e protegem contra a plataforma mudar o retorno de `createTerminalWidget` num upgrade. O que mudou foi a **probabilidade** de R-15, não a decisão                                                                                             |
 

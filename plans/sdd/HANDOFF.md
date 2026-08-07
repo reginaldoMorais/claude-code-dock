@@ -4,21 +4,21 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-03 (tarde)
+- **Última atualização:** 2026-08-07
 
 ---
 
 ## Estado atual
 
-**Fase: v1.8.2 — divisão da aba (RF-36 a RF-46); DEF-03, DEF-05 e DEF-06 corrigidos.**
-**Base: v1.6 commitada em `main`. 113 testes verdes.**
+**Fase: v1.9 — velocidade da fala (RF-47); DEF-07 corrigido (RF-48).**
+**Base: v1.8.2 commitada em `main`. 121 testes verdes.**
 
 | Artefato                                                         | Estado                                                                  |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                            |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.8 — RF-36 a RF-43 (split + reposicionar); DEF-02; D-33 a D-38; Achados 27/28/29 |
-| `HANDOFF.md`                                                     | ✅ Este arquivo, com novo log de 2026-08-03                             |
-| Código do plugin                                                 | ✅ **82 testes passando** (69 + 13 novos), sem warnings                 |
+| [SPEC.md](SPEC.md)                                               | ✅ v1.9 — RF-47/RF-48; RNF-31; DEF-07; D-39/D-40; Q-29; Achado 31       |
+| `HANDOFF.md`                                                     | ✅ Este arquivo, com novo log de 2026-08-07                             |
+| Código do plugin                                                 | ✅ **121 testes passando** (113 + 8 de v1.9), sem warnings              |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente               |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                 |
 | T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                  |
@@ -31,6 +31,8 @@
 | **RF-31/RF-32 (Piper TTS)**                                      | ✅ **COMPLETOS** — menu "Áudio" no cabeçalho; config executável + modelo |
 | `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23               |
 | **RF-30 (play no popup)**                                        | ⚰️ **DESCARTADO em v1.5.1** — UX redundante; menu Áudio (RF-31) já cobre |
+| **RF-47 (velocidade da fala)**                                   | ✅ Submenu + seletor em Settings, 0,25x a 2x — **validado no IDE**     |
+| **RF-48 / DEF-07 ("Tocar seleção")**                             | ✅ Corrigido em v1.9 e **validado no IDE** (T-3.54)                    |
 | **RF-33/34/35 (export do trecho)**                               | ✅ Implementados e **validados no IDE** pelo usuário                    |
 | `ClaudeSelectionExport`                                          | ✅ Objeto puro: nome sugerido + gravação (RNF-26)                       |
 | **RF-36 a RF-40 (split da aba)**                                 | ✅ Implementados e **validados no IDE** pelo usuário (4 panes)          |
@@ -54,9 +56,11 @@
 `ClaudeSessionSplitter.kt`, `SplitSessionAction.kt`, o listener nativo na factory e o ciclo de
 vida de panes em `ClaudeDockSessions`.
 
-**Próximos passos:** roteiros manuais T-3.34-41 (split) e T-3.21-23 (Piper), os dois dependendo
-de IDE real. **T-3.34 é o mais importante**: a cadeia que faz "Split Right" aparecer no menu de
-contexto foi lida no bytecode, não exercitada.
+**Próximos passos:** roteiros manuais T-3.34-41 (split) e T-3.21-23 (Piper), ainda dependendo de
+IDE real. Os da v1.9 (T-3.54 a T-3.58) já foram executados e aprovados.
+
+**Dívida conhecida (Achado 31):** `ClaudePiperPlayback.synthesize` nunca teve o timeout que o
+SPEC prometia. O KDoc já diz a verdade; implementar o timeout continua pendente.
 
 ---
 
@@ -259,6 +263,29 @@ sobre aparência. Qualquer mudança nessa linha começa medindo o ambiente resul
 > mesmo arquivo desde 2026-08-01 e mesmo assim custou quatro tentativas. **Em busca sobre jar,
 > `grep -a` desde a primeira chamada, e sempre com um controle conhecido junto.**
 
+### Piper: o que a CLI aceita e de onde vêm os defaults (2026-08-07)
+
+Obtido de `piper --help` e da leitura do pacote instalado
+(`~/.pyenv/versions/3.11.6/lib/python3.11/site-packages/piper/`).
+
+- **Flags de síntese:** `-m/--model`, `-c/--config`, `-i/--input-file`, `-f/--output-file`,
+  `-d/--output-dir`, `--output-raw`, `-s/--speaker`, `--length-scale`, `--noise-scale`,
+  `--noise-w-scale`, `--cuda`, `--sentence-silence`, `--volume`, `--no-normalize`, `--data-dir`,
+  `--debug`. Não há flag de "velocidade": `--length-scale` **é** o controle, e é **inverso** —
+  "Phoneme length", fonema mais longo, fala mais lenta.
+- **De onde vem o default:** `voice.py:449-450` — `if length_scale is None: length_scale =
+  self.config.length_scale`, ou seja, o `config.json` que acompanha o `.onnx`.
+  `config.py:8` define `DEFAULT_LENGTH_SCALE = 1.0`, mas ele só entra se o JSON não trouxer o seu.
+  **Omitir a flag ≠ passar 1.0** (D-40).
+- **Formato do número:** `__main__.py:61` declara `type=float` no argparse — recusa vírgula
+  decimal. Daí RNF-31.
+- **Medido com `pt_BR-faber-medium`**, mesma frase, `-f` para WAV:
+  `--length-scale 2.000` → 3,84 s · sem flag → 2,19 s · `--length-scale 0.500` → 1,42 s.
+  Monotônico e no sentido esperado, mas **não linear** — o silêncio entre frases não escala
+  junto. Serve para provar a direção, não para prometer "o dobro da velocidade".
+- Esse modelo traz `length_scale: 1` no `config.json`, então para **ele** omitir a flag coincide
+  com 1.0. Não generalizar: é coincidência de uma voz, não regra.
+
 ### API de terminal disponível na build 262
 
 `AbstractTerminalRunner.startShellTerminalWidget` · `LocalTerminalDirectRunner.createTerminalRunner`
@@ -341,6 +368,26 @@ apenas envia nada. A falha é silenciosa.
 fácil de deixar passar quanto um `null` é de notar — considerar adicionar testes que validam
 o **valor** da constante, não só sua existência.
 
+### D-39 — velocidade guardada como percentual `Int`, não como `length-scale` _(v1.9)_
+
+O piper fala em `length-scale`: 0.5 é rápido, 2.0 é lento. Guardar isso cru no
+`claude-code-dock.xml` significaria persistir um número **invertido** em relação à intuição, num
+arquivo que o usuário edita à mão. O campo é `speechSpeed: Int` em porcentagem — 200 é o dobro da
+velocidade —, e a conversão vive num único lugar (`piperParameters`).
+
+Ganho secundário: o spinner do Kotlin UI DSL é de `Int`, e o `coerceIn` de faixa fica idêntico ao
+de `sessionPadding`, que já existia. Nenhum idioma novo entrou no projeto por causa disto.
+
+### D-40 — em 100% a flag `--length-scale` não é passada _(v1.9)_
+
+Verificado em `piper/voice.py:449-450`: quando `length_scale` chega `None`, o piper usa o valor do
+`config.json` **do modelo**. Passar `--length-scale 1.0` em 100% substituiria o padrão de fábrica
+da voz por 1.0 — que **não é a mesma coisa**, ainda que coincida em muitos modelos (o
+`pt_BR-faber-medium` usado nos testes traz `length_scale: 1`).
+
+Por isso o preset de 100% se chama "1x (padrão do modelo)" e não "1x": ele devolve a voz ao que o
+autor dela calibrou, e não a um número escolhido por nós. Custo da decisão: um `if` (CB-62).
+
 ---
 
 ## Desafios em aberto
@@ -391,6 +438,95 @@ Concluído também: ~~RF-24/RF-26~~ · ~~T-3.14~~ · ~~T-3.17 (conclusivo: RF-27
 ---
 
 ## Log
+
+### 2026-08-07 — v1.9: velocidade da fala, e uma ação que nunca tocou
+
+**Contexto.** Pedido do usuário: poder mudar a velocidade da fala do Piper, pelo menu de áudio
+ou pela configuração do plugin. O SPEC v1.5 tinha posto `--length-scale` explicitamente **fora de
+escopo** — esta versão revoga essa linha, e só ela: `--noise-scale`, `--volume` e `--speaker`
+continuam fora, com o motivo escrito.
+
+**Fase 1 — o que a verificação mudou no plano.** Três coisas que eu teria errado adivinhando:
+
+1. `--length-scale` é **inverso** da velocidade. Um mapeamento direto sairia de cabeça para
+   baixo, e o teste que pega isso (T-1.51) só existe porque a direção foi conferida antes.
+2. Omitir a flag **não** é o mesmo que passar `1.0` — `voice.py:449-450` cai no `config.json` do
+   modelo. Virou D-40, e é a razão de o preset se chamar "1x (padrão do modelo)".
+3. O argparse do piper é `type=float` e recusa vírgula. Numa JVM pt-BR — a desta máquina — o
+   formato default produziria `0,667`, o piper sairia com código diferente de zero, e o sintoma
+   seria "não sai som", sem erro visível. Virou RNF-31 e o teste T-1.52.
+
+**Implementação.**
+
+- `ClaudeDockSettings`: `speechSpeed: Int = 100` + `effectiveSpeechSpeed()` com `coerceIn(50,200)`,
+  copiando o par `sessionPadding`/`effectivePadding()` que já existia (D-39).
+- `ClaudePiperPlayback`: `piperParameters(modelPath, speedPercent)` extraída como função pura —
+  é o que torna a regra testável sem lançar o piper. `synthesize` ganhou o parâmetro com valor
+  default, então os seis testes anteriores seguiram compilando sem alteração.
+- `SpeechSpeedActions.kt` (novo): `SpeechSpeedMenuAction` + `SpeechSpeedAction` (`ToggleAction`).
+  Sem estado nem lista próprios — os itens saem da tabela do settings e gravam o mesmo campo.
+- `ClaudeDockConfigurable`: terceira linha no grupo "Piper TTS", `comboBox` sobre a mesma tabela.
+- `ClaudeTtaSessions`: repassa a velocidade efetiva na chamada de síntese.
+
+**DEF-07, achado durante a implementação.** Ao procurar por onde a fala entra, `playText` tinha
+**um único chamador**: `AudioPlayAction`, lendo `PlatformDataKeys.CONTEXT_COMPONENT as?
+JBTerminalWidget`. Numa ação de título de tool window esse componente é a barra de ferramentas —
+o cast dá `null` e o clique não faz nada, em silêncio. Era o único ponto do cabeçalho que não
+passava pelo `ClaudeDockSessions`. Corrigido com `playSelectedSession()` no serviço, reusando
+`selectedWidget()`, `notify(...)` e `ClaudeSessionText.normalize` — nada novo foi escrito para
+isso. Sem essa correção a feature de velocidade não teria como ser ouvida pelo menu.
+
+**Achado 31.** O SPEC prometia um timeout de 20 s na síntese que **nunca existiu** — o código
+chama `process.waitFor()` sem argumento, e o `currentProcess?.destroy()` opera sobre um campo que
+nunca recebe atribuição. O KDoc foi corrigido para dizer a verdade; implementar o timeout ficou
+em Próximos passos.
+
+**Testes.** 113 → **120**, todos verdes. Sete novos: T-1.48/T-1.49 (padrão e clamp da
+velocidade), T-1.50 (100% omite a flag), T-1.51 (a conversão inversa), T-1.52 (locale pt-BR
+imposto), T-1.53 (rótulo do submenu). Nenhum lança o piper de verdade, seguindo a disciplina do
+arquivo. A direção da conversão foi confirmada **fora** da suíte, medindo os WAVs — está nos
+Fatos verificados.
+
+**Decisões.** D-39 (percentual `Int`, não `length-scale` `Double`) · D-40 (em 100% a flag não vai)
+· Q-29 (não reajustar a fala em curso — o piper sintetiza tudo antes de tocar; reajustar exigiria
+fila e posição, que RNF-23 mantém fora).
+
+**Correção de registro.** Duas afirmações deste arquivo diziam que `AudioPlayAction` "não estava
+integrado". Estava no menu desde a v1.5 — o que foi descartado em v1.5.1 é o play no **popup**
+(RF-30), outra coisa. A nota em D-29 foi corrigida no lugar.
+
+**Validação no IDE (mesmo dia).** `runIde`, com Piper configurado no sandbox: T-3.54 a T-3.58
+aprovados pelo usuário. "Tocar seleção" voltou a tocar, e a velocidade responde.
+
+**Ajuste pedido depois do teste.** A tela de configuração mostrava um número (100) enquanto o
+menu mostrava rótulos ("1x"). O usuário pediu a mesma seleção nos dois lugares, com a lista
+`0,25x … 2x` — o que **estendeu a faixa** de 50–200% para 25–200% e acrescentou 1,75x. Três
+consequências, todas registradas:
+
+1. A tabela de velocidades saiu de `SpeechSpeedMenuAction` para `ClaudeDockSettings.SPEECH_SPEEDS`.
+   Com as duas UIs consumindo a mesma lista, divergir virou impossível por construção — antes
+   dependia de disciplina, agora T-1.54 trava o conteúdo.
+2. O spinner virou `comboBox`, e com isso **não existe mais valor customizado**. O CB-60 original
+   ("110% não casa com preset algum") perdeu o objeto e foi reescrito.
+3. `effectiveSpeechSpeed()` deixou de apenas limitar a faixa e passou a **aproximar** para a
+   entrada mais próxima. Não é refinamento: com um `comboBox`, um valor solto no XML deixaria o
+   seletor sem item selecionado e o `apply` gravaria nulo. O clamp anterior não cobria isso.
+
+`SimpleListCellRenderer.create` foi a primeira escolha para o renderer e está **deprecada** —
+trocada por `textListCellRenderer`. A suíte segue sem warnings.
+
+**Resultado.** Código completo, 121 testes verdes, e **tudo validado no IDE**, incluindo o
+seletor novo — T-3.54 a T-3.58 aprovados pelo usuário em duas rodadas de `runIde` no mesmo dia.
+RF-47 e RF-48 fechados.
+
+**Próximos passos.** Nada pendente na v1.9. A dívida que fica é anterior a ela: o timeout da
+síntese (Achado 31), os testes de integração T-2.\* e os roteiros manuais herdados das versões
+anteriores.
+
+**Não verificado nesta rodada:** `verifyPlugin` não rodou — `/home` está em 100% e o verifier não
+consegue descompactar o IDE que baixa. É ambiente, não código, mas segue sem confirmação de que
+nenhuma API fora de `com.intellij.modules.platform` entrou. `textListCellRenderer` é a única API
+nova da v1.9, e é do pacote `com.intellij.ui.dsl`.
 
 ### 2026-08-03 (noite/2) — DEF-05 e DEF-06: a aba morria de foco, e o nome mentia
 
@@ -954,6 +1090,12 @@ seria UI paralela sem capacidade nova.
 **Código:** `AudioPlayAction.kt` implementado mas não integrado ao popup — fique no repositório 
 para futura reutilização ou descarte deliberado no cleanup final. Compilação e testes (82) 
 continuam passando.
+
+> **Correção (2026-08-07, v1.9):** a frase acima ficou ambígua e foi lida errado por duas
+> sessões seguidas. `AudioPlayAction` **nunca** saiu do menu "Áudio" do cabeçalho — o que foi
+> descartado em v1.5.1 é o botão de play no **popup de seleção** (RF-30), que é outra coisa.
+> Pior: a ação estava no menu e **não funcionava**, porque lia `CONTEXT_COMPONENT`. Ver DEF-07 e
+> RF-48.
 
 **Estado:** SPEC.md v1.5.1, HANDOFF.md e repositório alinhados. Branch `feature/tts` pronto para 
 merge após validação final dos testes manuais T-3.21-23 (Piper no IDE real).

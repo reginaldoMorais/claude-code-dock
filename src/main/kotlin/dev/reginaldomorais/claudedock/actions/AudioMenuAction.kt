@@ -24,6 +24,8 @@ class AudioMenuAction : DefaultActionGroup("Áudio", true) {
         addSeparator()
         add(AudioPauseResumeAction())
         add(AudioStopAction())
+        addSeparator()
+        add(SpeechSpeedMenuAction())
     }
 
     override fun getActionUpdateThread() = ActionUpdateThread.BGT
