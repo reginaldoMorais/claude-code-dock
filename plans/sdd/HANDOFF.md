@@ -11,13 +11,19 @@
 ## Estado atual
 
 **Fase: v1.9 — velocidade da fala (RF-47); DEF-07 corrigido (RF-48).**
-**Base: v1.8.2 commitada em `main`. 121 testes verdes.**
+**Publicado como release `v0.8.0` (tag em `c50861c`), sobre a base v1.8.2. 121 testes verdes.**
+
+> **Duas numerações, e não são a mesma.** O `SPEC.md` tem versionamento próprio (`v1.x`), que
+> conta rodadas de especificação; o release segue SemVer (`0.x.y`), no `CHANGELOG.md` e nas tags
+> do git. Mapa do que já saiu: **0.6.0** ← SPEC v1.5.1 · **0.7.0** ← SPEC v1.8.2 · **0.8.0** ←
+> SPEC v1.9. Cada release tem também uma tag `-rc` no commit do código, anterior ao da publicação.
 
 | Artefato                                                         | Estado                                                                  |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                            |
 | [SPEC.md](SPEC.md)                                               | ✅ v1.9 — RF-47/RF-48; RNF-31; DEF-07; D-39/D-40; Q-29; Achado 31       |
-| `HANDOFF.md`                                                     | ✅ Este arquivo, com novo log de 2026-08-07                             |
+| `HANDOFF.md`                                                     | ✅ Este arquivo, agora com o registro da release v0.8.0                 |
+| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)     |
 | Código do plugin                                                 | ✅ **121 testes passando** (113 + 8 de v1.9), sem warnings              |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente               |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                 |
@@ -52,15 +58,20 @@
 | Roteiros T-3.21-23 (Piper manual)                                | ⏳ Pendentes — aguardando IDE real com Piper                            |
 | Roteiros T-3.34-41 (split)                                       | ⏳ Pendentes — aguardando IDE real                                      |
 
-**Estado do repositório:** `main` com a v1.6 commitada e validada. A v1.7 acrescenta
+**Estado do repositório:** `main` na v1.9, árvore limpa, publicada como `v0.8.0`. Tags da rodada:
+`v0.8.0-rc` em `de5467e` (o código) e `v0.8.0` em `c50861c` (só o CHANGELOG). O split da v1.7 —
 `ClaudeSessionSplitter.kt`, `SplitSessionAction.kt`, o listener nativo na factory e o ciclo de
-vida de panes em `ClaudeDockSessions`.
+vida de panes em `ClaudeDockSessions` — está em `main` desde a release 0.7.0.
 
 **Próximos passos:** roteiros manuais T-3.34-41 (split) e T-3.21-23 (Piper), ainda dependendo de
 IDE real. Os da v1.9 (T-3.54 a T-3.58) já foram executados e aprovados.
 
 **Dívida conhecida (Achado 31):** `ClaudePiperPlayback.synthesize` nunca teve o timeout que o
 SPEC prometia. O KDoc já diz a verdade; implementar o timeout continua pendente.
+
+**Dívida conhecida (versão do plugin):** `gradle.properties` está em `pluginVersion = 0.1.0`
+enquanto a tag é `v0.8.0` — o plugin instalado se identifica como 0.1.0 em _Settings > Plugins_.
+Não corrigido aqui: subir a versão publicada é decisão de release do usuário.
 
 ---
 
@@ -438,6 +449,30 @@ Concluído também: ~~RF-24/RF-26~~ · ~~T-3.14~~ · ~~T-3.17 (conclusivo: RF-27
 ---
 
 ## Log
+
+### 2026-08-07 (fim do dia) — a release v0.8.0 e o CHANGELOG que este arquivo não conhecia
+
+**O que aconteceu.** A v1.9 saiu como release público `v0.8.0`. Duas coisas ficaram de fora daqui
+até agora, e as duas custam à próxima sessão:
+
+- **`CHANGELOG.md` existe desde `d99e9cd`** e nunca foi citado neste arquivo. Ele é o registro
+  voltado a quem **usa** o plugin — Keep a Changelog 1.1.0 + SemVer, em pt-BR — e cobre da
+  **0.6.0** em diante. Para trás não tenta competir: a seção "Versões anteriores" dele aponta de
+  volta para este HANDOFF, onde vivem as decisões e as descobertas. A referência agora é mútua.
+- **A release em si.** `c50861c` acrescentou a entrada `[0.8.0] — 2026-08-07` e recebeu a tag
+  `v0.8.0`. É commit de **documentação apenas**: o código da versão já estava em `de5467e`
+  (tag `v0.8.0-rc`), trazido para `main` pelo merge `421eb63`.
+
+**A confusão que motivou esta entrada.** Perguntado se o HANDOFF fora atualizado depois da v0.8.0,
+o `git log` respondia "não" — o último commit a tocá-lo era `de5467e`. Mas o conteúdo técnico da
+versão estava aqui desde então, na entrada `v1.9` logo abaixo. As duas coisas eram verdade porque
+**"v1.9" e "0.8.0" são a mesma versão com dois nomes**, e nada neste arquivo dizia isso. O mapa
+está agora no topo, em Estado atual.
+
+**Não corrigido.** `gradle.properties` segue em `pluginVersion = 0.1.0`, divergente da tag —
+registrado em Dívida conhecida por ser decisão de release, não de documentação.
+
+**Nenhum código mudou nesta rodada.** Os 121 testes da v1.9 continuam sendo o estado verificado.
 
 ### 2026-08-07 — v1.9: velocidade da fala, e uma ação que nunca tocou
 
