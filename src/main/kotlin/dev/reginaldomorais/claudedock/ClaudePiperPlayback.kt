@@ -2,12 +2,13 @@ package dev.reginaldomorais.claudedock
 
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.diagnostic.Logger
+import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
 import java.io.File
+import java.util.Locale
 import javax.sound.sampled.AudioFormat
 import javax.sound.sampled.AudioInputStream
 import javax.sound.sampled.AudioSystem
 import javax.sound.sampled.Clip
-import kotlin.math.min
 
 /**
  * ÚNICO ponto de acoplamento com Piper TTS e javax.sound.sampled (RNF-19).
@@ -60,16 +61,40 @@ object ClaudePiperPlayback {
     }
 
     /**
+     * Monta os argumentos do piper (RF-47).
+     *
+     * `length-scale` é o inverso da velocidade: fonema mais longo, fala mais lenta.
+     *
+     * Em 100% a flag é omitida de propósito — o `config.json` do modelo traz o `length_scale`
+     * dele, e passar 1.0 sobrescreveria esse padrão de fábrica da voz (D-40).
+     *
+     * `Locale.ROOT` é obrigatório: o argparse do piper é `type=float` e recusa vírgula decimal,
+     * que é justamente o que uma JVM pt-BR produziria (RNF-31).
+     */
+    internal fun piperParameters(modelPath: String, speedPercent: Int): List<String> {
+        val base = listOf("-m", modelPath, "--output-raw")
+        if (speedPercent == ClaudeDockSettings.DEFAULT_SPEECH_SPEED) return base
+
+        val lengthScale = String.format(Locale.ROOT, "%.3f", 100.0 / speedPercent)
+        return base + listOf("--length-scale", lengthScale)
+    }
+
+    /**
      * Sintetiza texto e retorna PCM cru (22050 Hz, 16-bit, mono).
-     * Fora da EDT. Lança ProcessOutput, capturando stderr. Timeout 20s.
+     * Fora da EDT. Sem timeout: o `waitFor()` abaixo espera o piper terminar (Achado 31).
      * Nenhum log do texto (RNF-21).
      */
-    fun synthesize(text: String, executable: String, modelPath: String): ByteArray? {
+    fun synthesize(
+        text: String,
+        executable: String,
+        modelPath: String,
+        speedPercent: Int = ClaudeDockSettings.DEFAULT_SPEECH_SPEED,
+    ): ByteArray? {
         if (text.isBlank()) return null
 
         return try {
             val cmd = GeneralCommandLine(executable)
-                .withParameters("-m", modelPath, "--output-raw")
+                .withParameters(piperParameters(modelPath, speedPercent))
                 .withCharset(Charsets.UTF_8)
 
             val process = cmd.createProcess()

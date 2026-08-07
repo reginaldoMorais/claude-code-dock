@@ -36,6 +36,7 @@ class ClaudeTtaSessions(private val project: Project) {
                 val settings = ClaudeDockSettings.getInstance()
                 val executable = settings.effectivePiperExecutable()
                 val model = settings.effectivePiperModel()
+                val speed = settings.effectiveSpeechSpeed()
 
                 if (!ClaudePiperPlayback.canSynthesize(executable, model)) {
                     LOG.warn("Piper not available for synthesis")
@@ -44,7 +45,7 @@ class ClaudeTtaSessions(private val project: Project) {
                     return@executeOnPooledThread
                 }
 
-                val pcm = ClaudePiperPlayback.synthesize(text, executable, model)
+                val pcm = ClaudePiperPlayback.synthesize(text, executable, model, speed)
                 if (pcm == null) {
                     state = TtsState.Idle
                     notifyStateChanged()
