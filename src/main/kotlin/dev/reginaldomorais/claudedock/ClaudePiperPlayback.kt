@@ -5,6 +5,8 @@ import com.intellij.openapi.diagnostic.Logger
 import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 import javax.sound.sampled.AudioFormat
 import javax.sound.sampled.AudioInputStream
 import javax.sound.sampled.AudioSystem
@@ -28,6 +30,9 @@ object ClaudePiperPlayback {
 
     private var currentClip: Clip? = null
     private var currentProcess: Process? = null
+
+    /** Prazo da síntese (RNF-20). Constante em código: é medida de implementação, não preferência. */
+    private const val TIMEOUT_SECONDS = 20L
 
     /**
      * Verifica se síntese é possível: executável existe E modelo (.onnx) existe.
@@ -81,39 +86,59 @@ object ClaudePiperPlayback {
 
     /**
      * Sintetiza texto e retorna PCM cru (22050 Hz, 16-bit, mono).
-     * Fora da EDT. Sem timeout: o `waitFor()` abaixo espera o piper terminar (Achado 31).
-     * Nenhum log do texto (RNF-21).
+     * Fora da EDT. Nenhum log do texto (RNF-21).
+     *
+     * O processo fica em `currentProcess` enquanto roda: é o que permite a `stop()` abortar uma
+     * síntese em curso (RNF-23). Antes da correção do Achado 31 o campo nunca era atribuído, e o
+     * `destroy()` de `stopCurrent` operava sempre sobre `null` — o piper seguia até o fim.
+     *
+     * A leitura do stdout roda em outra thread **de propósito**: `readBytes()` só volta no EOF, e
+     * o piper trava se o buffer do pipe encher sem ninguém lendo. Um `waitFor` com prazo depois de
+     * uma leitura bloqueante não limitaria coisa nenhuma (RNF-20).
      */
     fun synthesize(
         text: String,
         executable: String,
         modelPath: String,
         speedPercent: Int = ClaudeDockSettings.DEFAULT_SPEECH_SPEED,
+        timeoutSeconds: Long = TIMEOUT_SECONDS,
     ): ByteArray? {
         if (text.isBlank()) return null
 
+        var launched: Process? = null
         return try {
             val cmd = GeneralCommandLine(executable)
                 .withParameters(piperParameters(modelPath, speedPercent))
                 .withCharset(Charsets.UTF_8)
 
             val process = cmd.createProcess()
-            val stdin = process.outputStream
-            stdin.write(text.toByteArray(Charsets.UTF_8))
-            stdin.close()
+            launched = process
+            currentProcess = process
 
-            val stdoutBytes = process.inputStream.readBytes()
-            val exitCode = process.waitFor()
+            val stdout = CompletableFuture.supplyAsync { process.inputStream.readBytes() }
+            process.outputStream.use { it.write(text.toByteArray(Charsets.UTF_8)) }
 
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                LOG.warn("Piper synthesis timed out after ${timeoutSeconds}s")
+                process.destroyForcibly()
+                return null
+            }
+
+            val exitCode = process.exitValue()
             if (exitCode != 0) {
+                // Também é o caminho de uma síntese cancelada por stop(): o destroy mata o piper
+                // e ele sai com código diferente de zero.
                 LOG.warn("Piper synthesis failed with exit code $exitCode")
                 return null
             }
 
-            stdoutBytes.takeIf { it.isNotEmpty() }
+            stdout.get().takeIf { it.isNotEmpty() }
         } catch (e: Exception) {
             LOG.warn("Failed to synthesize with Piper", e)
             null
+        } finally {
+            // Só limpa se ninguém tiver começado outra síntese no meio-tempo.
+            if (currentProcess === launched) currentProcess = null
         }
     }
 

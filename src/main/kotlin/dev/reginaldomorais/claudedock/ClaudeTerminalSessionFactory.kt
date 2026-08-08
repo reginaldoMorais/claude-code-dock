@@ -119,15 +119,6 @@ object ClaudeTerminalSessionFactory {
     }
 
     /**
-     * Conteúdo do buffer da sessão: scrollback mais a tela visível (RF-21).
-     *
-     * No engine CLASSIC a plataforma monta a seleção do topo do histórico até a última linha
-     * da tela. Fora dele a interface cai no seu `default`, que devolve texto vazio — o botão
-     * de copiar avisa em vez de quebrar (CB-26).
-     */
-    fun readText(widget: TerminalWidget): CharSequence = widget.getText()
-
-    /**
      * Escreve [input] direto no PTY, como se o usuário tivesse digitado (RF-22).
      *
      * É o mesmo caminho do [ClaudeEscapeForwarder]. `sendCommandToExecute` não serve aqui:

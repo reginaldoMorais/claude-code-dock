@@ -4,59 +4,60 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-07
+- **Última atualização:** 2026-08-08
 
 ---
 
 ## Estado atual
 
-**Fase: v1.9 — velocidade da fala (RF-47); DEF-07 corrigido (RF-48).**
-**Publicado como release `v0.8.0` (tag em `c50861c`), sobre a base v1.8.2. 121 testes verdes.**
+**Fase: v1.9.1 — quitação do Achado 31 (prazo da síntese + cancelamento de RNF-23).**
+**A v1.9 saiu como release `v0.8.0` (tag em `c50861c`). 123 testes verdes; a v1.9.1 ainda não foi
+publicada — é a primeira rodada de dívida, não de funcionalidade.**
 
 > **Duas numerações, e não são a mesma.** O `SPEC.md` tem versionamento próprio (`v1.x`), que
 > conta rodadas de especificação; o release segue SemVer (`0.x.y`), no `CHANGELOG.md` e nas tags
 > do git. Mapa do que já saiu: **0.6.0** ← SPEC v1.5.1 · **0.7.0** ← SPEC v1.8.2 · **0.8.0** ←
 > SPEC v1.9. Cada release tem também uma tag `-rc` no commit do código, anterior ao da publicação.
 
-| Artefato                                                         | Estado                                                                  |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                            |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.9 — RF-47/RF-48; RNF-31; DEF-07; D-39/D-40; Q-29; Achado 31       |
-| `HANDOFF.md`                                                     | ✅ Este arquivo, agora com o registro da release v0.8.0                 |
-| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)     |
-| Código do plugin                                                 | ✅ **121 testes passando** (113 + 8 de v1.9), sem warnings              |
-| **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente               |
-| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                 |
-| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                  |
-| RF-22 (`/export`), RF-24 (cópia), RF-26 (botão de seleção)       | ✅ Implementados e em uso                                               |
-| RF-27 (saída plana)                                              | ⚰️ **REMOVIDO em v1.4** — funcionava, e não era o que servia            |
-| RF-28 (respiro nas bordas)                                       | ✅ Implementado e **validado no IDE**, em 20px por padrão               |
-| RF-29 (capa de carregamento)                                     | ✅ Implementado e **validado no IDE**, prazo de 3 s                     |
-| Tela de configurações                                            | ✅ Reescrita em Kotlin UI DSL; v1.5 adiciona Piper fields               |
-| T-1.21 (teste dos diretórios de fallback)                        | ✅ Implementado, com controle contra passar pelo motivo errado          |
+| Artefato                                                         | Estado                                                                   |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                             |
+| [SPEC.md](SPEC.md)                                               | ✅ v1.9.1 — Achado 31 quitado; T-1.55/T-1.56; Design da síntese corrigido |
+| `HANDOFF.md`                                                     | ✅ Este arquivo, com a v1.9.1 e o inventário de roteiros que faltavam    |
+| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)      |
+| Código do plugin                                                 | ✅ **123 testes passando** (121 + 2 de v1.9.1), sem warnings             |
+| **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                |
+| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                  |
+| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                   |
+| RF-22 (`/export`), RF-24 (cópia), RF-26 (botão de seleção)       | ✅ Implementados e em uso                                                |
+| RF-27 (saída plana)                                              | ⚰️ **REMOVIDO em v1.4** — funcionava, e não era o que servia             |
+| RF-28 (respiro nas bordas)                                       | ✅ Implementado e **validado no IDE**, em 20px por padrão                |
+| RF-29 (capa de carregamento)                                     | ✅ Implementado e **validado no IDE**, prazo de 3 s                      |
+| Tela de configurações                                            | ✅ Reescrita em Kotlin UI DSL; v1.5 adiciona Piper fields                |
+| T-1.21 (teste dos diretórios de fallback)                        | ✅ Implementado, com controle contra passar pelo motivo errado           |
 | **RF-31/RF-32 (Piper TTS)**                                      | ✅ **COMPLETOS** — menu "Áudio" no cabeçalho; config executável + modelo |
-| `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23               |
+| `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23                 |
 | **RF-30 (play no popup)**                                        | ⚰️ **DESCARTADO em v1.5.1** — UX redundante; menu Áudio (RF-31) já cobre |
-| **RF-47 (velocidade da fala)**                                   | ✅ Submenu + seletor em Settings, 0,25x a 2x — **validado no IDE**     |
-| **RF-48 / DEF-07 ("Tocar seleção")**                             | ✅ Corrigido em v1.9 e **validado no IDE** (T-3.54)                    |
-| **RF-33/34/35 (export do trecho)**                               | ✅ Implementados e **validados no IDE** pelo usuário                    |
-| `ClaudeSelectionExport`                                          | ✅ Objeto puro: nome sugerido + gravação (RNF-26)                       |
-| **RF-36 a RF-40 (split da aba)**                                 | ✅ Implementados e **validados no IDE** pelo usuário (4 panes)          |
-| **RF-41/RF-42 (fechar a divisão)**                               | ✅ Item "Fechar divisão" no cabeçalho + foco reassumido (v1.7.1)        |
-| **DEF-02 (navegação com uma aba)**                               | ✅ Corrigido em v1.7.2 — guarda em `ClaudeTabNavigation` (T-1.40)       |
-| **RF-43 (trocar de lado / girar)**                               | ✅ Implementado em v1.8, sobre `Splitter.swapComponents()`              |
-| **DEF-03 ("encerrado" com sessão viva)**                         | ✅ Corrigido em v1.8.1 — callback por pane + `isDescendingFrom`         |
-| **DEF-04 (menu "Dividir" vazio)**                                | ✅ Era sintoma de DEF-05; diagnóstico anterior revogado (Achado 30)     |
+| **RF-47 (velocidade da fala)**                                   | ✅ Submenu + seletor em Settings, 0,25x a 2x — **validado no IDE**       |
+| **RF-48 / DEF-07 ("Tocar seleção")**                             | ✅ Corrigido em v1.9 e **validado no IDE** (T-3.54)                      |
+| **RF-33/34/35 (export do trecho)**                               | ✅ Implementados e **validados no IDE** pelo usuário                     |
+| `ClaudeSelectionExport`                                          | ✅ Objeto puro: nome sugerido + gravação (RNF-26)                        |
+| **RF-36 a RF-40 (split da aba)**                                 | ✅ Implementados e **validados no IDE** pelo usuário (4 panes)           |
+| **RF-41/RF-42 (fechar a divisão)**                               | ✅ Item "Fechar divisão" no cabeçalho + foco reassumido (v1.7.1)         |
+| **DEF-02 (navegação com uma aba)**                               | ✅ Corrigido em v1.7.2 — guarda em `ClaudeTabNavigation` (T-1.40)        |
+| **RF-43 (trocar de lado / girar)**                               | ✅ Implementado em v1.8, sobre `Splitter.swapComponents()`               |
+| **DEF-03 ("encerrado" com sessão viva)**                         | ✅ Corrigido em v1.8.1 — callback por pane + `isDescendingFrom`          |
+| **DEF-04 (menu "Dividir" vazio)**                                | ✅ Era sintoma de DEF-05; diagnóstico anterior revogado (Achado 30)      |
 | **DEF-05 (cabeçalho morto após fechar pane)**                    | ✅ Corrigido — `preferredFocusableComponent` passa à sobrevivente        |
-| **DEF-06 (nome ambíguo do fechamento)**                          | ✅ "Fechar esta sessão" e "Fechar todas as sessões" (RF-46)             |
-| Q-26 ("encerrado" numa aba dividida)                             | ✅ Respondida pelo uso real: é "sem sessão viva" (RF-44)                |
-| **DnD de panes (Q-28)**                                          | ⚰️ **Avaliado e recusado** — falta onde agarrar, não mecanismo          |
-| Roteiros T-3.45-47 (reposicionar)                                | ⏳ Pendentes — aguardando IDE real                                      |
-| `ClaudeSessionSplitter`                                          | ✅ Objeto puro de Swing: árvore de panes (RNF-29, RNF-30)              |
-| **Premissa de engine (CB-26/36/47, R-15)**                       | ✅ **CORRIGIDA** — a sessão é sempre JediTerm/CLASSIC (Achado 27)      |
-| Testes de integração T-2.\*                                      | ⏳ Nunca implementados                                                  |
-| Roteiros T-3.21-23 (Piper manual)                                | ⏳ Pendentes — aguardando IDE real com Piper                            |
-| Roteiros T-3.34-41 (split)                                       | ⏳ Pendentes — aguardando IDE real                                      |
+| **DEF-06 (nome ambíguo do fechamento)**                          | ✅ "Fechar esta sessão" e "Fechar todas as sessões" (RF-46)              |
+| Q-26 ("encerrado" numa aba dividida)                             | ✅ Respondida pelo uso real: é "sem sessão viva" (RF-44)                 |
+| **DnD de panes (Q-28)**                                          | ⚰️ **Avaliado e recusado** — falta onde agarrar, não mecanismo           |
+| Roteiros T-3.45-47 (reposicionar)                                | ⏳ Pendentes — aguardando IDE real                                       |
+| `ClaudeSessionSplitter`                                          | ✅ Objeto puro de Swing: árvore de panes (RNF-29, RNF-30)                |
+| **Premissa de engine (CB-26/36/47, R-15)**                       | ✅ **CORRIGIDA** — a sessão é sempre JediTerm/CLASSIC (Achado 27)        |
+| Testes de integração T-2.\*                                      | ⏳ Nunca implementados                                                   |
+| Roteiros T-3.21-23 (Piper manual)                                | ⏳ Pendentes — aguardando IDE real com Piper                             |
+| Roteiros T-3.34-41 (split)                                       | ⏳ Pendentes — aguardando IDE real                                       |
 
 **Estado do repositório:** `main` na v1.9, árvore limpa, publicada como `v0.8.0`. Tags da rodada:
 `v0.8.0-rc` em `de5467e` (o código) e `v0.8.0` em `c50861c` (só o CHANGELOG). O split da v1.7 —
@@ -66,8 +67,13 @@ vida de panes em `ClaudeDockSessions` — está em `main` desde a release 0.7.0.
 **Próximos passos:** roteiros manuais T-3.34-41 (split) e T-3.21-23 (Piper), ainda dependendo de
 IDE real. Os da v1.9 (T-3.54 a T-3.58) já foram executados e aprovados.
 
-**Dívida conhecida (Achado 31):** `ClaudePiperPlayback.synthesize` nunca teve o timeout que o
-SPEC prometia. O KDoc já diz a verdade; implementar o timeout continua pendente.
+**Achado 31 — quitado em 2026-08-08.** `synthesize` ganhou o prazo de 20 s e a atribuição de
+`currentProcess`. A auditoria achou uma segunda promessa inerte no mesmo campo: o cancelamento de
+**RNF-23** ("novo play interrompe o anterior") nunca alcançou o piper. T-1.55 e T-1.56 provam as
+duas por efeito, e reprovam sob mutação.
+
+**Dívida conhecida (código morto):** ~~`ClaudeTerminalSessionFactory.readText`~~ removido em
+2026-08-08 — sem chamadores desde que RF-24 substituiu RF-21.
 
 **Dívida conhecida (versão do plugin):** `gradle.properties` está em `pluginVersion = 0.1.0`
 enquanto a tag é `v0.8.0` — o plugin instalado se identifica como 0.1.0 em _Settings > Plugins_.
@@ -244,15 +250,15 @@ sobre aparência. Qualquer mudança nessa linha começa medindo o ambiente resul
 
 ### Split: o gatilho já existia, e o engine nunca foi dúvida (2026-08-03, tarde/2)
 
-| Fato                                                                                                                              | Como foi descoberto                                                                        |
-| ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `ShellTerminalWidget.getActions()` cria as ações de split a partir de `getListener()` — sem listener, elas não aparecem            | `javap -c` de `ShellTerminalWidget`: duas chamadas a `TerminalSplitAction.create(Z, listener)` |
-| `TerminalSplitAction.isEnabled` → `canSplit(Z)`; `actionPerformed` → `split(Z)`                                                    | `javap -c` de `TerminalSplitAction`                                                          |
-| `canSplit`/`split` são métodos **default** de `JBTerminalWidgetListener` — implementar o listener é o suficiente                   | `javap` da interface                                                                         |
-| **`vertically = true` é "Split Right" (lado a lado)**; `Splitter(vertical = true)` é **empilhado** — nomes parecidos, sentido oposto | `javap -c` de `TerminalSplitAction$Companion.create` (pareia com `TW.SplitRight`) + teste de geometria |
-| **A sessão deste plugin é sempre JediTerm/CLASSIC**, qualquer que seja o `TerminalEngine` do usuário                               | `javap -c` de `AbstractTerminalRunner.startShellTerminalWidget`: `createTerminalWidget` devolve `JBTerminalWidget` |
-| `TerminalContainer` (o split do terminal nativo) **não é reusável**: o construtor exige um `TerminalToolWindowManager`             | `javap` de `org.jetbrains.plugins.terminal.ui.TerminalContainer`                             |
-| `Content.getDisposer()` existe — dispensa guardar o disposable da aba em `UserData`                                                | `javap` de `com.intellij.ui.content.Content`                                                 |
+| Fato                                                                                                                                 | Como foi descoberto                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `ShellTerminalWidget.getActions()` cria as ações de split a partir de `getListener()` — sem listener, elas não aparecem              | `javap -c` de `ShellTerminalWidget`: duas chamadas a `TerminalSplitAction.create(Z, listener)`                     |
+| `TerminalSplitAction.isEnabled` → `canSplit(Z)`; `actionPerformed` → `split(Z)`                                                      | `javap -c` de `TerminalSplitAction`                                                                                |
+| `canSplit`/`split` são métodos **default** de `JBTerminalWidgetListener` — implementar o listener é o suficiente                     | `javap` da interface                                                                                               |
+| **`vertically = true` é "Split Right" (lado a lado)**; `Splitter(vertical = true)` é **empilhado** — nomes parecidos, sentido oposto | `javap -c` de `TerminalSplitAction$Companion.create` (pareia com `TW.SplitRight`) + teste de geometria             |
+| **A sessão deste plugin é sempre JediTerm/CLASSIC**, qualquer que seja o `TerminalEngine` do usuário                                 | `javap -c` de `AbstractTerminalRunner.startShellTerminalWidget`: `createTerminalWidget` devolve `JBTerminalWidget` |
+| `TerminalContainer` (o split do terminal nativo) **não é reusável**: o construtor exige um `TerminalToolWindowManager`               | `javap` de `org.jetbrains.plugins.terminal.ui.TerminalContainer`                                                   |
+| `Content.getDisposer()` existe — dispensa guardar o disposable da aba em `UserData`                                                  | `javap` de `com.intellij.ui.content.Content`                                                                       |
 
 > **Sobre o "REWORKED no IntelliJ" registrado neste arquivo:** estava certo sobre o Terminal
 > **nativo** do usuário, e errado sobre as nossas abas. O engine é propriedade da tool window que
@@ -260,13 +266,13 @@ sobre aparência. Qualquer mudança nessa linha começa medindo o ambiente resul
 
 ### Gravar arquivo pelo diálogo nativo (2026-08-03, tarde)
 
-| Fato                                                                                                                    | Como foi descoberto                                                             |
-| ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| `FileSaverDescriptor(String title, String description, String... extensions)` é construtor público                       | `javap` sobre `intellij.platform.ide.jar` da distribuição `idea-2026.2` do build |
-| `FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)` devolve `FileSaverDialog`                   | mesma inspeção                                                                    |
-| `FileSaverDialog.save(Path, String)` existe — dispensa converter o diretório inicial em `VirtualFile`                   | mesma inspeção; há também `save(VirtualFile, String)` e `save(String)`           |
-| `save(...)` devolve `null` no cancelamento; `VirtualFileWrapper.getFile()` dá o `java.io.File`                          | assinatura + `javap` de `VirtualFileWrapper` (classe `final`, 5 métodos)         |
-| **O `/export` do CLI não aceita "um trecho"** — o argumento é só o caminho, e o conteúdo vem de `lZo(t.messages, …)`   | leitura do binário já feita na v1.3 (funções `azb`/`u0n`), reaproveitada         |
+| Fato                                                                                                                 | Como foi descoberto                                                              |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `FileSaverDescriptor(String title, String description, String... extensions)` é construtor público                   | `javap` sobre `intellij.platform.ide.jar` da distribuição `idea-2026.2` do build |
+| `FileChooserFactory.getInstance().createSaveFileDialog(descriptor, project)` devolve `FileSaverDialog`               | mesma inspeção                                                                   |
+| `FileSaverDialog.save(Path, String)` existe — dispensa converter o diretório inicial em `VirtualFile`                | mesma inspeção; há também `save(VirtualFile, String)` e `save(String)`           |
+| `save(...)` devolve `null` no cancelamento; `VirtualFileWrapper.getFile()` dá o `java.io.File`                       | assinatura + `javap` de `VirtualFileWrapper` (classe `final`, 5 métodos)         |
+| **O `/export` do CLI não aceita "um trecho"** — o argumento é só o caminho, e o conteúdo vem de `lZo(t.messages, …)` | leitura do binário já feita na v1.3 (funções `azb`/`u0n`), reaproveitada         |
 
 > ⚠️ **A armadilha do `grep` binário pegou de novo.** A primeira busca pelas classes do diálogo
 > nos jars da plataforma não achou **nada** — nem um controle conhecido (`Messages.class`). Causa:
@@ -285,7 +291,7 @@ Obtido de `piper --help` e da leitura do pacote instalado
   `--debug`. Não há flag de "velocidade": `--length-scale` **é** o controle, e é **inverso** —
   "Phoneme length", fonema mais longo, fala mais lenta.
 - **De onde vem o default:** `voice.py:449-450` — `if length_scale is None: length_scale =
-  self.config.length_scale`, ou seja, o `config.json` que acompanha o `.onnx`.
+self.config.length_scale`, ou seja, o `config.json` que acompanha o `.onnx`.
   `config.py:8` define `DEFAULT_LENGTH_SCALE = 1.0`, mas ele só entra se o JSON não trouxer o seu.
   **Omitir a flag ≠ passar 1.0** (D-40).
 - **Formato do número:** `__main__.py:61` declara `type=float` no argparse — recusa vírgula
@@ -432,23 +438,85 @@ Concluído: ~~aprovação do SPEC~~ · ~~T-4~~ · ~~esqueleto Gradle~~ · ~~comp
 Concluído também: ~~RF-24/RF-26~~ · ~~T-3.14~~ · ~~T-3.17 (conclusivo: RF-27 removido)~~ ·
 ~~RF-28~~ · ~~RF-29~~ · ~~tela de configurações em Kotlin UI DSL~~
 
+Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-23)~~ ·
+~~remoção de `readText`~~
+
 **Pendente, em ordem:**
 
 1. **Testes de integração T-2.\*** — nunca implementados. Tool window registrada, isolamento de
-   abas, liberação de PTY, e o comportamento com `REWORKED` vs `CLASSIC` (Q-04, Q-10, CB-26,
-   CB-36).
-2. **Roteiros manuais em aberto:** T-3.3 (`Ctrl+Alt+K` do oficial), T-3.4 (`--resume`), T-3.5
-   (outros IDEs), T-3.6 (desinstalação), T-3.18 a T-3.20 (respiro sob troca de tema, partida sem
-   eco, diretório não confiável).
+   abas, liberação de PTY, e o comportamento com `REWORKED` vs `CLASSIC`. **T-2.6 responde Q-04 e
+   Q-10 de graça** (CB-26, CB-36). É a maior lacuna e a única com peso de implementação.
+2. **Roteiros manuais em aberto — o inventário completo**, que até 2026-08-08 estava espalhado em
+   dois lugares e omitia dois blocos:
+
+   | Bloco                | Roteiros           | Observação                                                    |
+   | -------------------- | ------------------ | ------------------------------------------------------------- |
+   | Base                 | T-3.3 a T-3.6      | `Ctrl+Alt+K`, `--resume`, outros IDEs, desinstalação          |
+   | v1.4                 | T-3.18 a T-3.20    | respiro sob troca de tema, partida sem eco, diretório novo    |
+   | v1.5 (Piper)         | T-3.21 a T-3.23    | **provavelmente já pagos** — a v1.9 rodou `runIde` com Piper  |
+   | v1.5 (RNF-20/23)     | **T-3.26, T-3.27** | **nunca listados aqui.** Reprovariam antes da v1.9.1          |
+   | v1.7 (split)         | T-3.34 a T-3.41    | —                                                              |
+   | v1.8 (reposicionar)  | T-3.45 a T-3.47    | —                                                              |
+   | v1.8.2               | **T-3.48, 52, 53** | **status nunca declarado** — T-3.48 aparece só como hipótese  |
+
 3. **Q-02** — ambiguidade de sessão dupla, durante o uso real.
 4. **Decidir o destino do stash** `shell -i -c com exec`: mantê-lo como referência de D-20 ou
-   descartar. Stash não é memória de longo prazo.
-5. **Limpeza conhecida:** `ClaudeTerminalSessionFactory.readText` está morto desde que RF-24
-   substituiu RF-21 — nenhum chamador. Deletar tira um ponto de acoplamento com a API de terminal.
+   descartar. Stash não é memória de longo prazo, e D-20 já registra a medição por escrito.
+5. **`gradle.properties` em `pluginVersion = 0.1.0`** contra a tag `v0.8.0` — decisão de release.
+6. **[TTS agnóstico](../20260807-tts-engine-agnostic.md)** _(rodada nova, não é dívida)_ — análise
+   Piper × Kokoro com latência medida e escopo de uma **v1.10, "motor de fala plugável"**. Depende
+   de o `kokoro-tts.py` ganhar um modo que devolva os bytes: hoje ele toca sozinho e o plugin
+   perderia `pause`/`resume`. O Kokoro **não está instalado** nesta máquina.
 
 ---
 
 ## Log
+
+### 2026-08-08 — v1.9.1: o campo morto guardava duas promessas, não uma
+
+**Contexto.** Pedido do usuário: avaliar o que faltava para fechar este arquivo. A avaliação
+conferiu cada pendência contra o repositório em vez de reler o que estava escrito — e é essa
+diferença que produziu o resto da entrada.
+
+**O que a conferência corrigiu no próprio HANDOFF.**
+
+- **O diff sujo era falso alarme.** `HANDOFF.md` e `SPEC.md` apareciam com 460 linhas alteradas.
+  `git diff -w` mostrava 37: era o Prettier realinhando pipes de tabela e trocando `*x*` por
+  `_x_`. Nenhuma mudança semântica. **Lição barata: antes de tratar um diff de markdown como
+  trabalho pendente, rodar `git diff -w`.**
+- **Dois blocos de roteiro manual não estavam em lista nenhuma:** T-3.26/T-3.27 (v1.5) e
+  T-3.48/52/53 (v1.8.2). O inventário completo está agora em Próximos passos, numa tabela só, em
+  vez de espalhado entre a tabela de estado e a lista de pendências.
+- **O plano [TTS agnóstico](../20260807-tts-engine-agnostic.md) estava untracked e órfão** — 22 KB
+  de análise verificada que nem este arquivo nem o SPEC citavam. Referenciado agora.
+
+**Achado 31 quitado — e ele contava só metade.** O registro dizia "falta o timeout". Lendo o
+código, o campo `currentProcess` era declarado e **nunca atribuído**, então o
+`currentProcess?.destroy()` de `stopCurrent()` operava sempre sobre `null`. Isso não custava só o
+prazo: `stopCurrent()` é o caminho de **RNF-23** — "novo play interrompe o anterior" —, e o piper
+da síntese anterior seguia até o fim, invisível. **Duas promessas mortas no mesmo campo, e T-3.27
+reprovaria se alguém o tivesse executado.**
+
+**A correção teve uma terceira parte que não estava prevista.** Pôr `waitFor(20, SECONDS)` no
+lugar de `waitFor()` não bastaria: `readBytes()` vinha **antes** e só volta no EOF, então o prazo
+seria decorativo. Pior, ler depois de esperar convidaria o deadlock clássico — o piper trava se o
+buffer do pipe encher sem ninguém lendo. O stdout foi para um `CompletableFuture`, e só então o
+prazo passou a significar alguma coisa.
+
+**A checagem, que é o ponto.** T-1.55 e T-1.56 usam um piper falso de duas linhas (`sh` que dorme
+30 s) e afirmam o **efeito**: volta em ~1 s, não em 30. Depois de verdes, desfiz cada correção e
+rodei de novo — **os dois reprovam sob mutação**. É exatamente o que o Achado 20 (o `ESC` vazio)
+pediu por escrito e que teria pego este campo quatro versões antes. Um teste que só afirmasse
+"o campo existe" teria passado o tempo todo.
+
+**Também removido:** `ClaudeTerminalSessionFactory.readText`, morto desde que RF-24 substituiu
+RF-21 — um ponto a menos de acoplamento com a API de terminal (RNF-15).
+
+**Testes.** 121 → **123**, zero falhas, zero erros.
+
+**Não feito, e por quê.** Os testes de integração T-2.\* seguem pendentes: é implementação de
+verdade, não dívida de documentação, e a avaliação recomendou fazê-los como rodada própria — eles
+matam Q-04 e Q-10 junto. `pluginVersion` continua em 0.1.0: decisão de release do usuário.
 
 ### 2026-08-07 (fim do dia) — a release v0.8.0 e o CHANGELOG que este arquivo não conhecia
 
@@ -573,7 +641,7 @@ aba consertava.
   `content.preferredFocusableComponent = pane.widget.component` na criação. Fechando **essa**
   pane — a primeira, normalmente a em foco —, a aba passa a apontar para um componente
   descartado e fora da árvore: o foco não vai a lugar nenhum e o `DataContext` da toolbar fica
-  sem projeto. Daí *todo* o cabeçalho parar.
+  sem projeto. Daí _todo_ o cabeçalho parar.
 - **A v1.8.1 já trocava a chave e pedia foco, mas esqueceu o `preferredFocusableComponent`** —
   eram três lugares apontando para a pane, e eu tinha consertado dois. RF-42 agora lista os três.
 - **Achado 30 — e isto revoga o diagnóstico de DEF-04.** Eu tinha atribuído o "menu vazio" a
@@ -584,7 +652,7 @@ aba consertava.
   não a que explicava tudo. As mudanças de thread ficaram, porque ler a árvore Swing fora da EDT
   era errado de qualquer forma; só não eram a correção.
 - **DEF-06 — o nome era meu, e mentia.** O usuário acionou "Fechar divisão" esperando encerrar a
-  aba inteira. "Divisão" tanto é *a pane* quanto *o arranjo*. **É o mesmo erro que eu diagnostiquei
+  aba inteira. "Divisão" tanto é _a pane_ quanto _o arranjo_. **É o mesmo erro que eu diagnostiquei
   no "Close Tab" da plataforma uma rodada antes** (DEF-04/Achado 29) — repetido em rótulo escrito
   por mim, depois de a lição estar registrada. Agora os nomes dizem quantas sessões morrem:
   **"Fechar esta sessão"** e **"Fechar todas as sessões"** (RF-46), esta última fechando a aba
@@ -607,7 +675,7 @@ Dois defeitos no primeiro uso do "Fechar divisão".
   aba dividida — e cuja saída eu tinha descartado como cara. Custou seis linhas.
 - **O que vale mais que os dois defeitos: meu primeiro conserto não consertava nada.** A guarda
   usava `paneOf(...) == null` para detectar o fechamento deliberado. Não funciona: `close()`
-  desanexa o *splitter* da árvore, mas a pane fechada **continua filha dele**, e `paneOf`
+  desanexa o _splitter_ da árvore, mas a pane fechada **continua filha dele**, e `paneOf`
   devolvia assim que achasse um `Splitter` acima — sem nunca confirmar que ele leva à aba. Eu
   teria publicado um conserto inerte, do mesmo feitio do ESC vazio do Achado 21.
   **Quem pegou foi o teste** que escrevi junto (T-1.45), e só porque ele afirmava o estado da
@@ -785,7 +853,8 @@ exportar só o trecho selecionado, ao lado do de copiar que já existe no popup.
 Sessão de implementação pura: código, testes e documentação para RF-30/RF-31/RF-32. Nenhuma decisão de design nova; tudo seguiu a SDD de v1.5 conforme escrito.
 
 **Implementação:**
-- **`ClaudePiperPlayback.kt`** (singleton, 120 linhas) — encapsulação única de síntese + playback. 
+
+- **`ClaudePiperPlayback.kt`** (singleton, 120 linhas) — encapsulação única de síntese + playback.
   - `canSynthesize(executable, modelPath): Boolean` — valida se ambos existem, sem exceções.
   - `synthesize(text, executable, modelPath): ByteArray?` — lança piper via `GeneralCommandLine`, stdin/stdout, timeout 20s.
   - `playBytes(pcmBytes): Boolean` — abre `Clip` com AudioInputStream (22050 Hz, 16-bit, mono), reproduz, limpa recursos.
@@ -807,22 +876,26 @@ Sessão de implementação pura: código, testes e documentação para RF-30/RF-
   - UI em Kotlin DSL com comentários de escopo.
 
 **Testes:**
+
 - 8 testes novos em `ClaudePiperPlaybackTest.kt` (6) + `AudioActionsTest.kt` (3)
 - Suite completa: 82 testes passando (69 anteriores + 13 novos).
 - Todos os testes T-1.22-27 do SPEC implementados e verdes.
 
 **Integração:**
+
 - `ClaudeTerminalSessionFactory.install()` agora passa `project` para `ClaudeSelectionCopyButton.install()`.
 - Message bus listener pattern (TtsStateListener topic) desacopla UI de serviço.
 - `ponytail:` comentários registram simplificações conhecidas (thread pool, cache, timeout).
 
 **Mudanças no estado do repositório:**
+
 - Branch `feature/tts` com código compilado e testado.
 - SPEC.md — nova seção v1.5 com RFs/RNFs/CBs/Riscos/Testes/Achados 24.
 - HANDOFF.md — esta entrada de log.
 - `git status`: código novo em `src/main`, `src/test`; planos atualizados.
 
 **Próximos passos (não executados nesta rodada):**
+
 - Testes de integração T-2.\* (tool window registrada, abas isoladas, REWORKED engine).
 - Roteiros manuais T-3.21-27 (seleção, play/pause/stop, configuração, timeout).
 - Validação no IDE real com Piper instalado e modelo configurado.
@@ -1102,9 +1175,9 @@ da comunidade/usuário. Próximo: implementação de Fase 2.
 
 ### 2026-08-03 (manhã) — Descarte de RF-30, SPEC v1.5.1 finalizado
 
-**Contexto:** Após validação do SPEC.md v1.5, usuário decidiu descartar RF-30 (botão de play no 
-popup de seleção). Razão: UX redundante — o menu "Áudio" no cabeçalho (RF-31) já oferece 
-play/pause/stop durante reprodução; adicionar segundo caminho (play no popup, junto com cópia) 
+**Contexto:** Após validação do SPEC.md v1.5, usuário decidiu descartar RF-30 (botão de play no
+popup de seleção). Razão: UX redundante — o menu "Áudio" no cabeçalho (RF-31) já oferece
+play/pause/stop durante reprodução; adicionar segundo caminho (play no popup, junto com cópia)
 seria UI paralela sem capacidade nova.
 
 **Mudanças ao SPEC.md:**
@@ -1122,8 +1195,8 @@ seria UI paralela sem capacidade nova.
 
 - D-29: RF-30 descartado em favor de padrão único (menu no cabeçalho). Simplicidade > redundância.
 
-**Código:** `AudioPlayAction.kt` implementado mas não integrado ao popup — fique no repositório 
-para futura reutilização ou descarte deliberado no cleanup final. Compilação e testes (82) 
+**Código:** `AudioPlayAction.kt` implementado mas não integrado ao popup — fique no repositório
+para futura reutilização ou descarte deliberado no cleanup final. Compilação e testes (82)
 continuam passando.
 
 > **Correção (2026-08-07, v1.9):** a frase acima ficou ambígua e foi lida errado por duas
@@ -1132,6 +1205,5 @@ continuam passando.
 > Pior: a ação estava no menu e **não funcionava**, porque lia `CONTEXT_COMPONENT`. Ver DEF-07 e
 > RF-48.
 
-**Estado:** SPEC.md v1.5.1, HANDOFF.md e repositório alinhados. Branch `feature/tts` pronto para 
+**Estado:** SPEC.md v1.5.1, HANDOFF.md e repositório alinhados. Branch `feature/tts` pronto para
 merge após validação final dos testes manuais T-3.21-23 (Piper no IDE real).
-
