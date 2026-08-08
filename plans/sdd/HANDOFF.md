@@ -11,8 +11,9 @@
 ## Estado atual
 
 **Fase: v1.9.4 — RF-49: ação própria que entrega a seleção a *uma* pane, fechando DEF-08.**
-**A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79`.
-130 testes verdes. Nenhuma das duas foi publicada — são rodadas de dívida, não de funcionalidade.**
+**A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79` e a
+v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 2026-08-08 17:15 com
+`--rerun`. Nada disso foi publicado: são rodadas de dívida e de ergonomia, não de release.**
 
 > **Duas numerações, e não são a mesma.** O `SPEC.md` tem versionamento próprio (`v1.x`), que
 > conta rodadas de especificação; o release segue SemVer (`0.x.y`), no `CHANGELOG.md` e nas tags
@@ -22,10 +23,10 @@
 | Artefato                                                         | Estado                                                                    |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                              |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.9.2 — T-2.1 a T-2.6; escopo real do headless; Q-04/Q-10 recorrigidos |
-| `HANDOFF.md`                                                     | ✅ Este arquivo, com a v1.9.1 e o inventário de roteiros que faltavam     |
+| [SPEC.md](SPEC.md) | ✅ v1.9.4 — RF-49/D-41; DEF-08; Q-02 refinada; Q-30 respondida; Q-31 nova |
+| `HANDOFF.md` | ✅ Este arquivo, com RF-49, a receita do cache do Gradle e o inventário de roteiros |
 | [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)       |
-| Código do plugin | ✅ **136 testes passando** (130 + 6 de RF-49), **zero warnings** |
+| Código do plugin | ✅ **136 testes, 0 falhas, 0 erros** em 22 classes; **zero warnings**. Execução de 17:15 |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                 |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                   |
 | T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                    |
@@ -508,6 +509,25 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 ---
 
 ## Log
+
+### 2026-08-08 (noite/6) — a suíte verde de verdade, e o que o daemon escondia
+
+**136 testes · 0 falhas · 0 erros · 22 classes · zero warnings**, executados às **17:15:03** com
+`--rerun`. É a primeira medição de RF-49 feita depois de tudo pronto — as anteriores descreviam o
+mesmo código, mas eram de antes.
+
+**O que faltava na receita do cache, e é o motivo de três tentativas fracassadas.** Com o
+diretório do hash **já apagado**, o build continuava falhando com
+`Cannot resolve 'product-info.json'` apontando para um caminho **que não existia mais**. Não era
+corrupção nova: era o **daemon do Gradle** servindo o caminho resolvido da memória. Nem
+`--refresh-dependencies` nem `--no-configuration-cache` mexem nisso — só `./gradlew --stop`.
+
+**E a armadilha seguinte, que quase me fez reportar número velho:** destravado o build, o primeiro
+`./gradlew test` volta `BUILD SUCCESSFUL` em 34 s **sem executar teste nenhum** (task `UP-TO-DATE`),
+e os XMLs mantêm a data anterior. Contar a partir deles nesse estado produz um total que parece
+atual e não é. `--rerun` é obrigatório quando o que se quer é medição, não confirmação.
+
+As duas coisas estão na receita, em Fatos verificados.
 
 ### 2026-08-08 (noite/5) — a conclusão de Q-02 quase virou um alvo fixo inexistente
 
