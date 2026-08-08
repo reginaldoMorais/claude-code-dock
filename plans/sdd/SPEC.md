@@ -28,6 +28,7 @@
 > | 1.9.2  | 2026-08-08 | **T-2.1 a T-2.6 implementados** — a lacuna de integração mais antiga do projeto. T-2.6 fixa o Achado 27 como guarda de regressão e **corrige a razão pela qual Q-04/Q-10 estavam resolvidos**. Registra o que o ambiente headless não entrega (PTY) e o que fica com os roteiros manuais |
 > | 1.9.3  | 2026-08-08 | **DEF-08**: o `Ctrl+Alt+K` do plugin oficial nunca poderia chegar à nossa janela — `focusClaudeInTerminal` e `openClaudeInTerminal` estão presos ao literal `"Terminal"`. T-3.3 reescrito: era roteiro sobre premissa falsa. T-3.36 e T-3.4 aprovados |
 > | 1.9.4  | 2026-08-08 | **RF-49** — ação própria de enviar a seleção do editor para a pane **em foco**, fechando DEF-08 sem tocar no protocolo privado. D-41. T-1.57 a T-1.61 |
+> | 1.9.5  | 2026-08-08 | **Q-31 explicada no mecanismo (Achado 32)**: `CLAUDE_CODE_SSE_PORT` vem de `getOrDefault(locationHash, 0)`, e a mitigação de corrida do plugin oficial ignora as nossas panes. T-3.61 mede |
 
 ---
 
@@ -618,6 +619,80 @@ nos dois casos negativos.
 **Correção (RF-48):** `ClaudeDockSessions.playSelectedSession()`, junto de `copySelectedSession()`,
 reusando `selectedWidget()`, o `notify(...)` do serviço e o `ClaudeSessionText.normalize`. A ação
 volta a ser uma linha, como as irmãs.
+
+### Achado 32 — a integração falha por porta `0`, e a mitigação da corrida nos exclui _(v1.9.5)_
+
+**Pergunta de origem (Q-31):** por que uma pane às vezes não conecta ao MCP — sem `In <arquivo>` no
+rodapé e sem receber o `Ctrl+Alt+K` — enquanto a irmã conecta?
+
+**A cadeia, lida no bytecode do plugin oficial 0.1.14-beta:**
+
+1. **`TerminalCustomizer.customizeCommandAndEnvironment`** injeta
+   `CLAUDE_CODE_SSE_PORT = TerminalUtil.getRunningMcpServerPorts().getOrDefault(project.locationHash, 0)`.
+   **O `getOrDefault(…, 0)` é o ponto.** Sessão criada antes de a porta ser registrada não fica sem
+   a variável — fica com **`0`**. E ambiente de processo é fixado no `exec`: aquela sessão nunca
+   mais conecta, por mais que o servidor suba depois.
+2. **Quem popula o mapa é `MCPService.start()`**, que registra
+   `runningMcpServerPorts[locationHash] = port` e só então sobe o ktor.
+3. **`start()` é chamado do `PostStartupActivity`** — ou seja, existe uma janela real entre o
+   projeto abrir e a porta existir.
+4. **O oficial sabe da corrida e a mitiga:** logo depois de `start()`, o mesmo
+   `PostStartupActivity` chama `TerminalUtil.restartClaudeInExistingTerminals(project)`, que
+   reinicia o CLI nas sessões já abertas para que peguem a porta certa.
+
+**E é aqui que nos perdemos.** `restartClaudeInExistingTerminals` faz
+`ToolWindowManager.getToolWindow("Terminal")`, varre o `ContentManager` **dela** e só age em abas
+cujo título começa com `"Claude Code"`. **As nossas panes falham nos dois critérios.** A corrida é
+do oficial, a mitigação existe, e ela nos exclui estruturalmente — **terceira vez que o literal
+`"Terminal"` decide o nosso comportamento**, depois de RF-17 (o `Esc`) e de DEF-08.
+
+**O que isto explica de uma vez:** por que a primeira pane costuma ser a desintegrada (nasce com o
+projeto, antes do `PostStartupActivity`) e a criada por split costuma conectar (nasce depois); e
+por que em T-3.36 as duas conectaram — a aba foi aberta com o IDE já de pé.
+
+**Não é defeito do nosso código.** O caminho de split usa exatamente o mesmo `createPane` →
+`ClaudeTerminalSessionFactory.createSession` da primeira pane; não há divergência de ambiente entre
+elas. O que difere é **o instante** em que cada uma nasce.
+
+**Estado: mecanismo real no plugin oficial, mas NÃO observado nos afetando. Hipótese arquivada
+após duas não-reproduções.**
+
+T-3.61 rodou em 2026-08-08 e deu o **oposto da condição necessária**: as duas panes ficaram
+integradas e `echo $CLAUDE_CODE_SSE_PORT` devolveu a **mesma porta real (`33471`)** nas duas.
+
+**O que isso prova, e é ganho real:** a porta é **por projeto** (`locationHash`), como o bytecode
+dizia, e **o customizer alcança as panes de split em produção** — T-4 tinha provado isso em
+laboratório, agora está visto na sessão real, nas duas panes. É o braço de controle do teste, e
+ele passou.
+
+**O que isso NÃO prova:** nada sobre a causa da desintegração, porque **a pane desintegrada não
+apareceu**. A hipótese da porta `0` segue de pé e sem evidência — não confirmada e não refutada.
+
+**Segunda tentativa, com a condição específica — também não reproduziu.** A IDE foi reiniciada
+com a tool window restaurada, de modo que a primeira pane nasceu durante a inicialização, e o log
+confirma a sessão subindo sozinha na partida. Mesmo assim: as duas panes integradas, **mesma porta
+real**.
+
+**E há uma razão provável para nunca reproduzirmos, que estava debaixo do nariz.** Nossas sessões
+usam `deferSessionStartUntilUiShown = true` (D-23/RNF-02): **o processo não nasce quando a aba é
+criada, e sim quando o componente é exibido** — e é no nascimento do processo que
+`configureStartupOptions` roda o customizer e congela o `CLAUDE_CODE_SSE_PORT`. Isso não é
+suposição: o spike de T-2 mediu justamente isso, em headless, onde o `ttyConnector` fica `null`
+para sempre porque a UI nunca aparece.
+
+Ou seja, **a flag que existe por motivo estético — esconder o eco da partida — provavelmente nos
+tira da corrida de graça**, adiando a leitura da porta para depois de a janela estar montada.
+Adiar não elimina a corrida em teoria; só a estreita tanto que duas tentativas dirigidas não a
+pegaram.
+
+**Decisão: arquivar.** O mecanismo do `getOrDefault(…, 0)` e a mitigação presa a `"Terminal"` ficam
+documentados porque são fatos do plugin oficial e podem explicar sintomas futuros. Mas **a causa do
+caso visto em T-3.60 permanece desconhecida**, e não se escreve código sobre hipótese que duas
+medições dirigidas não sustentaram. **Se o sintoma voltar, o diagnóstico já está pronto** — pane
+sem `In <arquivo>`, `echo $CLAUDE_CODE_SSE_PORT`, comparar com uma pane sadia.
+
+**Contorno que já existe no produto:** "Nova sessão" cria uma sessão nova, que pega a porta certa.
+Fechar a pane desintegrada e abrir outra resolve o caso concreto — sem código novo.
 
 ### DEF-08 — `Ctrl+Alt+K` foca o Terminal nativo, e sempre foi assim _(v1.9.3)_
 
@@ -1925,6 +2000,7 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.58**     | _(v1.9)_ Acionar "Tocar seleção" **sem seleção** e com a aba vazia: aparece aviso nos dois casos, nenhum silêncio (RF-48)                                                                                                                                               |
 | **T-3.59**     | _(v1.9.3)_ **Substitui T-3.3.** Com uma sessão viva na janela dedicada, selecionar código e acionar `Ctrl+Alt+K`: o foco vai para o Terminal nativo (esperado, DEF-08) — **a pergunta é se a referência do trecho aparece na nossa pane**. Voltar para a janela dedicada **sem** tocar na nativa e conferir. Responde Q-30 ✅ **executado 2026-08-08** — chegou, e chegou nas **duas** panes |
 | **T-3.60**     | _(v1.9.4)_ Com a aba **dividida**, selecionar código e acionar "Enviar Seleção para o Claude Code" pelo menu de contexto do editor: a menção `@arquivo#Lx-y` aparece **só na pane em foco** — a diferença para o `Ctrl+Alt+K`, que entrega às duas —, a janela vem à frente e o cursor fica na pane certa (RF-49) ✅ **aprovado 2026-08-08** — print mostra a menção `@test.md#L3` **só na pane esquerda**, a direita vazia; e saiu `#L3`, não `#L3-4`, com a barra de status em `3:12 (30 chars)`: a correção de `inclusiveEndLine` vale no editor real, não só em T-1.60 |
+| **T-3.61**     | _(v1.9.5)_ **Mede o Achado 32.** Numa pane **sem** o indicador de integração no rodapé (`In <arquivo>`), rodar `echo $CLAUDE_CODE_SSE_PORT`: se sair **`0`**, a causa da desintegração é a corrida do `getOrDefault`, e Q-31 fecha. Conferir numa pane **com** o indicador que sai a porta real — é o controle que impede concluir pelo motivo errado ⚠️ **executado 2026-08-08 — não reproduziu.** As duas panes ficaram integradas e o `echo` deu a **mesma porta real (`33471`)** nas duas. Isso **valida o controle** (o customizer alcança as panes de split em produção, não só em T-4) e **deixa a hipótese sem medição**: o caso da pane desintegrada não ocorreu nesta sessão · **2ª execução, com a IDE reiniciada e a pane nascida na inicialização: também não reproduziu** — mesma porta real nas duas. Hipótese arquivada |
 
 ### Testes de regressão
 
@@ -2190,7 +2266,7 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-26** | ~~_(v1.7)_ Com a aba dividida, o que o título "(encerrado)" deveria significar?~~                                                                          | ✅ **RESOLVIDO em v1.8.1 pelo uso real.** Significa "não há mais sessão viva nesta aba" — contando as panes na árvore, que era a saída descartada como cara em v1.7 e custou seis linhas. Virou RF-44, depois de DEF-03 mostrar o oposto na prática                                                                                                                                                                                                                                        |
 | **Q-29** | _(v1.9)_ Vale aplicar a nova velocidade à fala **em curso**, e não só à próxima?                                                                           | **Recusado, com o motivo no mecanismo.** O piper sintetiza o áudio inteiro antes de tocar (`synthesize` lê todo o stdout e só então o `Clip` abre): não há stream a reajustar. Aplicar no meio seria re-sintetizar do zero e reposicionar por frame — fila e posição, exatamente o que RNF-23 mantém fora. O custo real é baixo: a fala típica dura segundos, e parar e tocar de novo já resolve                                                                                           |
 | **Q-30** | ~~_(v1.9.3)_ O trecho enviado por `Ctrl+Alt+K` chega à sessão da janela dedicada?~~ | ✅ **RESPONDIDA em 2026-08-08 por T-3.59: chega.** O `@test.md#L3` apareceu na nossa pane com `1 line selected`. **Logo DEF-08 é ergonomia, não integração** — o conteúdo atravessa, só o foco vai para a janela errada. Rebaixa a prioridade do defeito e muda o conserto plausível: não é preciso tocar em protocolo, basta uma ação nossa |
-| **Q-31** | _(v1.9.4)_ Por que uma pane às vezes **não conecta** ao servidor MCP, ficando sem o indicador `In <arquivo>` e sem receber o `Ctrl+Alt+K`? | Em aberto. Observado em T-3.60: das duas panes, só a segunda estava conectada. Hipóteses não medidas: corrida entre a partida da sessão e o servidor do plugin oficial, ou sessão criada antes de o servidor subir. **Afeta RF-37**, que assume integração em todas as panes — e T-3.36 já mostrou as duas conectadas, então não é impossível, é intermitente |
+| **Q-31** | _(v1.9.4)_ Por que uma pane às vezes **não conecta** ao servidor MCP, ficando sem o indicador `In <arquivo>` e sem receber o `Ctrl+Alt+K`? | Em aberto. Observado em T-3.60: das duas panes, só a segunda estava conectada. Hipóteses não medidas: corrida entre a partida da sessão e o servidor do plugin oficial, ou sessão criada antes de o servidor subir. **Afeta RF-37**, que assume integração em todas as panes — e T-3.36 já mostrou as duas conectadas, então não é impossível, é intermitente · 🔍 **Mecanismo identificado em 2026-08-08 (Achado 32)**: `CLAUDE_CODE_SSE_PORT` cai em `0` por `getOrDefault`, e a mitigação de corrida do oficial só alcança a tool window `"Terminal"`. **Falta medir** — T-3.61 · ⚠️ **T-3.61 não reproduziu** (2026-08-08): duas panes integradas, mesma porta real `33471`. Controle passou; a hipótese continua **sem medição** · ⚰️ **ARQUIVADA em 2026-08-08** após **duas** não-reproduções, a segunda com a condição específica. Causa do caso de T-3.60 desconhecida; `deferSessionStartUntilUiShown` é a explicação provável de por que não nos atinge |
 | **Q-28** | _(v1.8)_ Vale arrastar panes com o mouse para reorganizá-las, como o editor faz com as abas?                                                               | **Avaliado e adiado, com o levantamento feito.** Mecanismo existe (`DnDSupport`; `DockManager`/`DockContainer`). O que falta é **onde agarrar**: o editor arrasta o rótulo da aba, e as nossas panes não têm aba — a superfície delas é do terminal, onde arrastar é selecionar texto (RF-26). Exigiria barra de título por pane, UI permanente para ação ocasional. RF-43 cobre o uso de 2–4 panes por ações. Reabrir se o uso mostrar aninhamento profundo, onde trocar/girar não bastam |
 | **Q-27** | _(v1.7)_ As degradações graciosas de engine (CB-26, CB-36, CB-47, R-15) deveriam ser removidas agora que o Achado 27 provou que a sessão é sempre CLASSIC? | Não. Custam uma linha (`?: return`) e protegem contra a plataforma mudar o retorno de `createTerminalWidget` num upgrade. O que mudou foi a **probabilidade** de R-15, não a decisão                                                                                                                                                                                                                                                                                                       |
 

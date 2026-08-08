@@ -62,6 +62,7 @@ v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 20
 | **T-3.36 (diff por pane)** | ✅ **Aprovado 2026-08-08** — as duas panes com `In test.md` ao mesmo tempo |
 | **T-3.4 (`--resume`)** | ✅ **Aprovado 2026-08-08** |
 | **DEF-08 (`Ctrl+Alt+K`)** | ✅ **Contornado por RF-49** — entrega dirigida, **validada no IDE** (T-3.60) |
+| **Q-31 (pane sem integração)** | ⚰️ **Arquivada** após duas não-reproduções. Achado 32 documenta o mecanismo do oficial; a causa do caso real segue desconhecida |
 
 **Estado do repositório:** `main` na v1.9.2. A v1.9.1 (Achado 31) foi commitada em `2b7ef79`;
 a v1.9.2 (`ClaudeDockIntegrationTest`) ainda está na árvore de trabalho. Tags da última release:
@@ -323,12 +324,18 @@ The contents of the immutable workspace '~/.gradle/caches/9.2.0/transforms/<hash
 
 - **Não é corrupção de disco** e não tem a ver com o código. É o `runIde` mordendo o próprio rabo.
 - **Às vezes destrava sozinho** numa segunda tentativa com a IDE já fechada; às vezes não.
-- **Receita completa — e o `rm -rf` sozinho não basta:** fechar a IDE do sandbox, `rm -rf` no
-  diretório do hash **e `./gradlew --stop`**. Sem parar o daemon, ele continua servindo o caminho
-  resolvido da memória e o build falha com `Cannot resolve 'product-info.json'` apontando para um
-  diretório que **não existe mais** — sintoma que parece corrupção nova e é só cache de processo.
-  Nem `--refresh-dependencies` nem `--no-configuration-cache` resolvem; só derrubar o daemon.
-  A recriação é reextração **local**, sem download (~35 s aqui).
+- **Receita real: `./gradlew --stop`. Só isso.** O sintoma é
+  `Cannot resolve 'product-info.json'` apontando para o diretório do hash, e a causa é o **daemon**
+  servindo da memória um caminho que já não vale. Derrubado o daemon, o Gradle refaz a
+  transformação sozinho — reextração **local**, sem download (~32 s aqui).
+  Nem `--refresh-dependencies` nem `--no-configuration-cache` resolvem.
+
+  > ⚠️ **Correção de método.** Eu registrei antes que era preciso `rm -rf` no diretório do hash
+  > **e** parar o daemon. **O `rm` nunca foi necessário** — na primeira vez ele veio antes do
+  > `--stop`, e eu creditei o resultado aos dois. Depois o caso se repetiu com o diretório
+  > **vazio** e o `--stop` sozinho resolveu, sem `rm` nenhum. Foi conclusão tirada de uma sequência
+  > sem variar um fator de cada vez, e custou pedir ao usuário duas vezes um comando destrutivo
+  > que não fazia falta. **Mesmo padrão do Achado 30, agora em procedimento de build.**
 - **Depois de destravar, `./gradlew test` fica `UP-TO-DATE`** e não reexecuta nada: os XMLs
   continuam com a data antiga. Para ter medição de agora, `./gradlew test --rerun`.
 - **Consequência para a leitura de resultados:** com o build travado, `./gradlew test` não roda e os
@@ -339,6 +346,31 @@ The contents of the immutable workspace '~/.gradle/caches/9.2.0/transforms/<hash
 `UP-TO-DATE` enquanto nenhum fonte muda, o que dá a falsa impressão de que a cópia manual do
 plugin oficial sobrevive. **Depois de qualquer mudança de código, reinstalar o oficial** antes de
 rodar roteiro que dependa dele — senão o roteiro falha por ausência e parece regressão.
+
+### Como uma sessão conecta ao MCP — e como ela nasce quebrada (2026-08-08)
+
+> **Leia antes de mexer em criação de sessão.** Explica Q-31 e o Achado 32.
+
+| Fato                                                                                                                                                    | Onde foi lido                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `TerminalCustomizer` injeta `CLAUDE_CODE_SSE_PORT = getRunningMcpServerPorts().getOrDefault(project.locationHash, 0)` — **o default é `0`, não ausente** | `javap -c` de `TerminalCustomizer`                        |
+| O mapa é estático, por `locationHash`, e só é populado por `MCPService.start()`                                                                        | `javap -c` de `MCPService.start`                          |
+| `start()` roda no `PostStartupActivity` → **existe janela entre abrir o projeto e a porta existir**                                                     | `plugin.xml` do oficial + `javap` do activity             |
+| O oficial mitiga a corrida com `restartClaudeInExistingTerminals`, chamado logo após `start()`                                                          | `javap -c` de `PostStartupActivity`                       |
+| **A mitigação varre só a tool window `"Terminal"`** e só abas cujo título começa com `"Claude Code"`                                                    | `javap -c` de `restartClaudeInExistingTerminals$lambda$14` |
+
+**Consequência:** uma pane criada antes do `PostStartupActivity` recebe porta `0` e **nunca**
+conecta — ambiente de processo é fixado no `exec`. A mitigação que consertaria isso não nos
+enxerga. **É a terceira vez que o literal `"Terminal"` decide o nosso comportamento**, depois do
+`Esc` (RF-17) e de DEF-08.
+
+**Não é divergência do nosso split:** `splitSession` usa o mesmo `createPane` →
+`createSession` da primeira pane. O que difere é o **instante** do nascimento.
+
+**Diagnóstico de campo:** pane sem `In <arquivo>` no rodapé está fora do MCP. **Medição pendente
+(T-3.61):** `echo $CLAUDE_CODE_SSE_PORT` nessa pane — se sair `0`, fecha.
+
+**Contorno sem código:** "Nova sessão" nasce com a porta certa.
 
 ### API de terminal disponível na build 262
 
@@ -509,6 +541,95 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 ---
 
 ## Log
+
+### 2026-08-08 (noite/9) — Q-31 arquivada: duas medições dirigidas, nenhuma reprodução
+
+**Segunda tentativa, com a condição específica.** IDE reiniciada, tool window restaurada aberta, a
+primeira pane nascendo durante a inicialização — o log confirma a sessão subindo sozinha na
+partida. Resultado: **as duas panes integradas, mesma porta real**. Igual à primeira tentativa.
+
+**E existe uma razão provável para nunca reproduzirmos, que estava debaixo do nariz o tempo todo.**
+Nossas sessões usam `deferSessionStartUntilUiShown = true` (D-23/RNF-02): **o processo não nasce
+quando a aba é criada, e sim quando o componente aparece** — e é no nascimento do processo que
+`configureStartupOptions` roda o customizer e congela o `CLAUDE_CODE_SSE_PORT`. Não é suposição: o
+spike dos T-2 mediu exatamente isso, em headless, onde `ttyConnector` fica `null` para sempre
+porque a UI nunca é exibida.
+
+**A flag que existe por motivo estético — esconder o eco da partida (RF-29) — provavelmente nos
+tira da corrida de graça.** Adiar não elimina a corrida em teoria; estreita tanto que duas
+tentativas dirigidas não a pegaram.
+
+**Decisão: arquivar Q-31, e não escrever código.** O Achado 32 fica como fato do plugin oficial —
+`getOrDefault(…, 0)` e a mitigação presa ao literal `"Terminal"` são reais e podem explicar
+sintomas futuros. Mas a causa do caso visto em T-3.60 **continua desconhecida**, e duas medições
+dirigidas que não sustentam a hipótese são motivo para parar de caçar, não para implementar
+proteção contra algo que não se conseguiu provocar.
+
+**O que fica pronto para a próxima vez que o sintoma aparecer:** pane sem `In <arquivo>` no rodapé,
+`/exit`, `echo $CLAUDE_CODE_SSE_PORT`, comparar com uma pane sadia. Se der `0`, o Achado 32 estava
+certo e é só reabrir a questão com a evidência na mão.
+
+**Balanço honesto da investigação.** Ela não fechou Q-31, mas rendeu três coisas verificadas: o
+mecanismo do `getOrDefault`, a terceira ocorrência do literal `"Terminal"` nos excluindo, e a
+confirmação em produção — nas duas panes, com porta real — de que o customizer alcança sessões de
+split. Esta última é a premissa central do projeto, vista fora do laboratório de T-4.
+
+### 2026-08-08 (noite/8) — T-3.61 não reproduziu, e isso vale registrar
+
+**Medição.** As duas panes ficaram **integradas** e `echo $CLAUDE_CODE_SSE_PORT` devolveu a **mesma
+porta real, `33471`**, nas duas.
+
+**O braço de controle passou, e não é pouco.** A porta é por projeto (`locationHash`), como o
+bytecode dizia, e **o customizer alcança as panes de split em produção** — T-4 provou isso em
+laboratório em 2026-08-01; agora está visto numa sessão real, nas duas panes. É a premissa central
+do projeto confirmada mais uma vez, por outro caminho.
+
+**Mas a hipótese continua sem medição.** O caso que eu queria pegar — pane **sem** integração — não
+apareceu. Sem ele, a porta `0` do Achado 32 não foi nem confirmada nem refutada. **Não reproduzir
+não é refutar, e também não é confirmar**; é ficar onde estava, com uma tentativa registrada.
+
+**Por que registrar um resultado nulo.** Porque a próxima sessão, lendo o Achado 32 sozinho, teria
+todo motivo para tratá-lo como fechado — a leitura do bytecode é convincente demais. Este registro
+existe para que ela veja que a medição foi tentada e não deu.
+
+**Para reproduzir, falta a condição específica:** uma sessão que nasça **antes** do
+`PostStartupActivity` — a tool window restaurada aberta na abertura do projeto, não uma aba criada
+com o IDE já de pé. Foi assim que o sintoma apareceu em T-3.60, e é a única forma conhecida de
+provocá-lo.
+
+**Nada foi implementado, de novo e de propósito.** Continua valendo o contorno sem código: "Nova
+sessão" nasce com a porta certa.
+
+### 2026-08-08 (noite/7) — Q-31: a pane nasce com porta `0`, e o conserto do oficial não nos vê
+
+**Investigação pedida.** Comecei pelo nosso lado, e ele saiu limpo: `splitSession` usa o mesmo
+`createPane` → `createSession` da primeira pane, sem divergência de ambiente. Se as duas nascem
+iguais, a diferença é **quando** nascem — e aí a resposta estava no plugin oficial.
+
+**A cadeia (Achado 32), toda lida no bytecode:** o customizer injeta
+`CLAUDE_CODE_SSE_PORT = getOrDefault(locationHash, 0)`; o mapa só é populado por `MCPService.start()`;
+`start()` roda no `PostStartupActivity`. Sessão criada antes disso recebe **`0`** — não "sem
+variável", **zero** — e como ambiente de processo é fixado no `exec`, ela nunca conecta.
+
+**O detalhe que fecha o caso:** logo depois de `start()`, o oficial chama
+`restartClaudeInExistingTerminals` **justamente para consertar essa corrida**. E essa função varre
+`getToolWindow("Terminal")` e só age em abas cujo título começa com `"Claude Code"`. **As nossas
+panes falham nos dois critérios.** A corrida é dele, o conserto existe, e nos exclui por
+construção — **terceira vez que o literal `"Terminal"` nos define**, depois de RF-17 e DEF-08.
+
+**Explica os três comportamentos observados de uma vez:** a primeira pane costuma ser a
+desintegrada (nasce com o projeto), a de split costuma conectar (nasce depois), e em T-3.36 as duas
+conectaram porque a aba foi aberta com o IDE já de pé.
+
+**O que eu não fiz, de propósito: não implementei nada.** O mecanismo está lido, o efeito **não
+está medido**. T-3.61 mede com uma linha — `echo $CLAUDE_CODE_SSE_PORT` numa pane sem o indicador.
+Sair `0` fecha Q-31; qualquer outra coisa derruba a explicação inteira. Este arquivo já pagou duas
+vezes por tratar leitura como medição (Achados 30 e 31), e a tentação aqui era grande porque a
+leitura é bonita demais.
+
+**Contorno que já existe:** "Nova sessão" nasce com a porta certa. Fechar a pane desintegrada e
+abrir outra resolve o caso concreto, sem código novo — o que também é o motivo de eu não ter
+proposto código antes de medir.
 
 ### 2026-08-08 (noite/6) — a suíte verde de verdade, e o que o daemon escondia
 
