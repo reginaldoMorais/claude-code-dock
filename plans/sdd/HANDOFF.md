@@ -10,62 +10,64 @@
 
 ## Estado atual
 
-**Fase: v1.9.1 — quitação do Achado 31 (prazo da síntese + cancelamento de RNF-23).**
-**A v1.9 saiu como release `v0.8.0` (tag em `c50861c`). 123 testes verdes; a v1.9.1 ainda não foi
-publicada — é a primeira rodada de dívida, não de funcionalidade.**
+**Fase: v1.9.2 — testes de integração T-2.1 a T-2.6, a lacuna mais antiga do projeto.**
+**A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79`.
+130 testes verdes. Nenhuma das duas foi publicada — são rodadas de dívida, não de funcionalidade.**
 
 > **Duas numerações, e não são a mesma.** O `SPEC.md` tem versionamento próprio (`v1.x`), que
 > conta rodadas de especificação; o release segue SemVer (`0.x.y`), no `CHANGELOG.md` e nas tags
 > do git. Mapa do que já saiu: **0.6.0** ← SPEC v1.5.1 · **0.7.0** ← SPEC v1.8.2 · **0.8.0** ←
 > SPEC v1.9. Cada release tem também uma tag `-rc` no commit do código, anterior ao da publicação.
 
-| Artefato                                                         | Estado                                                                   |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                             |
-| [SPEC.md](SPEC.md)                                               | ✅ v1.9.1 — Achado 31 quitado; T-1.55/T-1.56; Design da síntese corrigido |
-| `HANDOFF.md`                                                     | ✅ Este arquivo, com a v1.9.1 e o inventário de roteiros que faltavam    |
-| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)      |
-| Código do plugin                                                 | ✅ **123 testes passando** (121 + 2 de v1.9.1), sem warnings             |
-| **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                |
-| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                  |
-| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                   |
-| RF-22 (`/export`), RF-24 (cópia), RF-26 (botão de seleção)       | ✅ Implementados e em uso                                                |
-| RF-27 (saída plana)                                              | ⚰️ **REMOVIDO em v1.4** — funcionava, e não era o que servia             |
-| RF-28 (respiro nas bordas)                                       | ✅ Implementado e **validado no IDE**, em 20px por padrão                |
-| RF-29 (capa de carregamento)                                     | ✅ Implementado e **validado no IDE**, prazo de 3 s                      |
-| Tela de configurações                                            | ✅ Reescrita em Kotlin UI DSL; v1.5 adiciona Piper fields                |
-| T-1.21 (teste dos diretórios de fallback)                        | ✅ Implementado, com controle contra passar pelo motivo errado           |
-| **RF-31/RF-32 (Piper TTS)**                                      | ✅ **COMPLETOS** — menu "Áudio" no cabeçalho; config executável + modelo |
-| `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23                 |
-| **RF-30 (play no popup)**                                        | ⚰️ **DESCARTADO em v1.5.1** — UX redundante; menu Áudio (RF-31) já cobre |
-| **RF-47 (velocidade da fala)**                                   | ✅ Submenu + seletor em Settings, 0,25x a 2x — **validado no IDE**       |
-| **RF-48 / DEF-07 ("Tocar seleção")**                             | ✅ Corrigido em v1.9 e **validado no IDE** (T-3.54)                      |
-| **RF-33/34/35 (export do trecho)**                               | ✅ Implementados e **validados no IDE** pelo usuário                     |
-| `ClaudeSelectionExport`                                          | ✅ Objeto puro: nome sugerido + gravação (RNF-26)                        |
-| **RF-36 a RF-40 (split da aba)**                                 | ✅ Implementados e **validados no IDE** pelo usuário (4 panes)           |
-| **RF-41/RF-42 (fechar a divisão)**                               | ✅ Item "Fechar divisão" no cabeçalho + foco reassumido (v1.7.1)         |
-| **DEF-02 (navegação com uma aba)**                               | ✅ Corrigido em v1.7.2 — guarda em `ClaudeTabNavigation` (T-1.40)        |
-| **RF-43 (trocar de lado / girar)**                               | ✅ Implementado em v1.8, sobre `Splitter.swapComponents()`               |
-| **DEF-03 ("encerrado" com sessão viva)**                         | ✅ Corrigido em v1.8.1 — callback por pane + `isDescendingFrom`          |
-| **DEF-04 (menu "Dividir" vazio)**                                | ✅ Era sintoma de DEF-05; diagnóstico anterior revogado (Achado 30)      |
-| **DEF-05 (cabeçalho morto após fechar pane)**                    | ✅ Corrigido — `preferredFocusableComponent` passa à sobrevivente        |
-| **DEF-06 (nome ambíguo do fechamento)**                          | ✅ "Fechar esta sessão" e "Fechar todas as sessões" (RF-46)              |
-| Q-26 ("encerrado" numa aba dividida)                             | ✅ Respondida pelo uso real: é "sem sessão viva" (RF-44)                 |
-| **DnD de panes (Q-28)**                                          | ⚰️ **Avaliado e recusado** — falta onde agarrar, não mecanismo           |
-| Roteiros T-3.45-47 (reposicionar)                                | ⏳ Pendentes — aguardando IDE real                                       |
-| `ClaudeSessionSplitter`                                          | ✅ Objeto puro de Swing: árvore de panes (RNF-29, RNF-30)                |
-| **Premissa de engine (CB-26/36/47, R-15)**                       | ✅ **CORRIGIDA** — a sessão é sempre JediTerm/CLASSIC (Achado 27)        |
-| Testes de integração T-2.\*                                      | ⏳ Nunca implementados                                                   |
-| Roteiros T-3.21-23 (Piper manual)                                | ⏳ Pendentes — aguardando IDE real com Piper                             |
-| Roteiros T-3.34-41 (split)                                       | ⏳ Pendentes — aguardando IDE real                                       |
+| Artefato                                                         | Estado                                                                    |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                              |
+| [SPEC.md](SPEC.md)                                               | ✅ v1.9.2 — T-2.1 a T-2.6; escopo real do headless; Q-04/Q-10 recorrigidos |
+| `HANDOFF.md`                                                     | ✅ Este arquivo, com a v1.9.1 e o inventário de roteiros que faltavam     |
+| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)       |
+| Código do plugin                                                 | ✅ **123 testes passando** (121 + 2 de v1.9.1), sem warnings              |
+| **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                 |
+| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                   |
+| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                    |
+| RF-22 (`/export`), RF-24 (cópia), RF-26 (botão de seleção)       | ✅ Implementados e em uso                                                 |
+| RF-27 (saída plana)                                              | ⚰️ **REMOVIDO em v1.4** — funcionava, e não era o que servia              |
+| RF-28 (respiro nas bordas)                                       | ✅ Implementado e **validado no IDE**, em 20px por padrão                 |
+| RF-29 (capa de carregamento)                                     | ✅ Implementado e **validado no IDE**, prazo de 3 s                       |
+| Tela de configurações                                            | ✅ Reescrita em Kotlin UI DSL; v1.5 adiciona Piper fields                 |
+| T-1.21 (teste dos diretórios de fallback)                        | ✅ Implementado, com controle contra passar pelo motivo errado            |
+| **RF-31/RF-32 (Piper TTS)**                                      | ✅ **COMPLETOS** — menu "Áudio" no cabeçalho; config executável + modelo  |
+| `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23                  |
+| **RF-30 (play no popup)**                                        | ⚰️ **DESCARTADO em v1.5.1** — UX redundante; menu Áudio (RF-31) já cobre  |
+| **RF-47 (velocidade da fala)**                                   | ✅ Submenu + seletor em Settings, 0,25x a 2x — **validado no IDE**        |
+| **RF-48 / DEF-07 ("Tocar seleção")**                             | ✅ Corrigido em v1.9 e **validado no IDE** (T-3.54)                       |
+| **RF-33/34/35 (export do trecho)**                               | ✅ Implementados e **validados no IDE** pelo usuário                      |
+| `ClaudeSelectionExport`                                          | ✅ Objeto puro: nome sugerido + gravação (RNF-26)                         |
+| **RF-36 a RF-40 (split da aba)**                                 | ✅ Implementados e **validados no IDE** pelo usuário (4 panes)            |
+| **RF-41/RF-42 (fechar a divisão)**                               | ✅ Item "Fechar divisão" no cabeçalho + foco reassumido (v1.7.1)          |
+| **DEF-02 (navegação com uma aba)**                               | ✅ Corrigido em v1.7.2 — guarda em `ClaudeTabNavigation` (T-1.40)         |
+| **RF-43 (trocar de lado / girar)**                               | ✅ Implementado em v1.8, sobre `Splitter.swapComponents()`                |
+| **DEF-03 ("encerrado" com sessão viva)**                         | ✅ Corrigido em v1.8.1 — callback por pane + `isDescendingFrom`           |
+| **DEF-04 (menu "Dividir" vazio)**                                | ✅ Era sintoma de DEF-05; diagnóstico anterior revogado (Achado 30)       |
+| **DEF-05 (cabeçalho morto após fechar pane)**                    | ✅ Corrigido — `preferredFocusableComponent` passa à sobrevivente         |
+| **DEF-06 (nome ambíguo do fechamento)**                          | ✅ "Fechar esta sessão" e "Fechar todas as sessões" (RF-46)               |
+| Q-26 ("encerrado" numa aba dividida)                             | ✅ Respondida pelo uso real: é "sem sessão viva" (RF-44)                  |
+| **DnD de panes (Q-28)**                                          | ⚰️ **Avaliado e recusado** — falta onde agarrar, não mecanismo            |
+| Roteiros T-3.45-47 (reposicionar)                                | ⏳ Pendentes — aguardando IDE real                                        |
+| `ClaudeSessionSplitter`                                          | ✅ Objeto puro de Swing: árvore de panes (RNF-29, RNF-30)                 |
+| **Premissa de engine (CB-26/36/47, R-15)**                       | ✅ **CORRIGIDA** — a sessão é sempre JediTerm/CLASSIC (Achado 27)         |
+| Testes de integração T-2.\* | ✅ **Implementados em v1.9.2** — `ClaudeDockIntegrationTest`, 7 casos |
+| Roteiros T-3.21-23, T-3.26, T-3.27 (Piper) | ✅ **Aprovados no IDE** em 2026-08-08, sandbox com Piper |
+| Roteiros T-3.34-41 (split)                                       | ⏳ Pendentes — aguardando IDE real                                        |
 
-**Estado do repositório:** `main` na v1.9, árvore limpa, publicada como `v0.8.0`. Tags da rodada:
+**Estado do repositório:** `main` na v1.9.2. A v1.9.1 (Achado 31) foi commitada em `2b7ef79`;
+a v1.9.2 (`ClaudeDockIntegrationTest`) ainda está na árvore de trabalho. Tags da última release:
 `v0.8.0-rc` em `de5467e` (o código) e `v0.8.0` em `c50861c` (só o CHANGELOG). O split da v1.7 —
 `ClaudeSessionSplitter.kt`, `SplitSessionAction.kt`, o listener nativo na factory e o ciclo de
 vida de panes em `ClaudeDockSessions` — está em `main` desde a release 0.7.0.
 
-**Próximos passos:** roteiros manuais T-3.34-41 (split) e T-3.21-23 (Piper), ainda dependendo de
-IDE real. Os da v1.9 (T-3.54 a T-3.58) já foram executados e aprovados.
+**Próximos passos:** roteiros manuais de split (T-3.34-41), reposicionamento (T-3.45-47) e os
+herdados da base (T-3.3-3.6, T-3.18-3.20), todos dependendo de IDE real. Os de Piper e os da v1.9
+já foram executados e aprovados.
 
 **Achado 31 — quitado em 2026-08-08.** `synthesize` ganhou o prazo de 20 s e a atribuição de
 `currentProcess`. A auditoria achou uma segunda promessa inerte no mesmo campo: o cancelamento de
@@ -443,21 +445,18 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 
 **Pendente, em ordem:**
 
-1. **Testes de integração T-2.\*** — nunca implementados. Tool window registrada, isolamento de
-   abas, liberação de PTY, e o comportamento com `REWORKED` vs `CLASSIC`. **T-2.6 responde Q-04 e
-   Q-10 de graça** (CB-26, CB-36). É a maior lacuna e a única com peso de implementação.
-2. **Roteiros manuais em aberto — o inventário completo**, que até 2026-08-08 estava espalhado em
+1. **Roteiros manuais em aberto — o inventário completo**, que até 2026-08-08 estava espalhado em
    dois lugares e omitia dois blocos:
 
-   | Bloco                | Roteiros           | Observação                                                    |
-   | -------------------- | ------------------ | ------------------------------------------------------------- |
-   | Base                 | T-3.3 a T-3.6      | `Ctrl+Alt+K`, `--resume`, outros IDEs, desinstalação          |
-   | v1.4                 | T-3.18 a T-3.20    | respiro sob troca de tema, partida sem eco, diretório novo    |
-   | v1.5 (Piper)         | T-3.21 a T-3.23    | **provavelmente já pagos** — a v1.9 rodou `runIde` com Piper  |
-   | v1.5 (RNF-20/23)     | **T-3.26, T-3.27** | **nunca listados aqui.** Reprovariam antes da v1.9.1          |
-   | v1.7 (split)         | T-3.34 a T-3.41    | —                                                              |
-   | v1.8 (reposicionar)  | T-3.45 a T-3.47    | —                                                              |
-   | v1.8.2               | **T-3.48, 52, 53** | **status nunca declarado** — T-3.48 aparece só como hipótese  |
+   | Bloco               | Roteiros           | Observação                                                   |
+   | ------------------- | ------------------ | ------------------------------------------------------------ |
+   | Base                | T-3.3 a T-3.6      | `Ctrl+Alt+K`, `--resume`, outros IDEs, desinstalação         |
+   | v1.4                | T-3.18 a T-3.20    | respiro sob troca de tema, partida sem eco, diretório novo   |
+   | v1.5 (Piper)        | T-3.21 a T-3.23    | **provavelmente já pagos** — a v1.9 rodou `runIde` com Piper |
+   | v1.5 (RNF-20/23)    | **T-3.26, T-3.27** | **nunca listados aqui.** Reprovariam antes da v1.9.1         |
+   | v1.7 (split)        | T-3.34 a T-3.41    | —                                                            |
+   | v1.8 (reposicionar) | T-3.45 a T-3.47    | —                                                            |
+   | v1.8.2              | **T-3.48, 52, 53** | **status nunca declarado** — T-3.48 aparece só como hipótese |
 
 3. **Q-02** — ambiguidade de sessão dupla, durante o uso real.
 4. **Decidir o destino do stash** `shell -i -c com exec`: mantê-lo como referência de D-20 ou
@@ -471,6 +470,50 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 ---
 
 ## Log
+
+### 2026-08-08 (tarde) — T-2.1 a T-2.6: medir o ambiente antes de escrever o teste
+
+**Contexto.** Última lacuna estrutural do projeto: os testes de integração nunca escritos, listados
+como pendência desde a v1.1.
+
+**A fase que evitou seis testes falsos.** Antes de escrever qualquer asserção, três spikes
+descartáveis mediram o que o `BasePlatformTestCase` realmente entrega. Os três acharam coisa:
+
+1. **`ToolWindowManager` no headless é `ToolWindowHeadlessManagerImpl` e devolve `null` para
+   qualquer id** — inclusive "Terminal". T-2.1 escrito sobre ele passaria sem medir nada, e é
+   exatamente a forma óbvia de escrever esse teste. A rota honesta é o `ToolWindowEP`.
+2. **Nenhuma sessão chega a ter PTY neste ambiente.** Mesmo passando
+   `deferSessionStartUntilUiShown = false` direto ao runner, `ttyConnector` continua `null` depois
+   de 10 s: o processo nasce quando o componente é exibido, e no headless nada é exibido. Isso
+   **redefiniu** T-2.2/2.3/2.4 — eles verificam o encadeamento de `Disposable` que produz o PTY,
+   que é onde o vazamento nasceria, e não o processo. A metade observável fica com T-3.1/T-3.41.
+3. **`ToolWindowEP.pluginDescriptor` expõe `descriptorPath`**, e o nosso diz `plugin-terminal.xml`.
+   Isso deu a T-2.5 uma asserção sobre o mecanismo real de RF-15, em vez de uma leitura de XML.
+
+**T-2.6 é o mais valioso, e o ambiente entregou o caso interessante de graça:** o
+`TerminalOptionsProvider` deste ambiente tem `REWORKED` como padrão, e a sessão nasceu
+`ShellTerminalWidget` mesmo assim. O Achado 27 deixou de ser leitura de bytecode e virou asserção.
+
+**E isso obrigou a corrigir um registro antigo.** Q-04 e Q-10 constavam resolvidos desde 2026-08-03
+com a justificativa "ambos os engines funcionavam". **A justificativa estava errada.** As abas
+deste plugin nunca foram `REWORKED`: o `REWORKED` do usuário valia para o Terminal nativo dele. As
+perguntas não tinham objeto, e a resolução acertou o resultado pelo caminho errado — o mesmo
+padrão do Achado 30. As duas linhas foram corrigidas no SPEC.
+
+**Mutação, como manda o Achado 20.** Movendo a tool window para o `plugin.xml`, trocando o id, e
+pendurando o widget no `project` em vez do `Disposable` da aba: reprovam T-2.1, T-2.5 e T-2.4b — e
+só eles. T-2.6 não é mutável por construção: fixa comportamento da plataforma, e vale como tripwire
+de upgrade (T-5.3).
+
+**Testes.** 123 → **130**, zero falhas.
+
+**Validação manual no IDE (mesmo dia).** Sandbox com Piper configurado: T-3.21, T-3.22, T-3.23,
+T-3.26 e T-3.27 aprovados pelo usuário — os dois últimos **depois** da correção da v1.9.1, e
+T-3.27 é justamente o cancelamento que era inerte. O `claude-code-dock.xml` do sandbox gravou
+executável, modelo e `speechSpeed=125`, o que fecha T-3.57 de passagem.
+
+**Não feito.** Os roteiros de split (T-3.34-41), de reposicionamento (T-3.45-47) e os herdados da
+base (T-3.3-3.6, T-3.18-3.20) seguem pendentes de IDE real. `pluginVersion` continua em 0.1.0.
 
 ### 2026-08-08 — v1.9.1: o campo morto guardava duas promessas, não uma
 
