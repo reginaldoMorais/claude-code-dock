@@ -10,7 +10,7 @@
 
 ## Estado atual
 
-**Fase: v1.9.2 — testes de integração T-2.1 a T-2.6, a lacuna mais antiga do projeto.**
+**Fase: v1.9.3 — DEF-08: o `Ctrl+Alt+K` do oficial nunca poderia chegar à nossa janela.**
 **A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79`.
 130 testes verdes. Nenhuma das duas foi publicada — são rodadas de dívida, não de funcionalidade.**
 
@@ -52,12 +52,15 @@
 | **DEF-06 (nome ambíguo do fechamento)**                          | ✅ "Fechar esta sessão" e "Fechar todas as sessões" (RF-46)               |
 | Q-26 ("encerrado" numa aba dividida)                             | ✅ Respondida pelo uso real: é "sem sessão viva" (RF-44)                  |
 | **DnD de panes (Q-28)**                                          | ⚰️ **Avaliado e recusado** — falta onde agarrar, não mecanismo            |
-| Roteiros T-3.45-47 (reposicionar)                                | ⏳ Pendentes — aguardando IDE real                                        |
+| Roteiros T-3.42-47 (fechar/reposicionar) | ✅ Validados pelo **uso real** desde a release 0.7.0 — não por roteiro |
 | `ClaudeSessionSplitter`                                          | ✅ Objeto puro de Swing: árvore de panes (RNF-29, RNF-30)                 |
 | **Premissa de engine (CB-26/36/47, R-15)**                       | ✅ **CORRIGIDA** — a sessão é sempre JediTerm/CLASSIC (Achado 27)         |
 | Testes de integração T-2.\* | ✅ **Implementados em v1.9.2** — `ClaudeDockIntegrationTest`, 7 casos |
 | Roteiros T-3.21-23, T-3.26, T-3.27 (Piper) | ✅ **Aprovados no IDE** em 2026-08-08, sandbox com Piper |
-| Roteiros T-3.34-41 (split)                                       | ⏳ Pendentes — aguardando IDE real                                        |
+| Roteiros de split (T-3.34-41) | ✅ **Aprovados em 2026-08-08**, menos T-3.36 (diff por pane), não executado |
+| **T-3.36 (diff por pane)** | ✅ **Aprovado 2026-08-08** — as duas panes com `In test.md` ao mesmo tempo |
+| **T-3.4 (`--resume`)** | ✅ **Aprovado 2026-08-08** |
+| **DEF-08 (`Ctrl+Alt+K`)** | 🐞 Aberto, mas **rebaixado**: é ergonomia — o trecho chega, o foco é que erra |
 
 **Estado do repositório:** `main` na v1.9.2. A v1.9.1 (Achado 31) foi commitada em `2b7ef79`;
 a v1.9.2 (`ClaudeDockIntegrationTest`) ainda está na árvore de trabalho. Tags da última release:
@@ -65,9 +68,9 @@ a v1.9.2 (`ClaudeDockIntegrationTest`) ainda está na árvore de trabalho. Tags 
 `ClaudeSessionSplitter.kt`, `SplitSessionAction.kt`, o listener nativo na factory e o ciclo de
 vida de panes em `ClaudeDockSessions` — está em `main` desde a release 0.7.0.
 
-**Próximos passos:** roteiros manuais de split (T-3.34-41), reposicionamento (T-3.45-47) e os
-herdados da base (T-3.3-3.6, T-3.18-3.20), todos dependendo de IDE real. Os de Piper e os da v1.9
-já foram executados e aprovados.
+**Próximos passos:** restam os herdados da base — T-3.5 (outros IDEs), T-3.6 (desinstalação) e
+T-3.18-3.20 (tema, partida sem eco, diretório não confiável). Split, Piper, diff por pane,
+`--resume` e T-3.59 estão pagos; T-3.3 foi invalidado por DEF-08.
 
 **Achado 31 — quitado em 2026-08-08.** `synthesize` ganhou o prazo de 20 s e a atribuição de
 `currentProcess`. A auditoria achou uma segunda promessa inerte no mesmo campo: o cancelamento de
@@ -414,7 +417,7 @@ autor dela calibrou, e não a um número escolhido por nós. Custo da decisão: 
 | #        | Desafio                                                                                                                                                               | Criticidade  |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
 | **Q-01** | ✅ **RESOLVIDO em 2026-08-01.** O customizer alcança sim — validado por `TerminalCustomizerReachTest` (T-4), com teste de controle. R-02 fechado                      | ✅ Resolvido |
-| **Q-02** | Duas sessões simultâneas (aba nativa + janela dedicada) no mesmo servidor MCP: qual "possui" um diff aberto?                                                          | 🟡 Médio     |
+| **Q-02** | ~~Duas sessões simultâneas no mesmo servidor MCP: qual "possui" um diff aberto?~~ ✅ **RESOLVIDO em 2026-08-08 (T-3.59): ninguém.** O envio é broadcast; a noção de dono não existe nessa camada | ✅ Resolvido |
 | **Q-03** | Semântica exata de `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` — string encontrada, comportamento não verificado                                                       | 🟢 Baixo     |
 | **Q-04** | `TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?                                                                                      | 🟡 Médio     |
 | **Q-05** | Vale ocultar o ponto de entrada do oficial para evitar confusão? Depende de Q-03                                                                                      | 🟢 Baixo     |
@@ -448,17 +451,20 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 1. **Roteiros manuais em aberto — o inventário completo**, que até 2026-08-08 estava espalhado em
    dois lugares e omitia dois blocos:
 
-   | Bloco               | Roteiros           | Observação                                                   |
-   | ------------------- | ------------------ | ------------------------------------------------------------ |
-   | Base                | T-3.3 a T-3.6      | `Ctrl+Alt+K`, `--resume`, outros IDEs, desinstalação         |
-   | v1.4                | T-3.18 a T-3.20    | respiro sob troca de tema, partida sem eco, diretório novo   |
-   | v1.5 (Piper)        | T-3.21 a T-3.23    | **provavelmente já pagos** — a v1.9 rodou `runIde` com Piper |
-   | v1.5 (RNF-20/23)    | **T-3.26, T-3.27** | **nunca listados aqui.** Reprovariam antes da v1.9.1         |
-   | v1.7 (split)        | T-3.34 a T-3.41    | —                                                            |
-   | v1.8 (reposicionar) | T-3.45 a T-3.47    | —                                                            |
-   | v1.8.2              | **T-3.48, 52, 53** | **status nunca declarado** — T-3.48 aparece só como hipótese |
+   | Bloco               | Roteiros           | Estado em 2026-08-08                                              |
+   | ------------------- | ------------------ | ----------------------------------------------------------------- |
+   | Base                | T-3.4              | ✅ aprovado (`--resume`)                                          |
+   | Base                | ~~T-3.3~~          | ⚰️ **inválido** — DEF-08; substituído por T-3.59, este ✅ aprovado |
+   | Base                | **T-3.5, T-3.6**   | ⏳ **pendentes** — outros IDEs, desinstalação                     |
+   | v1.4                | **T-3.18 a T-3.20**| ⏳ **pendentes** — tema, partida sem eco, diretório novo          |
+   | v1.5 (Piper)        | T-3.21 a T-3.23    | ✅ aprovados                                                      |
+   | v1.5 (RNF-20/23)    | T-3.26, T-3.27     | ✅ aprovados, **depois** da correção da v1.9.1                    |
+   | v1.7 (split)        | T-3.34 a T-3.41    | ✅ aprovados, incluindo T-3.36 (diff por pane)                    |
+   | v1.7.1 / v1.8       | T-3.42 a T-3.47    | ✅ uso real desde a release 0.7.0 — não por roteiro               |
+   | v1.8.2              | **T-3.48, 52, 53** | ⏳ **status nunca declarado** — T-3.48 aparece só como hipótese   |
 
-3. **Q-02** — ambiguidade de sessão dupla, durante o uso real.
+3. ~~**Q-02** — ambiguidade de sessão dupla~~ ✅ respondida em 2026-08-08 por T-3.59: é broadcast,
+   ninguém possui.
 4. **Decidir o destino do stash** `shell -i -c com exec`: mantê-lo como referência de D-20 ou
    descartar. Stash não é memória de longo prazo, e D-20 já registra a medição por escrito.
 5. **`gradle.properties` em `pluginVersion = 0.1.0`** contra a tag `v0.8.0` — decisão de release.
@@ -470,6 +476,107 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 ---
 
 ## Log
+
+### 2026-08-08 (noite/3) — T-3.59 fecha DEF-08 e, de brinde, a Q-02 mais antiga do arquivo
+
+**T-3.59 executado. O trecho chega.** Depois do `Ctrl+Alt+K`, `@test.md#L3` apareceu na nossa pane
+com `1 line selected`. **DEF-08 é ergonomia, não integração** — o conteúdo atravessa por MCP, só o
+foco vai para a janela errada. A leitura do bytecode acertou, e agora está medida em vez de
+inferida.
+
+**E chegou nas duas panes ao mesmo tempo.** Isso não é um segundo defeito: é a mesma frase do
+mecanismo vista de frente. `sendAtMentionedNotifications` é broadcast — não tem destinatário.
+
+**Q-02 respondida, depois de nove versões esperando.** A pergunta era "com duas sessões no mesmo
+servidor MCP, qual delas 'possui' um diff aberto?". **A resposta é: nenhuma, e a pergunta assumia
+uma estrutura que não existe.** O protocolo do plugin oficial não modela sessão-alvo; ele
+transmite a todos. Não é que a desambiguação erre — é que ela nunca foi escrita. Ela estava
+marcada como "🟡 Médio, durante o uso real", e foi exatamente o uso real que respondeu, de graça,
+num teste que existia para outra coisa.
+
+**O que isso ensina sobre o formato:** T-3.59 foi escrito para substituir um roteiro inválido, com
+uma pergunta binária (chega ou não chega). Ele respondeu a sua pergunta **e** uma pergunta de
+arquitetura aberta desde a v1.0. Roteiro barato com hipótese explícita rende mais que roteiro
+caro sem hipótese — mesma lição de T-1.55/T-1.56 na rodada anterior.
+
+**Conserto plausível de DEF-08, não implementado.** Uma ação nossa que escreva `@arquivo#Lx` direto
+no PTY da pane em foco, pelo `sendInput` que existe desde D-16 — sem tocar no protocolo privado e
+sem violar D-01. Custo baixo. **A demanda é que ainda não existe**, e inventá-la aqui seria o
+mesmo erro de RF-30, recusado na v1.5.1.
+
+**Nenhum código mudou.** A suíte não pôde ser reexecutada nesta rodada: a IDE do sandbox escreve
+dentro do diretório de distribuição, que vive no cache de transformação **imutável** do Gradle, e
+o `./gradlew test` passa a recusar. Some com `rm -rf ~/.gradle/caches/9.2.0/transforms/<hash>`
+depois de fechar a IDE. O último verde real é de 15:53 (130/0), e **nenhum `.kt` foi tocado
+depois** — então ele ainda descreve o código atual.
+
+### 2026-08-08 (noite/2) — DEF-08: o roteiro estava errado, não o plugin
+
+**Resultados.** T-3.4 ✅ · T-3.36 ✅ · **T-3.3 ✗** — e o "✗" virou achado estrutural.
+
+**T-3.36, com a melhor evidência da noite.** O print mostra as duas panes lado a lado, **ambas com
+`In test.md` no rodapé ao mesmo tempo**. Esse rótulo vem do servidor MCP dizendo ao CLI qual
+arquivo está aberto no editor: duas panes exibindo-o **é** a prova de que as duas mantêm a
+integração simultaneamente, que é o coração de RF-37. A edição foi aplicada e o editor atualizou.
+Melhor do que o roteiro pedia — ele falava em "diff abre no IDE", e o que se viu foi a integração
+viva nas duas pontas.
+
+**T-3.3 falhou, e a culpa é do roteiro.** Lido o bytecode de `SendToClaudeAction` e `TerminalUtil`
+(0.1.14-beta), a ação faz duas coisas independentes:
+
+1. **O trecho vai por MCP** — `sendAtMentionedNotifications(mcpService, editor)`, broadcast que não
+   conhece tool window nenhuma e, em tese, alcança as nossas panes.
+2. **O foco vai para o Terminal nativo, sempre.** Sem cliente MCP registrado,
+   `openClaudeInTerminal` cria sessão nova via `TerminalToolWindowManager`; com cliente,
+   `focusClaudeInTerminal` faz `getToolWindow("Terminal")` e varre o `ContentManager` **dela**.
+
+**As nossas sessões são invisíveis para esse caminho por definição** — não estão naquele
+`ContentManager`. É **o mesmo literal `"Terminal"`** que originou este projeto, registrado nos
+Fatos verificados desde 2026-08-01, agora aparecendo do outro lado do problema.
+
+**Por isso T-3.3 foi invalidado, e não marcado como defeito nosso.** Ele pedia que uma ação de
+terceiro, presa por literal à janela do terceiro, fosse parar na nossa. Nenhuma implementação
+nossa faz isso passar sem violar D-01 ou colidir com o id nativo — alternativa já recusada na v1.1.
+Substituído por **T-3.59**.
+
+**A pergunta que sobra é a que vale (Q-30).** Se o item (1) chega, DEF-08 é ergonomia: o trecho
+está lá, o foco é que foi para o lado errado. Se não chega, é integração. **A leitura do bytecode
+sugere que chega — mas leitura não é medição**, e este arquivo já registrou duas vezes o custo de
+confundir as duas (Achado 30, Achado 31). T-3.59 mede.
+
+**Sobre o sandbox.** Ele nasce só com o nosso plugin: o oficial não estava lá, e sem ele T-3.3 e
+T-3.36 seriam impossíveis de executar. `claude-code-jetbrains-plugin` foi copiado para
+`.intellijPlatform/sandbox/claude-code-dock/IU-2026.2/plugins/`; os dois carregam juntos
+("Claude Code Dock (0.1.0), Claude Code [Beta] (0.1.14-beta)") e o `prepareSandbox` **não** apaga a
+cópia. O servidor MCP subiu dentro do sandbox — lockfile `~/.claude/ide/41083.lock`, `transport: ws`,
+com o pid da IDE do sandbox. **Registrar isto poupa a próxima sessão de descobrir de novo.**
+
+### 2026-08-08 (noite) — os roteiros de split, e a corroboração que veio do log
+
+**O que foi executado.** Sandbox aberto sobre `~/Workspaces/my/POC/aw`, com o Piper já configurado
+da sessão anterior. Aprovados: **T-3.34, T-3.35, T-3.37, T-3.38, T-3.39, T-3.40 e T-3.41**.
+
+**O que o log confirmou por conta própria**, sem depender do relato:
+
+- **Quatro sessões numa mesma janela**, e uma delas subiu com `columns=59` contra `columns=126`
+  das outras. Meia largura é uma pane dividida recebendo o tamanho real — prova de que o split
+  aconteceu e de que o CLI redesenhou para o tamanho novo (T-3.34/T-3.35, CB-54).
+- **T-3.41 verificado sem a tela:** depois do fechamento, nenhum processo restou pendurado no
+  sandbox e **nada foi reparentado ao init**, que é onde um PTY órfão apareceria. RNF-09 e CB-53
+  confirmados por medição, não por observação.
+- Zero ocorrências de `dev.reginaldomorais.claudedock` em nível de erro no `idea.log`.
+
+**T-3.36 continua pendente, e vale registrar por quê.** O relato inicial foi "tudo funcionou", mas
+a janela da sessão durou 74 segundos para quatro sessões. Dá para dividir, focar e copiar nesse
+tempo; conversar com o Claude até sair diff em duas panes, não. Perguntado, o usuário confirmou
+que não executou esse. **É o tipo de ✅ que teria envenenado o arquivo:** o valor deste registro
+está em as marcas serem confiáveis, e uma delas contradita pelo relógio contamina as outras.
+
+**T-3.42 a T-3.47 — validados pelo uso real, não por roteiro.** São de SPEC v1.7.1 e v1.8, que
+saíram na release **0.7.0**; estão em uso diário desde então. O rótulo é deliberadamente diferente
+de "aprovado em roteiro" — mesmo padrão de Q-26, que também foi respondida pelo uso.
+
+**Nenhum código mudou nesta rodada.** Os 130 testes da v1.9.2 seguem sendo o estado verificado.
 
 ### 2026-08-08 (tarde) — T-2.1 a T-2.6: medir o ambiente antes de escrever o teste
 
