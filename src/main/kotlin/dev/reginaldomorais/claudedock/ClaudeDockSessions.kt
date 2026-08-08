@@ -436,6 +436,33 @@ class ClaudeDockSessions(private val project: Project) :
         }
     }
 
+    /**
+     * Entrega a referência do trecho do editor à sessão **em foco** e traz a janela à frente
+     * (RF-49).
+     *
+     * Existe porque o `Ctrl+Alt+K` do plugin oficial não alcança esta janela: as duas saídas dele
+     * — `focusClaudeInTerminal` e `openClaudeInTerminal` — estão presas ao literal `"Terminal"`,
+     * e as nossas sessões não estão no `ContentManager` daquela tool window (DEF-08). O que ele
+     * envia por MCP chega, mas em **broadcast**: com a aba dividida, todas as panes recebem, e
+     * nenhuma é o destino (Q-02).
+     *
+     * Aqui a entrega é dirigida, pelo mesmo `sendInput` que o `/export` usa desde D-16 — o texto
+     * é digitado no PTY daquela pane e de mais nenhuma. Sem tocar no protocolo privado, sem
+     * violar D-01.
+     */
+    fun sendEditorReference(reference: String) {
+        val widget = selectedWidget()
+            ?: return notify("Nenhuma sessão aberta para receber a seleção.", NotificationType.WARNING)
+
+        if (!ClaudeTerminalSessionFactory.sendInput(widget, reference)) {
+            return notify("A sessão ainda não iniciou; tente de novo em instantes.", NotificationType.WARNING)
+        }
+
+        // Sem isto a menção chegaria numa janela que o usuário não está vendo. O foco cai na pane
+        // certa porque `preferredFocusableComponent` da aba já aponta para ela (RF-42).
+        findToolWindow()?.activate(null)
+    }
+
     private fun selectedWidget(): TerminalWidget? =
         findToolWindow()?.contentManager?.selectedContent?.getUserData(SESSION_WIDGET)
 

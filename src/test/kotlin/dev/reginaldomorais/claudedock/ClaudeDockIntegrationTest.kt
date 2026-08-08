@@ -11,7 +11,6 @@ import com.intellij.ui.content.ContentManager
 import org.jetbrains.plugins.terminal.ShellTerminalWidget
 import org.jetbrains.plugins.terminal.TerminalEngine
 import org.jetbrains.plugins.terminal.TerminalOptionsProvider
-import javax.swing.JComponent
 
 /**
  * T-2.1 a T-2.6 — testes de integração da tool window e do ciclo de vida das sessões.
@@ -87,8 +86,8 @@ class ClaudeDockIntegrationTest : BasePlatformTestCase() {
 
         assertNotSame(first.component, second.component)
         assertNotSame(first.disposer, second.disposer)
-        assertEquals(1, ClaudeSessionSplitter.countPanes(first.component as JComponent))
-        assertEquals(1, ClaudeSessionSplitter.countPanes(second.component as JComponent))
+        assertEquals(1, ClaudeSessionSplitter.countPanes(first.component))
+        assertEquals(1, ClaudeSessionSplitter.countPanes(second.component))
     }
 
     /**
@@ -103,14 +102,20 @@ class ClaudeDockIntegrationTest : BasePlatformTestCase() {
         val content = contentManager.getContent(0)!!
         val tabDisposable = content.disposer
         assertNotNull("A aba precisa ter disposer próprio para levar a sessão junto", tabDisposable)
-        assertFalse(Disposer.isDisposed(tabDisposable!!))
+
+        // Sentinela pendurada no disposer da aba: afirma a **propagação**, que é o que solta o
+        // PTY. `Disposer.isDisposed` faria a pergunta direta, mas está depreciado justamente por
+        // ser pouco confiável em Disposable qualquer; `CheckedDisposable` é o substituto.
+        val marker = Disposer.newCheckedDisposable()
+        Disposer.register(tabDisposable!!, marker)
+        assertFalse(marker.isDisposed)
 
         contentManager.removeContent(content, true)
 
         assertEquals(0, contentManager.contentCount)
         assertTrue(
             "Fechar a aba não descartou o Disposable: todo PTY dela ficaria órfão",
-            Disposer.isDisposed(tabDisposable),
+            marker.isDisposed,
         )
     }
 
@@ -124,13 +129,16 @@ class ClaudeDockIntegrationTest : BasePlatformTestCase() {
         Disposer.register(testRootDisposable, parent)
 
         val widget = ClaudeTerminalSessionFactory.createSession(project, parent, "echo oi", NoopHost)
-        assertFalse(Disposer.isDisposed(widget))
+
+        val marker = Disposer.newCheckedDisposable()
+        Disposer.register(widget, marker)
+        assertFalse(marker.isDisposed)
 
         Disposer.dispose(parent)
 
         assertTrue(
             "O widget não é filho do Disposable da aba: fechar a aba deixaria o PTY vivo",
-            Disposer.isDisposed(widget),
+            marker.isDisposed,
         )
     }
 

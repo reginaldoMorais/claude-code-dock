@@ -9,6 +9,16 @@
     </extensions>
 
     <actions>
+        <!-- Sem atalho padrão: o "natural" é do plugin oficial, e mexer no keymap viola RF-13. -->
+        <action id="dev.reginaldomorais.claudedock.SendSelection"
+                class="dev.reginaldomorais.claudedock.actions.SendSelectionAction"
+                text="Enviar Seleção para o Claude Code"
+                description="Envia o trecho selecionado para a sessão em foco da janela dedicada"
+                icon="/icons/claudeDuckMono.svg">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
         <action id="dev.reginaldomorais.claudedock.OpenClaudeDock"
                 class="dev.reginaldomorais.claudedock.actions.OpenClaudeDockAction"
                 text="Abrir Claude Code Dock"

@@ -3,7 +3,7 @@ package dev.reginaldomorais.claudedock
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 
 /**
- * Os ícones são referenciados por caminho de string — dois no `plugin-terminal.xml` e um no
+ * Os ícones são referenciados por caminho de string — os do `plugin-terminal.xml` e um no
  * [ClaudeSessionLoading] —, e nenhum deles é verificado pelo compilador. Renomear um arquivo
  * quebra a barra de ferramentas só em tempo de execução.
  *
@@ -19,7 +19,14 @@ class ClaudeIconTest : BasePlatformTestCase() {
             .toList()
 
         // Controle: se a regex parar de casar, o forEach abaixo passaria sem verificar nada.
-        assertEquals(listOf(MONO, MONO), declarados)
+        // Antes isto era a lista exata `[MONO, MONO]`, e cada ação nova derrubava o teste por
+        // contagem — ruído, não defeito. A guarda de "não vazio" preserva o controle real.
+        assertFalse("A regex de ícone parou de casar", declarados.isEmpty())
+        assertEquals(
+            "A barra de ferramentas só usa a versão monocromática",
+            emptyList<String>(),
+            declarados.filterNot { it == MONO },
+        )
         declarados.forEach { assertNotNull("Ícone ausente: $it", javaClass.getResource(it)) }
     }
 

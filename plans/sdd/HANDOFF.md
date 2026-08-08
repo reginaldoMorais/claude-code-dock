@@ -10,7 +10,7 @@
 
 ## Estado atual
 
-**Fase: v1.9.3 — DEF-08: o `Ctrl+Alt+K` do oficial nunca poderia chegar à nossa janela.**
+**Fase: v1.9.4 — RF-49: ação própria que entrega a seleção a *uma* pane, fechando DEF-08.**
 **A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79`.
 130 testes verdes. Nenhuma das duas foi publicada — são rodadas de dívida, não de funcionalidade.**
 
@@ -25,7 +25,7 @@
 | [SPEC.md](SPEC.md)                                               | ✅ v1.9.2 — T-2.1 a T-2.6; escopo real do headless; Q-04/Q-10 recorrigidos |
 | `HANDOFF.md`                                                     | ✅ Este arquivo, com a v1.9.1 e o inventário de roteiros que faltavam     |
 | [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)       |
-| Código do plugin                                                 | ✅ **123 testes passando** (121 + 2 de v1.9.1), sem warnings              |
+| Código do plugin | ✅ **136 testes passando** (130 + 6 de RF-49), **zero warnings** |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                 |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                   |
 | T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                    |
@@ -60,7 +60,7 @@
 | Roteiros de split (T-3.34-41) | ✅ **Aprovados em 2026-08-08**, menos T-3.36 (diff por pane), não executado |
 | **T-3.36 (diff por pane)** | ✅ **Aprovado 2026-08-08** — as duas panes com `In test.md` ao mesmo tempo |
 | **T-3.4 (`--resume`)** | ✅ **Aprovado 2026-08-08** |
-| **DEF-08 (`Ctrl+Alt+K`)** | 🐞 Aberto, mas **rebaixado**: é ergonomia — o trecho chega, o foco é que erra |
+| **DEF-08 (`Ctrl+Alt+K`)** | ✅ **Contornado por RF-49** — entrega dirigida, **validada no IDE** (T-3.60) |
 
 **Estado do repositório:** `main` na v1.9.2. A v1.9.1 (Achado 31) foi commitada em `2b7ef79`;
 a v1.9.2 (`ClaudeDockIntegrationTest`) ainda está na árvore de trabalho. Tags da última release:
@@ -308,6 +308,37 @@ self.config.length_scale`, ou seja, o `config.json` que acompanha o `.onnx`.
 - Esse modelo traz `length_scale: 1` no `config.json`, então para **ele** omitir a flag coincide
   com 1.0. Não generalizar: é coincidência de uma voz, não regra.
 
+### O atrito do `runIde` com o cache do Gradle (2026-08-08)
+
+> **Bateu três vezes numa sessão só. Ler antes de perder tempo diagnosticando.**
+
+A IDE do sandbox escreve dentro do próprio diretório de distribuição (`brokenPlugins.db` e afins),
+e esse diretório vive no **cache de transformação imutável** do Gradle. Depois de um `runIde`, é
+comum toda tarefa passar a falhar com:
+
+```
+The contents of the immutable workspace '~/.gradle/caches/9.2.0/transforms/<hash>' have been modified.
+```
+
+- **Não é corrupção de disco** e não tem a ver com o código. É o `runIde` mordendo o próprio rabo.
+- **Às vezes destrava sozinho** numa segunda tentativa com a IDE já fechada; às vezes não.
+- **Receita completa — e o `rm -rf` sozinho não basta:** fechar a IDE do sandbox, `rm -rf` no
+  diretório do hash **e `./gradlew --stop`**. Sem parar o daemon, ele continua servindo o caminho
+  resolvido da memória e o build falha com `Cannot resolve 'product-info.json'` apontando para um
+  diretório que **não existe mais** — sintoma que parece corrupção nova e é só cache de processo.
+  Nem `--refresh-dependencies` nem `--no-configuration-cache` resolvem; só derrubar o daemon.
+  A recriação é reextração **local**, sem download (~35 s aqui).
+- **Depois de destravar, `./gradlew test` fica `UP-TO-DATE`** e não reexecuta nada: os XMLs
+  continuam com a data antiga. Para ter medição de agora, `./gradlew test --rerun`.
+- **Consequência para a leitura de resultados:** com o build travado, `./gradlew test` não roda e os
+  XMLs em `build/test-results` ficam **velhos**. Contar teste a partir deles nesse estado dá um
+  número que parece atual e não é — conferir a data do arquivo antes de citar o total.
+
+**E o `prepareSandbox` apaga o diretório de plugins quando roda de verdade.** Ele fica
+`UP-TO-DATE` enquanto nenhum fonte muda, o que dá a falsa impressão de que a cópia manual do
+plugin oficial sobrevive. **Depois de qualquer mudança de código, reinstalar o oficial** antes de
+rodar roteiro que dependa dele — senão o roteiro falha por ausência e parece regressão.
+
 ### API de terminal disponível na build 262
 
 `AbstractTerminalRunner.startShellTerminalWidget` · `LocalTerminalDirectRunner.createTerminalRunner`
@@ -354,6 +385,7 @@ self.config.length_scale`, ou seja, o `config.json` que acompanha o `.onnx`.
 | **D-35** | _(v1.7)_ O split ganha **também** um menu "Dividir" no cabeçalho, apesar de o menu de contexto já oferecê-lo | Decisão do usuário, contra o critério de D-32 — e o conflito é real, não descuido. O contrapeso é o precedente do RF-26, aceito só por descoberta ("`Ctrl+C` copia, mas é invisível para quem usa o mouse"): o menu de contexto do terminal é tão invisível quanto. O critério de D-32 continua valendo para o **popup de seleção**, que é espaço escasso; o cabeçalho não é |
 | **D-36** | _(v1.7)_ A árvore de divisões vive **só** na hierarquia de componentes Swing, sem mapa paralelo | Mesma razão de D-18: um mapa precisaria ser limpo em todo caminho de fechamento, e é aí que sobra referência para pane morta. As três consultas necessárias saem da árvore: `isDescendingFrom` acha a aba, subir pelos pais acha o bloco divisível, e `putClientProperty` guarda o `Disposable` no próprio componente |
 | **D-37** | _(v1.7.1)_ O fechamento da divisão ganha **item próprio no cabeçalho**, mesmo já existindo no menu de contexto | Não é o caso de D-35 outra vez: aqui o problema não é descoberta, é **nome**. "Close Tab" é rótulo da plataforma, correto no terminal nativo (onde aba = sessão) e enganoso numa aba dividida, onde diz o oposto do que faz. Herdar comportamento de um ponto de extensão é de graça; herdar vocabulário não (Achado 29) |
+| **D-41** | _(v1.9.4)_ A entrega de RF-49 é **escrita direta no PTY** da pane em foco, não uma notificação MCP | Reimplementar a notificação exigiria falar o protocolo privado do oficial — o que D-01 recusa — e ainda herdaria o **broadcast** que torna DEF-08 ambíguo (Q-02): entregaria a todas as panes de novo. A escrita no PTY é o caminho do `/export` desde D-16, já em produção, e é a **única** que tem destinatário. O preço é o formato do @-mention virar acoplamento a um detalhe do CLI — mitigado por ele ter sido **lido do binário** e travado por T-1.57 a T-1.61, em vez de suposto |
 
 ### Correção registrada
 
@@ -477,6 +509,93 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 
 ## Log
 
+### 2026-08-08 (noite/5) — a conclusão de Q-02 quase virou um alvo fixo inexistente
+
+**O relato.** Em T-3.60 o `Ctrl+Alt+K` entregou **só à segunda pane**, "sempre". Isso parecia
+contradizer o que eu tinha acabado de registrar em Q-02 — broadcast, sem destinatário — e sugeria
+o oposto: que existe um alvo fixo, só que o errado.
+
+**Não contradiz, e a diferença só apareceu porque fui ao bytecode em vez de teorizar.**
+`MCPService._mcpServerInfos` é `Map<Server, McpServerInfo>`: **uma entrada por conexão**, sem
+colisão de chave que fizesse uma sessão sobrescrever a outra. E `sendAtMentionedNotifications`
+itera **todas**. O broadcast está no código.
+
+**O que muda entre as duas execuções é quantas sessões estão conectadas.** Comparando os prints:
+em T-3.36 as duas panes mostravam `In test.md` e as duas receberam; em T-3.60 só a segunda mostra
+`1 line selected`, e só ela recebeu. **A regra é "broadcast para toda sessão conectada"**, não
+"para todas as panes".
+
+**Q-02 continua respondida** — ninguém possui o envio. Mas a formulação foi refinada, porque
+"chega nas duas" era verdade de uma execução, não do mecanismo.
+
+**Q-31, nova e não medida:** por que uma pane às vezes não conecta. Afeta RF-37, que assume
+integração em todas. O diagnóstico de campo é barato: **pane sem `In <arquivo>` no rodapé está
+fora do MCP.**
+
+**A lição, de novo.** Duas observações, duas conclusões opostas, e nenhuma delas era do mecanismo.
+Terceira vez nesta sessão que o padrão do Achado 30 aparece — concluir de uma amostra sem variar a
+condição. O que salvou foi ter uma fonte de verdade abaixo do comportamento: o bytecode.
+
+**Sobre o erro de Gradle no print.** Não é do plugin. O sandbox estava com o **próprio projeto do
+plugin aberto** (aba `build.gradle.kts (claude-code-dock)`), e o sync do Gradle da IDE bateu na
+mesma corrupção de workspace imutável já registrada em Fatos verificados — agravada por ser a
+mesma distribuição que o sandbox está usando. **Não abrir este projeto dentro do sandbox**; abrir
+qualquer outro.
+
+### 2026-08-08 (noite/4) — RF-49: a entrega que tem destinatário
+
+**O que foi feito.** Ação própria de enviar a seleção do editor para a sessão **em foco**:
+`ClaudeEditorReference` (objeto puro), `ClaudeDockSessions.sendEditorReference`,
+`SendSelectionAction` no menu de contexto do editor e no menu Tools.
+
+**O formato do @-mention foi lido, não inventado.** Está na função do CLI 2.1.220 que renderiza a
+menção a partir da notificação MCP:
+
+```js
+let r = path.relative(cwd(), e.filePath)
+if (e.lineStart && e.lineEnd)
+  n = e.lineStart === e.lineEnd ? `@${r}#L${e.lineStart} ` : `@${r}#L${e.lineStart}-${e.lineEnd} `
+else n = `@${r} `
+```
+
+Três regras que eu teria errado adivinhando, e cada uma virou teste: caminho **relativo ao cwd**,
+linhas **1-based** (o `&&` trata `0` como ausente, não como linha zero) e **espaço no fim**, que
+separa a menção do que o usuário digita em seguida.
+
+**O bug que o teste pegou antes do IDE (T-1.60).** Selecionar linhas inteiras deixa o offset final
+na **coluna 0 da linha seguinte**. Sem `inclusiveEndLine`, marcar uma linha produziria
+`@arquivo#L3-4` — uma referência que mente sobre o que foi marcado, e do tipo que passa
+despercebido porque o CLI aceita o texto sem reclamar.
+
+**D-41 — por que PTY e não MCP.** Reimplementar a notificação exigiria falar o protocolo privado
+(D-01 recusa) **e** herdaria o broadcast que criou o problema: entregaria a todas as panes de
+novo. A escrita no PTY é o caminho do `/export` desde D-16 e é a única com destinatário.
+
+**Mutação.** Tirando o espaço final e a correção de linha inteira, reprovam três testes — os dois
+alvos mais o de espaço. Restaurado, 136 verdes.
+
+**Dois consertos de higiene que a rodada obrigou.**
+
+- **`ClaudeIconTest` quebrou, e a falha estava certa:** ele fixava a lista exata `[MONO, MONO]`
+  como controle contra a regex parar de casar, e a ação nova virou a terceira. Trocado por
+  "não vazio **e** todos MONO" — mantém o controle real (regex morta → lista vazia → falha) e
+  para de cair por contagem a cada ação nova. Era ruído disfarçado de teste.
+- **Os cinco warnings que eu tinha introduzido em `ClaudeDockIntegrationTest` sumiram.** Dois
+  casts inúteis, e três usos de `Disposer.isDisposed`, depreciado. Em vez de suprimir, T-2.4a e
+  T-2.4b passaram a pendurar um `CheckedDisposable` como sentinela: não é depreciado e a asserção
+  fica **mais forte**, porque afirma a propagação do descarte, que é o que solta o PTY.
+
+**Testes.** 130 → **136**, zero falhas, **zero warnings** (conferido com `--rerun-tasks`).
+
+**Validado no IDE no mesmo dia (T-3.60).** Com a aba dividida, a menção `@test.md#L3` apareceu
+**só na pane esquerda** — a direita ficou vazia. É a diferença para o `Ctrl+Alt+K`, que em T-3.59
+entregou às duas. E saiu `#L3`, não `#L3-4`, com a barra de status em `3:12 (30 chars)`: a
+correção de `inclusiveEndLine` vale no editor real, e não só na suíte.
+
+**Um susto que não era defeito.** Nesta partida o `Ctrl+Alt+K` "parou de funcionar" — o plugin
+oficial não estava mais no sandbox, apagado pelo `prepareSandbox` ao recompilar. Ausência, não
+regressão. Rendeu a correção do fato errado acima e a receita nova em Fatos verificados.
+
 ### 2026-08-08 (noite/3) — T-3.59 fecha DEF-08 e, de brinde, a Q-02 mais antiga do arquivo
 
 **T-3.59 executado. O trecho chega.** Depois do `Ctrl+Alt+K`, `@test.md#L3` apareceu na nossa pane
@@ -546,9 +665,16 @@ confundir as duas (Achado 30, Achado 31). T-3.59 mede.
 
 **Sobre o sandbox.** Ele nasce só com o nosso plugin: o oficial não estava lá, e sem ele T-3.3 e
 T-3.36 seriam impossíveis de executar. `claude-code-jetbrains-plugin` foi copiado para
-`.intellijPlatform/sandbox/claude-code-dock/IU-2026.2/plugins/`; os dois carregam juntos
-("Claude Code Dock (0.1.0), Claude Code [Beta] (0.1.14-beta)") e o `prepareSandbox` **não** apaga a
-cópia. O servidor MCP subiu dentro do sandbox — lockfile `~/.claude/ide/41083.lock`, `transport: ws`,
+`.intellijPlatform/sandbox/claude-code-dock/IU-2026.2/plugins/` e os dois carregam juntos
+("Claude Code Dock (0.1.0), Claude Code [Beta] (0.1.14-beta)").
+
+> ⚠️ **Correção de 2026-08-08 (noite/4):** eu registrei aqui que o `prepareSandbox` **não** apagava
+> a cópia. **Apaga.** Ela sobreviveu a dois `runIde` seguidos apenas porque a tarefa estava
+> `UP-TO-DATE` — nenhum fonte havia mudado. No primeiro `runIde` após recompilar, o
+> `prepareSandbox` rodou de verdade e limpou o diretório de plugins. **Regra real: reinstalar o
+> oficial depois de qualquer mudança de código**, ou os roteiros que dependem dele falham por
+> ausência e não por defeito. Foi conclusão tirada de duas observações sem variar a condição —
+> o mesmo erro de método do Achado 30. O servidor MCP subiu dentro do sandbox — lockfile `~/.claude/ide/41083.lock`, `transport: ws`,
 com o pid da IDE do sandbox. **Registrar isto poupa a próxima sessão de descobrir de novo.**
 
 ### 2026-08-08 (noite) — os roteiros de split, e a corroboração que veio do log

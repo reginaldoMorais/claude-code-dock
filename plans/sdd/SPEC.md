@@ -27,6 +27,7 @@
 > | 1.9.1  | 2026-08-08 | **Achado 31 quitado**: `synthesize` ganha o prazo de 20 s que o SPEC prometia desde a v1.5 e passa a registrar o processo em `currentProcess` — sem isso o cancelamento de RNF-23 era inerte. T-1.55/T-1.56; remoção de `readText` (morto desde a v1.3) |
 > | 1.9.2  | 2026-08-08 | **T-2.1 a T-2.6 implementados** — a lacuna de integração mais antiga do projeto. T-2.6 fixa o Achado 27 como guarda de regressão e **corrige a razão pela qual Q-04/Q-10 estavam resolvidos**. Registra o que o ambiente headless não entrega (PTY) e o que fica com os roteiros manuais |
 > | 1.9.3  | 2026-08-08 | **DEF-08**: o `Ctrl+Alt+K` do plugin oficial nunca poderia chegar à nossa janela — `focusClaudeInTerminal` e `openClaudeInTerminal` estão presos ao literal `"Terminal"`. T-3.3 reescrito: era roteiro sobre premissa falsa. T-3.36 e T-3.4 aprovados |
+> | 1.9.4  | 2026-08-08 | **RF-49** — ação própria de enviar a seleção do editor para a pane **em foco**, fechando DEF-08 sem tocar no protocolo privado. D-41. T-1.57 a T-1.61 |
 
 ---
 
@@ -657,10 +658,24 @@ item (1) vista de frente. Broadcast não tem destinatário. **Isso responde Q-02
 v1.0 esperando exatamente uso real: ninguém "possui" o envio, porque a noção de dono não existe
 nessa camada.
 
-**Conserto plausível, se algum dia valer a pena.** Uma ação nossa que escreva o `@arquivo#Lx`
-direto no PTY da pane em foco, pelo `sendInput` que já existe desde D-16 — sem tocar no protocolo
-privado, sem violar D-01. Custo baixo; a demanda é que ainda não existe, e por isso nada foi
-implementado nesta rodada.
+> **Refinamento de 2026-08-08 (T-3.60), e o que quase virou conclusão errada.** Numa execução
+> seguinte o `Ctrl+Alt+K` entregou **só à segunda pane**, o que parecia contradizer o broadcast e
+> sugerir um alvo fixo. Não contradiz. `MCPService._mcpServerInfos` é
+> `Map<Server, McpServerInfo>` — **uma entrada por conexão**, sem colisão de chave — e
+> `sendAtMentionedNotifications` itera **todas**. O que muda entre as duas execuções é quantas
+> sessões estão **conectadas**: nos prints, a pane que recebeu mostra o indicador de integração
+> (`In <arquivo>` / `N line selected`) e a que não recebeu não mostra nada.
+>
+> **A regra correta, então, é "broadcast para toda sessão conectada"** — e não "para todas as
+> panes". O indicador de integração no rodapé do CLI é o diagnóstico: pane sem ele está fora do
+> MCP e não recebe. **Por que uma pane às vezes não conecta é pergunta nova (Q-31)**, e não foi
+> medida. Registrar isto importa porque a leitura ingênua — "sempre vai para a segunda" — teria
+> virado um alvo fixo inexistente, no mesmo formato do Achado 30.
+
+**Consertado em v1.9.4 por RF-49**, e não no lugar do oficial: a ação dele continua fazendo o que
+faz. O que passa a existir é uma entrega **com destinatário** — `@arquivo#Lx-y` escrito no PTY da
+pane em foco pelo `sendInput` de D-16, sem tocar no protocolo privado e sem violar D-01 (D-41).
+O `Ctrl+Alt+K` segue levando o foco para a janela nativa; quem não quiser isso usa a ação nova.
 
 ### Achado 31 — o SPEC afirmava um timeout que nunca existiu _(v1.9)_
 
@@ -866,6 +881,7 @@ reimplementação frágil.**
 | **RF-43**     | _(v1.8)_ O menu "Dividir" DEVE oferecer "Trocar de lado" (inverte a sessão em foco com a vizinha) e "Girar divisão" (alterna lado a lado ↔ empilhado). Sem divisão, as duas DEVEM avisar em vez de agir.                                                                                                                                                                                                                                                                                                          |
 | **RF-47**     | _(v1.9)_ O plugin DEVE permitir configurar a **velocidade da fala** do Piper em **dois lugares ligados ao mesmo valor e à mesma lista**: um submenu "Velocidade" dentro do menu "Áudio" e um seletor em Settings > Tools > Claude Code Dock. A lista é 0,25x / 0,5x / 0,75x / 1x / 1,25x / 1,5x / 1,75x / 2x, e os dois pontos DEVEM oferecer exatamente ela — sem campo numérico livre. O padrão, "1x", DEVE preservar o padrão **do próprio modelo**, não impor 1.0. A velocidade vale para a **próxima** fala. |
 | **RF-48**     | _(v1.9)_ O menu "Áudio" DEVE tocar o trecho **selecionado** na sessão em foco, obtendo a seleção pelo mesmo caminho das demais ações do cabeçalho. Sem sessão aberta, ou sem seleção, DEVE avisar em vez de não fazer nada em silêncio (DEF-07).                                                                                                                                                                                                                                                                  |
+| **RF-49**     | _(v1.9.4)_ O plugin DEVE oferecer ação própria que envie a referência do trecho selecionado no editor (`@arquivo#Lx-y`) para a sessão **em foco** da janela dedicada, e traga a janela à frente. Sem sessão aberta, DEVE avisar. **Não substitui o `Ctrl+Alt+K` do oficial** — resolve o que ele não faz: entregar a uma pane só, e nesta janela (DEF-08, Q-02). NÃO DEVE definir atalho padrão (RF-13). |
 
 ---
 
@@ -1766,6 +1782,11 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.45**     | `ClaudeSessionSplitter`           | _(v1.8.1)_ **`paneOf` devolve `null` para pane já fechada.** Foi este teste que pegou DEF-03: `close` desanexa o splitter, mas a pane removida continua filha dele, então sem checar `isDescendingFrom` ela ainda "estava" na aba — e a guarda de RF-44 não teria efeito nenhum                   |
 | **T-1.55**     | `ClaudePiperPlayback`             | _(v1.9.1)_ **A síntese respeita o prazo.** Com um piper falso que dorme 30 s e `timeoutSeconds = 1`, `synthesize` volta `null` em cerca de um segundo. É o teste que reprova se alguém devolver o `waitFor()` sem argumento (RNF-20, Achado 31)                                                   |
 | **T-1.56**     | `ClaudePiperPlayback`             | _(v1.9.1)_ **`stop()` alcança a síntese em curso.** Com o mesmo piper falso, `stop()` faz `synthesize` voltar `null` de imediato em vez de esperar os 30 s. Afirma o efeito, não o campo: sem `currentProcess = process` o teste estoura o prazo (RNF-23)                                         |
+| **T-1.57**     | `ClaudeEditorReference`           | _(v1.9.4)_ Uma linha só produz `@arquivo#L3 ` — a forma curta que o CLI usa quando `lineStart == lineEnd` (RF-49) |
+| **T-1.58**     | `ClaudeEditorReference`           | _(v1.9.4)_ Várias linhas produzem a faixa `@arquivo#L3-10 ` |
+| **T-1.59**     | `ClaudeEditorReference`           | _(v1.9.4)_ Sem seleção não vai `#L`. No CLI a guarda é `if (lineStart && lineEnd)` e `0` é falso em JS: zero significa **ausente**, não linha zero |
+| **T-1.60**     | `ClaudeEditorReference`           | _(v1.9.4)_ **Seleção de linhas inteiras não conta a linha seguinte.** O offset final cai na coluna 0 da próxima, e sem correção marcar uma linha reportaria `#L3-4` |
+| **T-1.61**     | `ClaudeEditorReference`           | _(v1.9.4)_ A referência **sempre termina em espaço** — é ele que separa a menção do que o usuário digita depois. Existe porque `trim()` é a limpeza mais tentadora do mundo |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
 executada após cada implementação.
@@ -1903,6 +1924,7 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.57**     | _(v1.9)_ Fechar e reabrir o IDE: a velocidade escolhida persiste no `claude-code-dock.xml` (RF-47)                                                                                                                                                                      |
 | **T-3.58**     | _(v1.9)_ Acionar "Tocar seleção" **sem seleção** e com a aba vazia: aparece aviso nos dois casos, nenhum silêncio (RF-48)                                                                                                                                               |
 | **T-3.59**     | _(v1.9.3)_ **Substitui T-3.3.** Com uma sessão viva na janela dedicada, selecionar código e acionar `Ctrl+Alt+K`: o foco vai para o Terminal nativo (esperado, DEF-08) — **a pergunta é se a referência do trecho aparece na nossa pane**. Voltar para a janela dedicada **sem** tocar na nativa e conferir. Responde Q-30 ✅ **executado 2026-08-08** — chegou, e chegou nas **duas** panes |
+| **T-3.60**     | _(v1.9.4)_ Com a aba **dividida**, selecionar código e acionar "Enviar Seleção para o Claude Code" pelo menu de contexto do editor: a menção `@arquivo#Lx-y` aparece **só na pane em foco** — a diferença para o `Ctrl+Alt+K`, que entrega às duas —, a janela vem à frente e o cursor fica na pane certa (RF-49) ✅ **aprovado 2026-08-08** — print mostra a menção `@test.md#L3` **só na pane esquerda**, a direita vazia; e saiu `#L3`, não `#L3-4`, com a barra de status em `3:12 (30 chars)`: a correção de `inclusiveEndLine` vale no editor real, não só em T-1.60 |
 
 ### Testes de regressão
 
@@ -2168,6 +2190,7 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-26** | ~~_(v1.7)_ Com a aba dividida, o que o título "(encerrado)" deveria significar?~~                                                                          | ✅ **RESOLVIDO em v1.8.1 pelo uso real.** Significa "não há mais sessão viva nesta aba" — contando as panes na árvore, que era a saída descartada como cara em v1.7 e custou seis linhas. Virou RF-44, depois de DEF-03 mostrar o oposto na prática                                                                                                                                                                                                                                        |
 | **Q-29** | _(v1.9)_ Vale aplicar a nova velocidade à fala **em curso**, e não só à próxima?                                                                           | **Recusado, com o motivo no mecanismo.** O piper sintetiza o áudio inteiro antes de tocar (`synthesize` lê todo o stdout e só então o `Clip` abre): não há stream a reajustar. Aplicar no meio seria re-sintetizar do zero e reposicionar por frame — fila e posição, exatamente o que RNF-23 mantém fora. O custo real é baixo: a fala típica dura segundos, e parar e tocar de novo já resolve                                                                                           |
 | **Q-30** | ~~_(v1.9.3)_ O trecho enviado por `Ctrl+Alt+K` chega à sessão da janela dedicada?~~ | ✅ **RESPONDIDA em 2026-08-08 por T-3.59: chega.** O `@test.md#L3` apareceu na nossa pane com `1 line selected`. **Logo DEF-08 é ergonomia, não integração** — o conteúdo atravessa, só o foco vai para a janela errada. Rebaixa a prioridade do defeito e muda o conserto plausível: não é preciso tocar em protocolo, basta uma ação nossa |
+| **Q-31** | _(v1.9.4)_ Por que uma pane às vezes **não conecta** ao servidor MCP, ficando sem o indicador `In <arquivo>` e sem receber o `Ctrl+Alt+K`? | Em aberto. Observado em T-3.60: das duas panes, só a segunda estava conectada. Hipóteses não medidas: corrida entre a partida da sessão e o servidor do plugin oficial, ou sessão criada antes de o servidor subir. **Afeta RF-37**, que assume integração em todas as panes — e T-3.36 já mostrou as duas conectadas, então não é impossível, é intermitente |
 | **Q-28** | _(v1.8)_ Vale arrastar panes com o mouse para reorganizá-las, como o editor faz com as abas?                                                               | **Avaliado e adiado, com o levantamento feito.** Mecanismo existe (`DnDSupport`; `DockManager`/`DockContainer`). O que falta é **onde agarrar**: o editor arrasta o rótulo da aba, e as nossas panes não têm aba — a superfície delas é do terminal, onde arrastar é selecionar texto (RF-26). Exigiria barra de título por pane, UI permanente para ação ocasional. RF-43 cobre o uso de 2–4 panes por ações. Reabrir se o uso mostrar aninhamento profundo, onde trocar/girar não bastam |
 | **Q-27** | _(v1.7)_ As degradações graciosas de engine (CB-26, CB-36, CB-47, R-15) deveriam ser removidas agora que o Achado 27 provou que a sessão é sempre CLASSIC? | Não. Custam uma linha (`?: return`) e protegem contra a plataforma mudar o retorno de `createTerminalWidget` num upgrade. O que mudou foi a **probabilidade** de R-15, não a decisão                                                                                                                                                                                                                                                                                                       |
 
