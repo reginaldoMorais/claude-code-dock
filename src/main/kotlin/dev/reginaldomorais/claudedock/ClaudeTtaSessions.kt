@@ -1,5 +1,6 @@
 package dev.reginaldomorais.claudedock
 
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
@@ -42,6 +43,7 @@ class ClaudeTtaSessions(private val project: Project) {
                     LOG.warn("Piper not available for synthesis")
                     state = TtsState.Idle
                     notifyStateChanged()
+                    notifyPiperMissing()
                     return@executeOnPooledThread
                 }
 
@@ -105,6 +107,29 @@ class ClaudeTtaSessions(private val project: Project) {
 
     private fun notifyStateChanged() {
         project.messageBus.syncPublisher(TtsStateListener.TOPIC).stateChanged(state)
+    }
+
+    /**
+     * Avisa que o Piper não está configurado (RNF-33, D-42).
+     *
+     * **Fica aqui, e não no chamador, de propósito.** Os dois pontos que tocam um trecho — o item
+     * "Tocar seleção" do menu "Áudio" (RF-48) e o botão do popup da seleção (RF-50) — passam por
+     * [playText]. Uma guarda neste ponto conserta os dois; uma em cada chamador seria o dobro do
+     * código e deixaria o terceiro chamador quebrado no dia em que existir.
+     *
+     * O menu escondia a falta: o `update()` da ação desabilita o item quando o Piper não está
+     * configurado. **O popup não tem `update()`** — o botão está sempre lá, e sem este aviso o
+     * clique seria de novo o no-op mudo do DEF-07.
+     */
+    private fun notifyPiperMissing() {
+        // Roda em thread de pool, e o projeto pode ter fechado no meio da verificação em disco.
+        if (project.isDisposed) return
+
+        ClaudeDockSessions.getInstance(project).notify(
+            "Piper não está configurado. Ajuste o executável e o modelo em " +
+                "Settings > Tools > Claude Code Dock.",
+            NotificationType.WARNING,
+        )
     }
 
     companion object {

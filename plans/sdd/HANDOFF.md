@@ -10,7 +10,13 @@
 
 ## Estado atual
 
-**Fase: v1.9.4 — RF-49: ação própria que entrega a seleção a *uma* pane, fechando DEF-08.**
+**Fase: v1.10.2 — RF-50, RF-51 e RF-53 implementados; o terceiro pedido virou `apt install`
+(Achado 33).** **142 testes verdes — medidos em 2026-08-09 00:06 com `--rerun`.**
+
+**Roteiros manuais: TODOS aprovados em 2026-08-09** — T-3.62, T-3.63, T-3.64, T-3.65, T-3.66,
+T-3.69 e o ícone cinza. **RF-52 arquivado sem código** e **Q-32 respondida** por T-3.62.
+
+**Fase anterior: v1.9.4 — RF-49: ação própria que entrega a seleção a *uma* pane, fechando DEF-08.**
 **A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79` e a
 v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 2026-08-08 17:15 com
 `--rerun`. Nada disso foi publicado: são rodadas de dívida e de ergonomia, não de release.**
@@ -23,10 +29,10 @@ v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 20
 | Artefato                                                         | Estado                                                                    |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                              |
-| [SPEC.md](SPEC.md) | ✅ v1.9.4 — RF-49/D-41; DEF-08; Q-02 refinada; Q-30 respondida; Q-31 nova |
+| [SPEC.md](SPEC.md) | ✅ **v1.10.2** — RF-50, RF-51, RF-53; RF-52 condicional; DEF-09; Achados 33/34/35/36; Q-32 (executável) e Q-33 (fechada); R-23 substituído por R-29 |
 | `HANDOFF.md` | ✅ Este arquivo, com RF-49, a receita do cache do Gradle e o inventário de roteiros |
 | [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)       |
-| Código do plugin | ✅ **136 testes, 0 falhas, 0 erros** em 22 classes; **zero warnings**. Execução de 17:15 |
+| Código do plugin | ✅ **142 testes, 0 falhas, 0 erros** em 25 classes; **zero warnings**. RF-50 e RF-51 entram nesta contagem |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                 |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                   |
 | T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                    |
@@ -372,6 +378,48 @@ enxerga. **É a terceira vez que o literal `"Terminal"` decide o nosso comportam
 
 **Contorno sem código:** "Nova sessão" nasce com a porta certa.
 
+### Colar imagem: o CLI já sabe, e falta o pacote do sistema (2026-08-08, noite/10)
+
+**Medido no binário `claude` 2.1.226 desta máquina**, não deduzido:
+
+- O CLI lê imagem da área de transferência por **shell-out**. No Linux:
+  `xclip -selection clipboard -t TARGETS -o | grep -E "image/(png|jpeg|...)"` para detectar, e
+  `xclip ... -t image/png -o > arquivo || wl-paste --type image/png > arquivo` para gravar.
+- O chamador trata a falha da detecção como ausência de imagem: `if (exitCode !== 0) return null`.
+  **Falha e ausência são indistinguíveis** — no-op mudo.
+- Destino no disco: `~/.claude/image-cache/<sessionId>/N.png`. Existe aqui, com PNGs reais.
+
+**E o que está instalado nesta máquina:** `xclip` ❌ · `xsel` ❌ · `wl-paste` ❌ · `wl-copy` ❌ ·
+`XDG_SESSION_TYPE=wayland`.
+
+**Conserto:** `sudo apt install wl-clipboard`. Vale para o terminal comum e para o IDE.
+**Instalado em 2026-08-09** (`2.2.1-1build1`) — **T-3.62 passa a ser executável**.
+
+**Efeito colateral que chegou como suspeita sobre o plugin:** com `wl-copy` no `PATH`, o
+copiar-ao-selecionar **do CLI** trocou de OSC 52 para nativo, e a mensagem virou "copied N chars to
+clipboard". Não é do plugin — nenhum caminho nosso copia sem clique, e a pilha do DEF-09 prova pelo
+negativo (quem fechou a barra foi o `IdePopupManager`, não o nosso `hide()`). Decisão do usuário:
+**deixar como está**.
+
+**O que ainda não sabemos (Q-32):** dentro da janela dedicada, o `Ctrl+V` chega ao PTY? A ordem em
+`JBTerminalPanel.handleKeyEvent` foi lida no bytecode — `preKeyEventConsumers` → `TerminalEscapeKeyListener`
+→ (se não consumido) `TerminalPanel.handleKeyEvent`, que trata `PASTE` como colagem de **texto**.
+Ler a ordem não diz quem consome na prática. **T-3.62 mede, depois do `apt install`.**
+
+### `/usage` não tem saída headless (2026-08-08, noite/10)
+
+- `claude --help` lista 13 subcomandos; **`usage` não é um deles**. `claude usage --help` cai no
+  help geral.
+- `/usage` é tela de TUI. Este projeto já sabia: o `ClaudeEscapeForwarder` existe em parte para
+  **sair** dela com `Ctrl+Backspace`.
+- `~/.claude/stats-cache.json` guarda **atividade** (`dailyActivity`, `modelUsage`,
+  `totalSessions`), não limite de plano.
+- O número vem de `/api/oauth/usage`, autenticado com o token de `~/.claude/.credentials.json`
+  (modo `600`).
+
+**Consequência:** popup exigiria o plugin ler o segredo do usuário. Recusado (RNF-34). O botão que
+envia `/usage` à sessão fica (RF-51).
+
 ### API de terminal disponível na build 262
 
 `AbstractTerminalRunner.startShellTerminalWidget` · `LocalTerminalDirectRunner.createTerminalRunner`
@@ -418,6 +466,9 @@ enxerga. **É a terceira vez que o literal `"Terminal"` decide o nosso comportam
 | **D-35** | _(v1.7)_ O split ganha **também** um menu "Dividir" no cabeçalho, apesar de o menu de contexto já oferecê-lo | Decisão do usuário, contra o critério de D-32 — e o conflito é real, não descuido. O contrapeso é o precedente do RF-26, aceito só por descoberta ("`Ctrl+C` copia, mas é invisível para quem usa o mouse"): o menu de contexto do terminal é tão invisível quanto. O critério de D-32 continua valendo para o **popup de seleção**, que é espaço escasso; o cabeçalho não é |
 | **D-36** | _(v1.7)_ A árvore de divisões vive **só** na hierarquia de componentes Swing, sem mapa paralelo | Mesma razão de D-18: um mapa precisaria ser limpo em todo caminho de fechamento, e é aí que sobra referência para pane morta. As três consultas necessárias saem da árvore: `isDescendingFrom` acha a aba, subir pelos pais acha o bloco divisível, e `putClientProperty` guarda o `Disposable` no próprio componente |
 | **D-37** | _(v1.7.1)_ O fechamento da divisão ganha **item próprio no cabeçalho**, mesmo já existindo no menu de contexto | Não é o caso de D-35 outra vez: aqui o problema não é descoberta, é **nome**. "Close Tab" é rótulo da plataforma, correto no terminal nativo (onde aba = sessão) e enganoso numa aba dividida, onde diz o oposto do que faz. Herdar comportamento de um ponto de extensão é de graça; herdar vocabulário não (Achado 29) |
+| **D-42** | _(v1.10)_ O aviso de "Piper não configurado" vai em `ClaudeTtaSessions.playText`, e **não** no botão novo do popup | É o ponto por onde os dois chamadores passam. Guarda no serviço conserta o botão novo e o item do menu com um diff menor do que verificar nos dois lugares. Mesma forma de RF-48 |
+| **D-43** | _(v1.10)_ `/usage` é **enviado à sessão**, não raspado para um popup | Raspar o buffer de uma tela de TUI que se repinta traz o DEF-01 de volta, agora sobre conteúdo que muda a cada frame. E o dado real exige o token do usuário (RNF-34) |
+| **D-44** | _(v1.10)_ Colar print screen **não vira RF** enquanto T-3.62 não rodar | Metade do problema é ambiental e está comprovada (pacote ausente); a outra metade é hipótese. Especificar sobre a metade não medida repetiria o Achado 30 |
 | **D-41** | _(v1.9.4)_ A entrega de RF-49 é **escrita direta no PTY** da pane em foco, não uma notificação MCP | Reimplementar a notificação exigiria falar o protocolo privado do oficial — o que D-01 recusa — e ainda herdaria o **broadcast** que torna DEF-08 ambíguo (Q-02): entregaria a todas as panes de novo. A escrita no PTY é o caminho do `/export` desde D-16, já em produção, e é a **única** que tem destinatário. O preço é o formato do @-mention virar acoplamento a um detalhe do CLI — mitigado por ele ter sido **lido do binário** e travado por T-1.57 a T-1.61, em vez de suposto |
 
 ### Correção registrada
@@ -496,6 +547,7 @@ autor dela calibrou, e não a um número escolhido por nós. Custo da decisão: 
 | **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos                       | 🟢 Baixo     |
 | **Q-16** | _(v1.4)_ Trocar o prazo fixo da capa por detecção de que o CLI já pintou? Avaliado: viável via `addModelListener` + `getScreenLines()`, mas acopla ao texto do banner | 🟢 Baixo     |
 | **Q-17** | _(v1.4)_ Reintroduzir a capa sobre uma partida sem eco (D-20), deixando-a só como acabamento? O pior caso do prazo viraria "tela vazia", não "eco visível"            | 🟢 Baixo     |
+| **Q-32** | ✅ **RESOLVIDA em 2026-08-09 (T-3.62): o `Ctrl+V` chega.** Com o `wl-clipboard` instalado, o print colado foi anexado e o arquivo apareceu em `~/.claude/image-cache/`. Ninguém consome a tecla antes do PTY. **RF-52 arquivado sem código** | ✅ Resolvido |
 
 ---
 
@@ -534,13 +586,259 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
    descartar. Stash não é memória de longo prazo, e D-20 já registra a medição por escrito.
 5. **`gradle.properties` em `pluginVersion = 0.1.0`** contra a tag `v0.8.0` — decisão de release.
 6. **[TTS agnóstico](../20260807-tts-engine-agnostic.md)** _(rodada nova, não é dívida)_ — análise
-   Piper × Kokoro com latência medida e escopo de uma **v1.10, "motor de fala plugável"**. Depende
-   de o `kokoro-tts.py` ganhar um modo que devolva os bytes: hoje ele toca sozinho e o plugin
-   perderia `pause`/`resume`. O Kokoro **não está instalado** nesta máquina.
+   Piper × Kokoro com latência medida e escopo de "motor de fala plugável". Depende de o
+   `kokoro-tts.py` ganhar um modo que devolva os bytes: hoje ele toca sozinho e o plugin perderia
+   `pause`/`resume`. O Kokoro **não está instalado** nesta máquina. ⚠️ **O rascunho reservava o
+   número "v1.10" — que já foi usado por esta rodada.** Quando entrar, será v1.11 ou adiante.
+
+7. ~~**v1.10 — implementar RF-50 (play no popup)**~~ ✅ **feito em 2026-08-09.** Terceiro botão em
+   `ClaudeSelectionCopyButton`, guarda de notificação em `playText` (D-42), painel extraído para
+   `buttonPanel` para poder testar o teto. T-1.62 a T-1.64 verdes.
+
+8. ~~**v1.10 — implementar RF-51 (`/usage` no cabeçalho)**~~ ✅ **feito em 2026-08-09.**
+   `ClaudeDockSessions.openUsage()` + `UsageSessionAction`, entre `ResumeSessionAction` e
+   `SplitSessionMenuAction`. T-1.65 e T-1.66 verdes.
+
+9. **Rodar os roteiros manuais da v1.10 — T-3.63 a T-3.68.** T-3.65 já passou (o `/usage` abriu
+   na sessão). T-3.67 e T-3.68 são novos e medem DEF-09. É o que falta para RF-50/RF-51
+   saírem de "compila e passa" para "funciona". T-3.64 é o mais importante dos quatro: mede
+   justamente o aviso que não existia antes (DEF-07 de novo, se falhar).
+
+10. **v1.10 — rodar T-3.62 (colar print screen)**, e **primeiro** `sudo apt install wl-clipboard`.
+    O resultado decide se RF-52 vira código ou é arquivada (Q-32). **Não escrever código antes
+    desta medição** (D-44).
 
 ---
 
 ## Log
+
+### 2026-08-09 (madrugada/2) — todos os roteiros fecharam, e o melhor recurso da rodada não teve código
+
+T-3.64, T-3.66 e T-3.62 aprovados no IDE real. Com eles, **a v1.10 fecha inteira**: RF-50, RF-51 e
+RF-53 entregues e medidos, RF-52 arquivado.
+
+**T-3.62 é o resultado que vale registrar.** Depois de `sudo apt install wl-clipboard`, colar um
+print com `Ctrl+V` **funcionou**, e o arquivo apareceu em `~/.claude/image-cache/<sessionId>/N.png`
+— exatamente o destino que o Achado 33 tinha previsto lendo o binário do CLI. **Q-32 respondida:**
+ninguém consome o `Ctrl+V` antes do PTY; a ordem do `JBTerminalPanel.handleKeyEvent` nunca foi
+problema.
+
+**Então o pedido "colar print screen" foi entregue com zero linha de código nossa.** A recusa de
+virar RF, lá na avaliação, era o desfecho certo — e o que a sustentou foi uma pergunta barata
+(`command -v xclip`) feita antes de desenhar interceptação de teclado. **Um `apt install` resolveu
+o que teria sido uma feature inteira.**
+
+Contraste que a rodada deixa claro, e que vale mais que qualquer dos dois isolado: o recurso mais
+barato foi o que eu quase implementei sem medir; o mais caro (DEF-09) foi o que eu declarei
+consertado **tendo** medido — só que a coisa errada.
+
+### 2026-08-09 (madrugada) — o conserto do DEF-09 falhou, e a instrumentação disse por quê
+
+**Registro de erro meu, e vale mais que o conserto.** Verifiquei no bytecode que
+`TerminalPanel.scrollArea` limpa a seleção incondicionalmente, escrevi DEF-09 em cima disso, mudei
+o código e **declarei consertado**. Não era a causa. O sintoma não mudou nada.
+
+**O que a instrumentação mediu** — um `JBPopupListener` com `Throwable` no `onClosed`:
+
+```
+IdePopupManager.maybeCloseAllPopups → closeAllPopups
+  → StackingPopupDispatcherImpl.closeActivePopup → AbstractPopup.cancel
+dispatched from IdeEventQueue via java.awt.SentEvent
+```
+
+Quem fecha é **a plataforma**, por evento de foco, 268 ms depois de o popup nascer. E o mesmo log
+mata a hipótese de largura: painel **80×24** em **x=325**, num terminal de **2173px**. Sobra
+espaço — **a contagem de botões nunca esteve no caminho causal**.
+
+**As duas pistas boas vieram do usuário, não da minha leitura de bytecode:**
+
+1. *"Por que com dois botões não dava e com três dá?"* — respondi que o `diff` era neutro. Verdade,
+   e irrelevante: a pergunta apontava uma variável que eu não tinha **medido**. A resposta certa
+   naquele momento era instrumentar, não argumentar.
+2. A captura de tela com **"copied N chars to clipboard"**, com a seleção sendo copiada **sem
+   clique**. Foi ela que levou ao verdadeiro suspeito.
+
+**Medições que a segunda pista motivou:**
+
+| Verificação                                | Resultado                                  |
+| ------------------------------------------ | ------------------------------------------ |
+| CLI liga mouse reporting?                  | **Sim** — `?1000h` e `?1006h` no binário   |
+| IntelliJ encaminha o mouse ao PTY?         | **Sim** — `myReportMouse = true` no padrão |
+| `copyOnSelection` do IntelliJ está ligado? | **Não** — campo não inicializado           |
+| A mensagem é do plugin?                    | **Não** — nenhum caminho nosso a imprime   |
+
+**Confirmado no mesmo dia, pelo teste do `Shift`:** com `Shift` o popup fica de pé e o play toca;
+sem `Shift`, o sintoma persiste. Quem trata o gesto é o **TUI do Claude Code**.
+
+**Primeira correção (exigir `Shift`) — recusada pelo usuário.** "Não quero que funcione só com
+shift." Tecnicamente correta, errada como produto. A recusa foi o que levou à correção certa, e por
+isso fica registrada.
+
+**Correção final (RF-53, revisto):** a barra deixa de ser `JBPopup` e vira filho do `JLayeredPane`
+em `POPUP_LAYER`. O `closeAllPopups` não a enxerga — não há popup registrado para fechar.
+**Funciona com e sem `Shift`.** ✅ aprovado no IDE real em 2026-08-09.
+
+**Terceiro erro meu da rodada, e o mais barato de evitar:** ao propor a guarda, eu tratei uma
+limitação do ambiente como requisito do produto. O usuário não pediu para entender o mouse
+reporting — pediu que a barra aparecesse. **Explicar por que não dá não é entregar.** A saída
+existia (não ser popup) e estava a uma pergunta de distância: *"o que fecha popups não alcança o
+quê?"*
+
+**Lição — irmã do Achado 30, com uma volta a mais.** O Achado 30 foi publicar hipótese como
+conserto. Este foi publicar **hipótese verificada** como conserto, que é pior: a verificação dá
+confiança sem dar causalidade. **Mecanismo confirmado ≠ causa observada.** Custou uma execução
+inteira do usuário. Registrado como Achado 36.
+
+**Correção de procedimento de build, também minha.** A nota de 2026-08-08 dizia que o `rm -rf` no
+diretório de transformação **nunca** foi necessário. **Falsificado hoje:** dois `--stop`, zero
+daemons, erro idêntico, e nenhum arquivo com mtime posterior para remover cirurgicamente. O `rm`
+resolveu, e a re-extração levou os 36 s previstos. **A regra correta tem dois casos:**
+
+- Sintoma `Cannot resolve 'product-info.json'` → **`./gradlew --stop` basta** (daemon com caminho
+  velho na memória). Confirmado de novo hoje.
+- Sintoma `contents of the immutable workspace ... have been modified` **persistindo depois do
+  `--stop`** → o diretório foi mesmo alterado; aí **só o `rm -rf` resolve**.
+
+### 2026-08-09 (tarde) — DEF-09: o popup piscava, e o culpado óbvio era inocente
+
+Primeiro teste no IDE real da v1.10. O `/usage` funcionou de primeira. O popup da seleção, não:
+"aparece rápido e some, quase piscando", sem dar tempo de clicar.
+
+**O suspeito óbvio era o terceiro botão** — é a novidade, e o popup ficou mais largo. Resisti a
+consertar por aí e fui ver o `diff`: **nada do ciclo de vida do popup tinha mudado.** A montagem do
+painel trocou de escopo, e só. Se o diff não explica, a causa é mais antiga que o diff.
+
+**Achei no bytecode do JediTerm, e é incondicional:**
+
+```
+public void scrollArea(int, int, int);
+  10: aconst_null
+  11: invokevirtual updateSelection(TerminalSelection)
+```
+
+`scrollArea` não desloca a seleção pela rolagem — **apaga**. E `updateSelection` notifica os
+listeners. O popup escutava `selectionChanged(null)` para fechar. Logo: **toda rolagem do terminal
+fechava o popup**, e uma sessão do Claude Code rola sozinha o tempo todo.
+
+**Por que só apareceu agora, se o bug é da v1.6:** sobre uma sessão parada o popup funciona. Nos
+testes anteriores a sessão estava parada. Desta vez o roteiro começou pelo `/usage` — que desenha
+uma tela viva — e o defeito ficou óbvio. **Não foi regressão da v1.10; foi a v1.10 dando a
+condição de teste que faltava.**
+
+**O defeito vinha em par, e o segundo era pior.** Os botões liam `selectedText` **na hora do
+clique**. Mesmo com o popup de pé, uma rolagem entre mostrar e clicar faria copiar/exportar/tocar
+agirem sobre `null` — em silêncio, no caso do copiar. Nunca foi visto porque o primeiro defeito
+escondia o segundo. Registrado como T-3.68.
+
+**Correção tentada — NÃO resolveu.** O popup passou a capturar o trecho ao nascer (`snapshot`) e o
+listener de seleção saiu. Sintoma idêntico no IDE real. Ver a entrada de 2026-08-09 (madrugada):
+o `scrollArea` é mecanismo real, mas não era a causa deste sintoma.
+
+**Lição:** um evento com o nome certo não é o gatilho certo. `selectionChanged(null)` parecia dizer
+"o usuário desfez a seleção" e dizia "a seleção não vale mais" — inclusive quando quem a invalidou
+foi o emulador. Mesma forma do Achado 25.
+
+**Também nesta rodada:** ícone de RF-51 trocado de `General.BalloonInformation` (azul) para
+`Actions.Profile` — o medidor cinza monocromático, coerente com as irmãs do cabeçalho. As variantes
+coloridas da família chamam-se `ProfileBlue`/`Red`/`Yellow`, o que confirma qual é o neutro.
+
+**Ambiente que vale registrar:** o sandbox roda sobre `sun.awt.wl.WLToolkit` — toolkit **Wayland
+nativo** do JBR, não XWayland. Não foi a causa aqui, mas é contexto para qualquer defeito futuro de
+popup ou foco.
+
+### 2026-08-09 — RF-50 e RF-51 implementados
+
+Rodada de código, curta, sem surpresa arquitetural. **142 testes, 0 falhas, 0 warnings.**
+
+**RF-51 (`/usage` no cabeçalho)** — `ClaudeDockSessions.openUsage()`, `UsageSessionAction`,
+registro entre `ResumeSessionAction` e `SplitSessionMenuAction`. Três arquivos tocados.
+
+Um detalhe que só apareceu escrevendo: **o `activate(null)` no fim é necessário.** Clicar num botão
+do cabeçalho não garante que o foco caia no terminal, e sem foco lá o `Esc` que sai da tela de uso
+não chega ao CLI — o usuário abriria uma tela da qual não sabe sair. Mesmo remate de RF-49, e não
+estava no desenho da v1.10; o SPEC foi corrigido para refletir o código, e não o contrário.
+
+**RF-50 (play no popup)** — o botão em si foram 3 linhas, como previsto. As duas outras mudanças é
+que importam:
+
+1. **A guarda em `playText` (D-42).** Confirmado ao escrever: o ramo negativo só chamava
+   `LOG.warn`. Agora notifica, e conserta os **dois** chamadores de uma vez.
+2. **`buttonPanel` saiu do `Controller` para o objeto.** Concessão estrutural que eu preferiria
+   não fazer, e que se paga: dentro do `Controller` o painel só seria testável subindo um
+   `TerminalPanel` real. Fora, T-1.64 verifica o teto de três (R-29) e a fiação de cada callback
+   em milissegundos. Dado que o teto já foi rompido uma vez por critério errado (Achado 34), ter o
+   número escrito onde um quarto botão quebre o teste vale a indireção.
+
+**O único erro da rodada foi meu, e no teste:** passei `null` como `MouseEvent` para
+`mousePressed`, e o check de não-nulo do Kotlin reprovou. Corrigido com um evento de verdade. Vale
+registrar porque é o tipo de falha que tenta a gente a afrouxar a produção (`e: MouseEvent?`) para
+o teste ficar mais curto — seria trocar segurança de tipo por conveniência de bancada.
+
+**Falta o que não dá para medir aqui:** T-3.63 a T-3.66, no IDE real. Nada nesta rodada teve PTY.
+
+### 2026-08-08 (noite/10) — três pedidos: dois viram RF, um vira `apt install`
+
+Chegaram três propostas em `plans/`. A rodada foi de **avaliação**, não de implementação, e o
+resultado mais útil foi o pedido que **não** virou código.
+
+**1. Colar print screen (`20260808-paste-print-screen.md`) — recusado como RF.**
+
+A tentação era desenhar interceptação de `Ctrl+V` no plugin. Antes disso, a pergunta do Achado 25:
+**de onde vem o dado?** Resposta lida no binário do CLI, não suposta: de `xclip` ou `wl-paste`.
+**Nenhum dos dois está instalado nesta máquina**, e a sessão é Wayland. O CLI trata a falha do
+comando de detecção como "não há imagem" (`if (exitCode !== 0) return null`) — no-op mudo, o mesmo
+formato do DEF-07.
+
+E o relato **já trazia a prova** de que a causa era externa: "o mesmo problema acontece quando
+executo claude code no terminal". Nenhuma linha do plugin roda ali. Uma causa que alcança os dois
+ambientes não pode estar no plugin. Essa frase, sozinha, valia mais que qualquer leitura de
+bytecode — e quase passou batido.
+
+Conserto: `sudo apt install wl-clipboard`. Sobrou uma pergunta legítima (Q-32: o `Ctrl+V` chega ao
+PTY dentro do IDE?), um teste que a responde (T-3.62) e um RF **condicional** (RF-52) que só existe
+se a medição pedir. Publicar RF-52 como decidido seria repetir o Achado 30.
+
+**2. Play no popup da seleção (`20260808-tts-play-button.md`) — aceito, RF-50.**
+
+O pedido era reuso, e o usuário estava certo: as peças existem todas. O popup tem o texto
+(`selectedText`, o mesmo de RF-26/RF-33) e o serviço tem o play (`playText`, o mesmo de RF-48).
+São ~8 linhas.
+
+**O interessante não é o botão, é o critério que o barrava.** R-23 declarava teto de dois botões,
+e o play já tinha sido recusado duas vezes — RF-30 em v1.5.1, e o Achado 26 — pela pergunta "isso
+já existe em outro lugar da UI?". **Essa pergunta reprova o botão de copiar**, que existe desde
+RF-26 apesar de `Ctrl+C` já copiar; o comentário do `ClaudeSelectionCopyButton` diz, com todas as
+letras, que atalho é invisível para quem está com o mouse. O critério media a **existência** da
+capacidade e ignorava o **custo de alcançá-la**.
+
+Agravante descoberto agora: entre a recusa de v1.5.1 e a v1.9, o item "Tocar seleção" do menu
+**não funcionava** (DEF-07). O play foi recusado por já existir num lugar onde não existia.
+
+Critério novo (Achado 34): entra no popup o que opera **sobre o trecho selecionado** e cabe em
+**um clique**. Teto de três. R-29 substitui R-23.
+
+**Uma coisa não é reuso, e é a única mudança real de comportamento:** `playText` hoje só *loga*
+quando o Piper não está configurado. Do cabeçalho isso não aparecia, porque o `update()` do menu
+desabilita o item antes do clique. **O popup não tem `update()`.** Sem aviso, o botão novo nasceria
+sendo o DEF-07 de novo. A guarda vai em `playText` (D-42) — um ponto, dois chamadores consertados.
+
+**3. `/usage` no cabeçalho (`20260808-usage-option.md`) — aceito como botão, recusado como popup.**
+
+O recurso passa; o formato não. `/usage` é tela de TUI: não existe subcomando `claude usage` (a
+lista de comandos foi lida), o `stats-cache.json` local guarda atividade e não limite de plano, e o
+número que o popup mostraria vem de `/api/oauth/usage` autenticado com o token de
+`~/.claude/.credentials.json`. **O popup custaria o plugin passar a ler o segredo do usuário** —
+contra RNF-04 e contra a regra de segredos do `CLAUDE.md`. Raspar o buffer também não serve: é o
+DEF-01 sobre uma tela que se repinta.
+
+O botão entrega o que o pedido queria de fato — parar de digitar `/usage` — e custa uma linha
+(RF-51, D-43).
+
+**Colisão de numeração, resolvida:** o rascunho de TTS agnóstico reservava "v1.10". Esta rodada
+tomou o número; aquela entra em v1.11 ou adiante.
+
+**Nada foi implementado.** SPEC v1.10 e este registro são a entrega. Os próximos passos 7, 8 e 9
+listam o código.
 
 ### 2026-08-08 (noite/9) — Q-31 arquivada: duas medições dirigidas, nenhuma reprodução
 
