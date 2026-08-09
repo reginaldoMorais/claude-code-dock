@@ -1,8 +1,9 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.9
-- **Data:** 2026-08-07
-- **Status:** Especificação — v1.9 abre a velocidade da fala (RF-47) e corrige DEF-07
+- **Versão:** 1.10
+- **Data:** 2026-08-08
+- **Status:** Especificação — v1.10 avalia três pedidos: aceita dois (RF-50, RF-51) e recusa o
+  terceiro como requisito, por ter causa medida fora do plugin (Achado 33)
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -28,6 +29,7 @@
 > | 1.9.2  | 2026-08-08 | **T-2.1 a T-2.6 implementados** — a lacuna de integração mais antiga do projeto. T-2.6 fixa o Achado 27 como guarda de regressão e **corrige a razão pela qual Q-04/Q-10 estavam resolvidos**. Registra o que o ambiente headless não entrega (PTY) e o que fica com os roteiros manuais |
 > | 1.9.3  | 2026-08-08 | **DEF-08**: o `Ctrl+Alt+K` do plugin oficial nunca poderia chegar à nossa janela — `focusClaudeInTerminal` e `openClaudeInTerminal` estão presos ao literal `"Terminal"`. T-3.3 reescrito: era roteiro sobre premissa falsa. T-3.36 e T-3.4 aprovados |
 > | 1.9.4  | 2026-08-08 | **RF-49** — ação própria de enviar a seleção do editor para a pane **em foco**, fechando DEF-08 sem tocar no protocolo privado. D-41. T-1.57 a T-1.61 |
+> | 1.10   | 2026-08-08 | Três pedidos avaliados. **RF-50** — play do trecho no popup da seleção, **revogando o teto de dois botões de R-23** com critério novo (Achado 34). **RF-51** — `/usage` no cabeçalho, entregue como envio à sessão e **não** como popup, porque o popup exigiria o token do usuário (Achado 35). **Colar print screen recusado como RF**: o CLI já implementa o caminho e o que falta é um pacote do sistema (Achado 33, Q-32, T-3.62) |
 > | 1.9.5  | 2026-08-08 | **Q-31 explicada no mecanismo (Achado 32)**: `CLAUDE_CODE_SSE_PORT` vem de `getOrDefault(locationHash, 0)`, e a mitigação de corrida do plugin oficial ignora as nossas panes. T-3.61 mede |
 
 ---
@@ -694,6 +696,89 @@ sem `In <arquivo>`, `echo $CLAUDE_CODE_SSE_PORT`, comparar com uma pane sadia.
 **Contorno que já existe no produto:** "Nova sessão" cria uma sessão nova, que pega a porta certa.
 Fechar a pane desintegrada e abrir outra resolve o caso concreto — sem código novo.
 
+### Colar print screen: o CLI já faz isso, e o que falta é um pacote do sistema _(v1.10)_
+
+**Pedido de origem.** Colar um print screen direto na janela do plugin, como no VS Code, em vez de
+abrir a pasta de capturas, copiar o arquivo e colar o caminho.
+
+**A primeira pergunta decide o resto: o CLI sabe ler imagem da área de transferência?** **Sabe.**
+Lido no binário `claude` 2.1.226 instalado neste ambiente, o bloco por sistema operacional é
+literal:
+
+```js
+linux: {
+  checkImage: `xclip -selection clipboard -t TARGETS -o 2>/dev/null | grep -E "image/(png|jpeg|jpg|gif|webp|bmp)" || wl-paste -l 2>/dev/null | grep -E "image/(png|jpeg|jpg|gif|webp|bmp)"`,
+  saveImage:  `xclip -selection clipboard -t image/png -o > ${i} 2>/dev/null || wl-paste --type image/png > ${i} 2>/dev/null || xclip -selection clipboard -t image/bmp -o > ${i} 2>/dev/null || wl-paste --type image/bmp > ${i}`,
+}
+```
+
+E o chamador trata a falha do `checkImage` como "não há imagem":
+
+```js
+if ((await Tni(r.checkImage)).exitCode !== 0) return null;
+```
+
+Há ainda `~/.claude/image-cache/<sessionId>/N.png` no disco desta máquina, com PNGs reais — o
+destino já existe e já foi usado.
+
+**No Linux o caminho inteiro depende de `xclip` ou `wl-paste` estarem no `PATH`.** Neste ambiente
+**nenhum dos dois está instalado** — `xclip`, `xsel`, `wl-paste` e `wl-copy`, todos ausentes — e a
+sessão é **Wayland** (`XDG_SESSION_TYPE=wayland`). Os dois comandos falham, o `exitCode` nunca é
+`0`, e o `return null` transforma tudo num **no-op mudo**: o mesmo formato de falha do DEF-07, e
+pela mesma razão — um caminho negativo sem aviso é indistinguível de um recurso que não existe.
+
+**Isto explica o sintoma inteiro, inclusive a parte que não é nossa.** O relato diz que falha
+**também no terminal comum**, fora do IDE, onde nenhuma linha do plugin roda. Uma causa que
+alcança os dois casos é do ambiente, não do plugin — e o pacote ausente é exatamente essa causa.
+Funcionar no VS Code do mesmo usuário não contradiz nada: a extensão de lá não passa pela área de
+transferência do sistema para entregar a imagem ao modelo.
+
+**Conserto de ambiente, sem uma linha de código nosso:**
+
+```bash
+sudo apt install wl-clipboard   # sessão Wayland; `xclip` também serve, via XWayland
+```
+
+**O que sobra para o plugin, e ainda não está medido.** No terminal do IDE, `Ctrl+V` é ação da
+plataforma. `JBTerminalPanel.handleKeyEvent` roda, nesta ordem, os `preKeyEventConsumers`, o
+`TerminalEscapeKeyListener` e — só se o evento não tiver sido consumido — o
+`TerminalPanel.handleKeyEvent` do JediTerm, que trata `PASTE` como colagem **de texto**
+(`handlePaste` → `pasteFromClipboard`). Se a tecla for consumida antes de virar bytes no PTY, o CLI
+nunca fica sabendo que houve um `Ctrl+V`, e aí o pacote instalado não basta. **Isso é pergunta, não
+fato** (Q-32); T-3.62 existe para respondê-la **depois** de o pacote estar instalado.
+
+**Por que não escrever o código antes de medir.** O plugin já tem o gancho que resolveria — o
+`addPreKeyEventHandler` do `ClaudeEscapeForwarder` — e um plano B melhor que o do próprio CLI:
+`Toolkit.getDefaultToolkit().getSystemClipboard()` lê `DataFlavor.imageFlavor` **sem depender de
+`xclip`**, e gravar um PNG temporário e colar o caminho é literalmente o que o usuário já faz à
+mão hoje, com sucesso. Mas metade do problema é ambiental e está comprovada; a outra metade é
+hipótese. Especificar RF sobre a metade não medida repetiria o Achado 30 — publicar hipótese
+plausível como se fosse conserto.
+
+### `/usage` é tela de TUI, e não saída de texto _(verificado em v1.10)_
+
+**Pedido de origem.** Um botão no cabeçalho que abra, em popup, o resumo de uso hoje obtido com
+`/usage`.
+
+**O que foi verificado, e não suposto:**
+
+1. **Não existe subcomando.** `claude --help` lista `agents`, `auth`, `auto-mode`, `doctor`,
+   `gateway`, `import`, `install`, `mcp`, `plugin`, `project`, `setup-token`, `ultrareview` e
+   `update`. **`usage` não está lá**, e `claude usage --help` cai no help geral.
+2. **`/usage` é comando de sessão interativa.** Este próprio documento já sabia disso desde a v1.1:
+   o `ClaudeEscapeForwarder` existe, entre outras coisas, para **sair** de telas como o `/usage`
+   com `Ctrl+Backspace` onde o `Esc` é capturado pelo IDE (RF-17).
+3. **O dado não está em cache local utilizável.** `~/.claude/stats-cache.json` existe, mas guarda
+   **atividade** (`dailyActivity`, `modelUsage`, `totalSessions`) — não os limites de plano que a
+   tela de `/usage` mostra.
+4. **O dado vem da rede, autenticado.** O binário traz o endpoint `/api/oauth/usage`, e o token
+   está em `~/.claude/.credentials.json` (modo `600`).
+
+**A consequência é direta:** um popup com o resumo exigiria o plugin **ler o token do usuário** e
+falar com um endpoint não documentado. Isso colide com RNF-04 e com a regra de segredos do
+`CLAUDE.md`, e quebraria em qualquer mudança de formato do CLI. **O popup é recusado; o botão
+não** — ver Achado 35 e RF-51.
+
 ### DEF-08 — `Ctrl+Alt+K` foca o Terminal nativo, e sempre foi assim _(v1.9.3)_
 
 **Sintoma.** Em T-3.3, `Ctrl+Alt+K` com um trecho selecionado no editor abriu uma sessão na tool
@@ -957,6 +1042,9 @@ reimplementação frágil.**
 | **RF-47**     | _(v1.9)_ O plugin DEVE permitir configurar a **velocidade da fala** do Piper em **dois lugares ligados ao mesmo valor e à mesma lista**: um submenu "Velocidade" dentro do menu "Áudio" e um seletor em Settings > Tools > Claude Code Dock. A lista é 0,25x / 0,5x / 0,75x / 1x / 1,25x / 1,5x / 1,75x / 2x, e os dois pontos DEVEM oferecer exatamente ela — sem campo numérico livre. O padrão, "1x", DEVE preservar o padrão **do próprio modelo**, não impor 1.0. A velocidade vale para a **próxima** fala. |
 | **RF-48**     | _(v1.9)_ O menu "Áudio" DEVE tocar o trecho **selecionado** na sessão em foco, obtendo a seleção pelo mesmo caminho das demais ações do cabeçalho. Sem sessão aberta, ou sem seleção, DEVE avisar em vez de não fazer nada em silêncio (DEF-07).                                                                                                                                                                                                                                                                  |
 | **RF-49**     | _(v1.9.4)_ O plugin DEVE oferecer ação própria que envie a referência do trecho selecionado no editor (`@arquivo#Lx-y`) para a sessão **em foco** da janela dedicada, e traga a janela à frente. Sem sessão aberta, DEVE avisar. **Não substitui o `Ctrl+Alt+K` do oficial** — resolve o que ele não faz: entregar a uma pane só, e nesta janela (DEF-08, Q-02). NÃO DEVE definir atalho padrão (RF-13). |
+| **RF-50**     | _(v1.10)_ O popup flutuante da seleção DEVE oferecer um **terceiro** botão, "Tocar seleção", que sintetiza o trecho já selecionado chamando o **mesmo** `ClaudeTtaSessions.playText` do menu "Áudio" (RF-31) — sem caminho de síntese próprio. **Revoga o teto de dois botões de R-23**, sob critério novo e declarado (Achado 34). |
+| **RF-51**     | _(v1.10)_ O cabeçalho DEVE oferecer, **depois** de "Retomar Sessão", uma ação "Uso" que envie `/usage` à sessão **em foco**, pelo mesmo `sendInput` de RF-24 e RF-49. O resultado aparece **na própria sessão**, como tela de TUI — **não** em popup (Achado 35). Sem sessão aberta, ou sem PTY ainda, DEVE avisar. |
+| **RF-52**     | _(v1.10)_ **Condicional, não implementável ainda.** Se — e somente se — T-3.62 mostrar que o `Ctrl+V` não chega ao CLI dentro da janela dedicada, o plugin DEVE interceptar `Ctrl+V` pelo `addPreKeyEventHandler`, e, havendo imagem na área de transferência e **nenhum** texto, gravar um PNG temporário e enviar o caminho dele à sessão. Com texto na área de transferência, o comportamento padrão de colagem DEVE seguir intacto. Enquanto T-3.62 não rodar, **não há código a escrever** (Achado 33). |
 
 ---
 
@@ -1092,6 +1180,20 @@ reimplementação frágil.**
   para panes mortas (mesma razão de D-18).
 - **RNF-30** _(v1.7, novo)_ — A lógica de divisão DEVE ficar em objeto puro de Swing, sem
   conhecer `Project`, terminal ou tool window, para poder ser testada sem subir o IDE (RNF-26).
+
+### Requisitos novos em v1.10 — play no popup e `/usage` no cabeçalho
+
+- **RNF-32** _(v1.10, novo)_ — O botão de play do popup NÃO DEVE ganhar caminho próprio de
+  síntese. DEVE chamar `ClaudeTtaSessions.playText`, para que velocidade (RF-47),
+  pausa/retomada (RF-31), exclusão mútua entre falas (RNF-23) e liberação de recursos (RNF-22)
+  continuem tendo **um dono só**. Um segundo caminho de síntese seria um segundo estado de áudio.
+- **RNF-33** _(v1.10, novo)_ — **Nenhum caminho negativo novo pode ser mudo.** Piper não
+  configurado, síntese falhada, seleção vazia e sessão inexistente DEVEM notificar. É a
+  generalização da lição do DEF-07, e alcança um ponto que hoje ainda falha em silêncio:
+  `playText` apenas loga quando `canSynthesize` devolve `false`.
+- **RNF-34** _(v1.10, novo)_ — A ação de `/usage` NÃO DEVE ler `~/.claude/.credentials.json` nem
+  chamar `/api/oauth/usage`. O token de acesso é do CLI; o plugin não entra nesse caminho
+  (RNF-04, e a regra de segredos do `CLAUDE.md`).
 
 ---
 
@@ -1271,6 +1373,39 @@ reimplementação frágil.**
 2. A notificação "Falha ao sintetizar o áudio. Verifique o modelo e o texto." é exibida.
 3. Menu "Áudio" volta a desabilitado; nenhuma reprodução inicia.
 4. O processo `piper` é destruído e recursos liberados (RNF-22).
+
+### Fluxo alternativo N — tocar o trecho pelo popup da seleção _(v1.10, RF-50)_
+
+1. O usuário seleciona um trecho com o mouse e solta o botão.
+2. O popup aparece com **três** botões: copiar, exportar, tocar.
+3. O usuário clica em tocar; o popup fecha, como nos outros dois.
+4. `ClaudeTtaSessions.playText(trecho)` roda o mesmo caminho do menu "Áudio", fora da EDT.
+5. Sai som — e o menu "Áudio" já mostra pausa e parar, porque o estado de reprodução é o mesmo
+   objeto, não uma cópia (RNF-32).
+
+### Fluxo alternativo O — consultar o uso _(v1.10, RF-51)_
+
+1. O usuário clica em "Uso", no cabeçalho, logo depois de "Retomar Sessão".
+2. `sendInput(widget, "/usage\r")` escreve na sessão em foco — o mesmo mecanismo de RF-24.
+3. O CLI abre a tela de uso **dentro da sessão**.
+4. O usuário sai dela com `Esc`, ou com `Ctrl+Backspace` onde o `Esc` é capturado pelo IDE
+   (RF-17) — que é, aliás, a razão original de o `ClaudeEscapeForwarder` existir.
+
+### Fluxo de erro K — tocar sem Piper configurado _(v1.10, RF-50/RNF-33)_
+
+1. O usuário clica no botão de tocar com o Piper ausente ou sem modelo.
+2. `canSynthesize` devolve `false`.
+3. O plugin **notifica** que o Piper não está configurado e aponta Settings > Tools > Claude Code
+   Dock.
+4. Nada toca — e, ao contrário de hoje, nada fica em silêncio. É a correção de forma que o DEF-07
+   exigiu, aplicada no ponto por onde **todos** os chamadores passam.
+
+### Fluxo de erro L — `/usage` sem sessão viva _(v1.10, RF-51)_
+
+1. O usuário clica em "Uso" sem nenhuma sessão na janela, ou com a sessão ainda sem PTY.
+2. `selectedWidget()` devolve `null`, ou `sendInput` devolve `false`.
+3. O plugin notifica — "Nenhuma sessão aberta para consultar o uso." no primeiro caso, "A sessão
+   ainda não iniciou; tente de novo em instantes." no segundo, reusando a mensagem de RF-24.
 
 ---
 
@@ -1615,6 +1750,11 @@ foi descartado em v1.5.1 justamente para não transformá-lo em barra de ferrame
 que separa os casos é capacidade, não simetria: exportar o trecho **não existe** em outro lugar
 da UI, enquanto o play já existia no menu do cabeçalho. Ver R-23 e o Achado 25.
 
+> **Superado em v1.10.** O teto virou três e o critério mudou: o de capacidade reprovava também o
+> botão de copiar, que `Ctrl+C` já cobria — e o copiar existe. O critério em vigor é o do
+> Achado 34 (opera sobre o trecho selecionado, e cabe em um clique). RF-50 entra por ele; R-29
+> substitui R-23.
+
 ### Divisão da aba em várias sessões _(v1.7)_
 
 **A árvore de componentes é a estrutura de dados (RNF-29).**
@@ -1671,6 +1811,73 @@ O menu "Dividir" do cabeçalho é o segundo caminho, pedido pelo usuário (D-35)
 lado a lado; `Splitter(vertical = true)` significa empilhado. Os dois booleanos têm nome parecido
 e sentido oposto, então o código converte num ponto só (`stacked = !vertically`) e T-1.34/T-1.35
 verificam **geometria**, não a flag: depois do layout, a segunda pane está à direita ou abaixo.
+
+### Play do trecho no popup da seleção _(v1.10, RF-50)_
+
+**O pedido é de reuso, e o código já está todo escrito.** O popup tem o texto
+(`widget.selectedText`, o mesmo que alimenta RF-26 e RF-33) e o serviço de áudio tem o play
+(`ClaudeTtaSessions.playText`, o mesmo que RF-48 usa desde o cabeçalho). O que falta é um terceiro
+`button(...)` no `JPanel` que já existe:
+
+```kotlin
+add(button(AllIcons.Actions.Execute, "Tocar seleção", ::playSelection))
+
+private fun playSelection() {
+    val text = ClaudeSessionText.normalize(selectedText())
+    hide()
+    if (text == null) return
+    ClaudeTtaSessions.getInstance(project).playText(text)
+}
+```
+
+O `project` já é campo do `Controller` — entrou com a exportação, na v1.6. **Nenhuma peça nova.**
+
+**O que não é reuso, e é a única mudança de comportamento real.** Hoje `playText` falha em
+silêncio quando o Piper não está configurado:
+
+```kotlin
+if (!ClaudePiperPlayback.canSynthesize(executable, model)) {
+    LOG.warn("Piper not available for synthesis")   // <- e mais nada
+    state = TtsState.Idle
+    notifyStateChanged()
+    return@executeOnPooledThread
+}
+```
+
+Do cabeçalho isso passava despercebido, porque as duas camadas de `update()` do menu "Áudio"
+desabilitam o item antes do clique. **O popup não tem `update()`** — o botão está sempre lá, e sem
+aviso o clique vira exatamente o no-op mudo do DEF-07, no mesmo produto e pelo mesmo motivo.
+
+**O aviso vai em `playText`, e não no botão** (RNF-33). Não é preferência de estilo: `playText` é o
+ponto por onde **os dois** chamadores passam, então uma guarda ali conserta o botão novo e o item
+de menu de uma vez, com um diff menor do que colocar a verificação nos dois lugares. É a mesma
+forma do RF-48 — resolver no serviço, não no chamador.
+
+### `/usage` no cabeçalho _(v1.10, RF-51)_
+
+Uma ação irmã das outras do cabeçalho, e do mesmo tamanho:
+
+```kotlin
+// ClaudeDockSessions
+fun openUsage() {
+    val widget = selectedWidget()
+        ?: return notify("Nenhuma sessão aberta para consultar o uso.", NotificationType.WARNING)
+
+    if (!ClaudeTerminalSessionFactory.sendInput(widget, "/usage\r")) {
+        notify("A sessão ainda não iniciou; tente de novo em instantes.", NotificationType.WARNING)
+    }
+}
+```
+
+O `\r` é a convenção já usada por `ClaudeSessionExport.command` — é o retorno que o TUI espera, e
+não `\n`. A ação entra em `setTitleActions` **entre** `ResumeSessionAction` e
+`SplitSessionMenuAction`, que é a posição pedida.
+
+**O que este desenho deliberadamente não faz.** Não sonda o terminal esperando a resposta, como
+RF-24 faz com o `/export`. Não há arquivo para aparecer: o `/usage` desenha uma tela e fica nela.
+Tentar raspar o buffer para montar um popup traria de volta o DEF-01 (a conversa sai repetida, uma
+cópia por repintura do TUI) sobre um conteúdo que muda a cada frame. **Entregar dentro da sessão é
+o desenho, não uma limitação contornável.**
 
 ### Itens não aplicáveis
 
@@ -1754,6 +1961,11 @@ Registrados por exigência do roteiro de SDD:
 | **CB-59** | _(v1.9)_ `speechSpeed` fora da tabela no `claude-code-dock.xml`, editado à mão (ex.: 110, 9999, 0)                  | `effectiveSpeechSpeed()` devolve a velocidade **mais próxima** das oferecidas — 110 vira 100, 9999 vira 200, 0 vira 25. Limitar a faixa não bastaria: um valor solto dentro dela deixaria o seletor da tela sem item selecionado, e o `apply` gravaria nulo |
 | **CB-60** | _(v1.9)_ Menu e tela oferecendo listas diferentes                                                                   | Impossível por construção: as duas leem `ClaudeDockSettings.SPEECH_SPEEDS`, e T-1.54 fixa o conteúdo dela. A tabela mora no settings, e não nas actions, para que a tela não dependa do pacote de ações                                                     |
 | **CB-61** | _(v1.9)_ Velocidade trocada durante uma fala em curso                                                               | A fala atual segue na velocidade com que foi sintetizada; a nova vale a partir do próximo play. O piper sintetiza o áudio inteiro antes de tocar, então não há o que reajustar (Q-29)                                                                       |
+| **CB-63** | _(v1.10)_ Clique no play do popup com o Piper não configurado                                                       | Notifica e não toca (RNF-33). Antes de v1.10 este caminho era mudo, e do menu ficava escondido atrás do `update()` desabilitado                                                                                                                            |
+| **CB-64** | _(v1.10)_ Clique no play do popup com uma fala já em curso                                                          | A anterior é interrompida e a nova toca: `playText` começa com `stop()`, e a regra de uma fala por vez (RNF-23) vale para o botão novo sem código novo                                                                                                     |
+| **CB-65** | _(v1.10)_ Trecho selecionado longo demais para a síntese                                                            | Mesmo teto do menu "Áudio": o prazo de 20 s do `ClaudePiperPlayback` (RNF-20) corta, e a falha notifica. O botão novo não muda o limite nem o herda pela metade                                                                                            |
+| **CB-66** | _(v1.10)_ "Uso" clicado com o CLI no meio de uma resposta                                                           | O `/usage` entra na fila de entrada do TUI como qualquer digitação. Não há garantia de que abra na hora, e o plugin não tenta dar uma — é sessão interativa, não RPC                                                                                       |
+| **CB-67** | _(v1.10)_ `Ctrl+V` com imagem na área de transferência e `xclip`/`wl-paste` ausentes                                | Hoje: no-op mudo, dentro e fora do IDE (Achado 33). Conserto é de ambiente (`wl-clipboard`), não de código. O que o plugin pode fazer depende de T-3.62                                                                                                    |
 | **CB-62** | _(v1.9)_ Modelo cujo `config.json` traz `length_scale` diferente de 1.0                                             | Em 100% a flag não é passada e o valor do modelo prevalece — é o comportamento correto, e é por isso que 100% se chama "padrão do modelo" e não "1x" (D-40)                                                                                                 |
 
 ---
@@ -1784,11 +1996,13 @@ Registrados por exigência do roteiro de SDD:
 | **R-20** | _(v1.5)_ Reprodução de áudio via `javax.sound.sampled` é bloqueante (thread do mixer aguarda buffer ficar vazio)                                                                                                     | Médio       | Média               | Linha de áudio é reproduzida em thread separada (mixer nativo do SO), a UI fica responsiva. Se o mixer travar ou estiver indisponível, a thread de reprodução congela, não a EDT. Risco aceitável                                                                                                                                                                               |
 | **R-21** | _(v1.5)_ Modelo `.onnx` pode ser muito grande (63 MB) e o carregamento na primeira síntese causa latência                                                                                                            | Baixo       | Média               | Piper já cacheia o modelo em memória entre chamadas. Primeira síntese tem latência de carregamento (~2-3s); as seguintes são rápidas. Documentar e aceitar                                                                                                                                                                                                                      |
 | **R-22** | _(v1.5)_ Dois projetos abertos com configurações diferentes de `piperModel` — sem sincronização entre `ClaudeTtsSessions`                                                                                            | Baixo       | Baixa               | Cada projeto tem sua própria instância de `ClaudeTtaSessions` (via `project.service()`). Não há compartilhamento; cada um usa seu próprio modelo configurado. Esperado e correto                                                                                                                                                                                                |
-| **R-23** | _(v1.6)_ O popup de seleção vira barra de ferramentas: cada rodada acrescenta "só mais um botão" até ele atrapalhar a leitura do que foi selecionado                                                                 | Baixo       | Média               | Teto declarado de dois botões, e o critério registrado (capacidade que não existe em outro lugar, não simetria com o cabeçalho). RF-30 já foi recusado por esse critério em v1.5.1. Ver Achado 25                                                                                                                                                                               |
+| **R-23** | _(v1.6; **substituído por R-29 em v1.10**)_ O popup de seleção vira barra de ferramentas: cada rodada acrescenta "só mais um botão" até ele atrapalhar a leitura do que foi selecionado                              | Baixo       | Média               | ~~Teto de dois botões, critério de capacidade~~ — o critério reprovava o próprio botão de copiar, que existe desde RF-26 (Achado 34). Substituído: teto de três, critério de escopo (opera sobre o trecho, um clique). Ver R-29                                                                                                                                                                               |
 | **R-24** | _(v1.6)_ O trecho gravado é o render do terminal, com quebras de linha na largura da aba — o arquivo pode não conter o texto como o autor o escreveu                                                                 | Baixo       | Alta                | Inerente a exportar de um terminal, e o mesmo que a cópia por seleção (RF-26) já entrega há rodadas sem reclamação. Declarado em [Fora de Escopo](#fora-de-escopo); Q-22 registra a alternativa se incomodar                                                                                                                                                                    |
 | **R-25** | _(v1.7)_ `JBTerminalWidgetListener` não tem contrato de estabilidade: um upgrade pode acrescentar método abstrato ou mudar a semântica de `split(vertically)`                                                        | Médio       | Média               | O acoplamento está num arquivo só (RNF-27), e a semântica da direção tem teste de **geometria** (T-1.34/T-1.35) — inverter a flag lá em cima quebra o teste em vez de sair invertido na tela. O menu do cabeçalho não depende do listener e continuaria funcionando                                                                                                             |
 | **R-26** | _(v1.7)_ Várias sessões por aba multiplicam processos `claude`, cada um com seu consumo de memória e sua conexão ao servidor MCP                                                                                     | Baixo       | Alta                | É o custo pedido: dividir é para rodar mais de um Claude Code. Mesmo custo de abrir mais abas, que já não tem limite (RNF-18). Fechar a pane encerra o processo (RF-39)                                                                                                                                                                                                         |
 | **R-28** | _(v1.9)_ Nos extremos da faixa (25% e 200%) a inteligibilidade cai, e o ponto em que cai varia por modelo                                                                                                            | Baixo       | Média               | É ajuste de gosto, reversível em dois cliques pelo menu, e o padrão continua sendo o do modelo. A lista é fechada e curta justamente para o usuário topar com o limite escolhendo, não digitando; quem quiser além disso está pedindo outra voz, não outra velocidade                                                                                                           |
+| **R-29** | _(v1.10)_ O teto de dois botões no popup (R-23) foi revogado por RF-50; um terceiro pedido de botão volta a crescer o popup até atrapalhar a leitura do trecho                                                        | Baixo       | Média               | O critério não foi abandonado, foi **substituído** por um mais estreito e declarado no Achado 34: entra no popup o que opera **sobre o trecho selecionado** e cabe em um clique. Três é o novo teto, e o próximo pedido passa pela mesma pergunta                        |
+| **R-30** | _(v1.10)_ `/usage` pode ser renomeado, removido ou mudar de forma em qualquer release do CLI, e a ação do cabeçalho vira um botão que não faz nada                                                                    | Baixo       | Média               | Mesma exposição que RF-24 já aceita com o `/export` (R-11), e mesma mitigação: o texto do comando fica num ponto só. A falha é visível — o usuário vê o comando entrar na sessão e o CLI reclamar —, ao contrário de um popup que ficaria vazio sem explicação           |
 | **R-27** | _(v1.7)_ Com mais sessões simultâneas, a ambiguidade de Q-02 (qual sessão "possui" um diff) deixa de ser hipótese e vira rotina                                                                                      | Médio       | Alta                | Não é regressão — duas abas já bastavam. O split apenas torna o caso comum, o que **ajuda**: Q-02 passa a ser observável no uso real, que é a condição que faltava para decidi-la (CB-56)                                                                                                                                                                                       |
 
 ---
@@ -1861,6 +2075,11 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.58**     | `ClaudeEditorReference`           | _(v1.9.4)_ Várias linhas produzem a faixa `@arquivo#L3-10 ` |
 | **T-1.59**     | `ClaudeEditorReference`           | _(v1.9.4)_ Sem seleção não vai `#L`. No CLI a guarda é `if (lineStart && lineEnd)` e `0` é falso em JS: zero significa **ausente**, não linha zero |
 | **T-1.60**     | `ClaudeEditorReference`           | _(v1.9.4)_ **Seleção de linhas inteiras não conta a linha seguinte.** O offset final cai na coluna 0 da próxima, e sem correção marcar uma linha reportaria `#L3-4` |
+| **T-1.62**     | `ClaudeTtaSessions`               | _(v1.10)_ Piper não configurado: `playText` **notifica** e deixa o estado em `Idle`. Antes de v1.10 só logava, e o clique era mudo (RF-50, RNF-33, DEF-07) |
+| **T-1.63**     | `ClaudeTtaSessions`               | _(v1.10)_ Texto em branco continua saindo cedo, **sem** notificar — o popup nunca chega a chamar com branco, e um aviso aqui viraria ruído (RF-50) |
+| **T-1.64**     | `ClaudeSelectionCopyButton`       | _(v1.10)_ O painel do popup monta **três** botões, nesta ordem: copiar, exportar, tocar. Guarda de regressão do teto revogado em R-29 (RF-50) |
+| **T-1.65**     | `ClaudeDockSessions`              | _(v1.10)_ `openUsage()` sem sessão selecionada notifica e **não** escreve no PTY (RF-51) |
+| **T-1.66**     | `ClaudeDockSessions`              | _(v1.10)_ O comando enviado é exatamente `/usage\r` — o `\r`, e não `\n`, é o que o TUI espera; a mesma convenção do `ClaudeSessionExport.command` (RF-51) |
 | **T-1.61**     | `ClaudeEditorReference`           | _(v1.9.4)_ A referência **sempre termina em espaço** — é ele que separa a menção do que o usuário digita depois. Existe porque `trim()` é a limpeza mais tentadora do mundo |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
@@ -2000,6 +2219,11 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.58**     | _(v1.9)_ Acionar "Tocar seleção" **sem seleção** e com a aba vazia: aparece aviso nos dois casos, nenhum silêncio (RF-48)                                                                                                                                               |
 | **T-3.59**     | _(v1.9.3)_ **Substitui T-3.3.** Com uma sessão viva na janela dedicada, selecionar código e acionar `Ctrl+Alt+K`: o foco vai para o Terminal nativo (esperado, DEF-08) — **a pergunta é se a referência do trecho aparece na nossa pane**. Voltar para a janela dedicada **sem** tocar na nativa e conferir. Responde Q-30 ✅ **executado 2026-08-08** — chegou, e chegou nas **duas** panes |
 | **T-3.60**     | _(v1.9.4)_ Com a aba **dividida**, selecionar código e acionar "Enviar Seleção para o Claude Code" pelo menu de contexto do editor: a menção `@arquivo#Lx-y` aparece **só na pane em foco** — a diferença para o `Ctrl+Alt+K`, que entrega às duas —, a janela vem à frente e o cursor fica na pane certa (RF-49) ✅ **aprovado 2026-08-08** — print mostra a menção `@test.md#L3` **só na pane esquerda**, a direita vazia; e saiu `#L3`, não `#L3-4`, com a barra de status em `3:12 (30 chars)`: a correção de `inclusiveEndLine` vale no editor real, não só em T-1.60 |
+| **T-3.62**     | _(v1.10)_ **Mede o Achado 33, e só depois de `sudo apt install wl-clipboard`.** Tirar um print screen, focar a sessão da janela dedicada e teclar `Ctrl+V`. Se a imagem for anexada, **não há RF-52 a implementar** e o caso fecha como ambiente. Se nada acontecer, conferir no terminal comum: funcionando lá e não aqui, o `Ctrl+V` está sendo consumido antes do PTY, e **aí** RF-52 vira código |
+| **T-3.63**     | _(v1.10)_ Selecionar um trecho, clicar no play do popup: **sai som**, e o menu "Áudio" passa a oferecer pausa — a prova de que o estado é compartilhado e não duplicado (RF-50, RNF-32) |
+| **T-3.64**     | _(v1.10)_ Com o Piper **desconfigurado** de propósito, clicar no play do popup: aparece **notificação**. É o teste que distingue "não configurado" de "quebrado em silêncio", e que só existe por causa do DEF-07 (RF-50, RNF-33) |
+| **T-3.65**     | _(v1.10)_ Clicar em "Uso" no cabeçalho: a tela de uso do CLI abre **na sessão em foco**; `Esc` (ou `Ctrl+Backspace`) sai dela e devolve o prompt (RF-51, RF-17) |
+| **T-3.66**     | _(v1.10)_ Com a aba dividida, selecionar a pane da direita e clicar em "Uso": a tela abre **nela**, não na irmã — mesma garantia de RF-38 |
 | **T-3.61**     | _(v1.9.5)_ **Mede o Achado 32.** Numa pane **sem** o indicador de integração no rodapé (`In <arquivo>`), rodar `echo $CLAUDE_CODE_SSE_PORT`: se sair **`0`**, a causa da desintegração é a corrida do `getOrDefault`, e Q-31 fecha. Conferir numa pane **com** o indicador que sai a porta real — é o controle que impede concluir pelo motivo errado ⚠️ **executado 2026-08-08 — não reproduziu.** As duas panes ficaram integradas e o `echo` deu a **mesma porta real (`33471`)** nas duas. Isso **valida o controle** (o customizer alcança as panes de split em produção, não só em T-4) e **deixa a hipótese sem medição**: o caso da pane desintegrada não ocorreu nesta sessão · **2ª execução, com a IDE reiniciada e a pane nascida na inicialização: também não reproduziu** — mesma porta real nas duas. Hipótese arquivada |
 
 ### Testes de regressão
@@ -2192,6 +2416,33 @@ abre no visualizador do IDE de ponta a ponta.
 
 ---
 
+**CA-30 — Tocar o trecho selecionado pelo popup** _(v1.10, RF-50)_
+
+- **Given** uma sessão com um trecho selecionado e o Piper configurado
+- **When** o usuário clica no terceiro botão do popup flutuante
+- **Then** o áudio do trecho é reproduzido, e o menu "Áudio" do cabeçalho passa a oferecer pausa e
+  parar — o mesmo estado, não um segundo
+
+**CA-31 — Play sem Piper avisa** _(v1.10, RF-50/RNF-33)_
+
+- **Given** o Piper não configurado
+- **When** o usuário clica no botão de tocar do popup
+- **Then** uma notificação explica que o Piper não está configurado, e nada acontece em silêncio
+
+**CA-32 — Consultar o uso pelo cabeçalho** _(v1.10, RF-51)_
+
+- **Given** uma sessão viva na janela dedicada
+- **When** o usuário clica em "Uso", logo depois de "Retomar Sessão"
+- **Then** o `/usage` é enviado à sessão **em foco** e a tela de uso do CLI aparece nela
+
+**CA-33 — Uso sem sessão avisa** _(v1.10, RF-51)_
+
+- **Given** a janela dedicada sem nenhuma sessão aberta
+- **When** o usuário clica em "Uso"
+- **Then** uma notificação avisa que não há sessão, e nada é escrito em PTY nenhum
+
+---
+
 ## Plano de Rollout
 
 ### Estratégia de deploy
@@ -2266,6 +2517,7 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-26** | ~~_(v1.7)_ Com a aba dividida, o que o título "(encerrado)" deveria significar?~~                                                                          | ✅ **RESOLVIDO em v1.8.1 pelo uso real.** Significa "não há mais sessão viva nesta aba" — contando as panes na árvore, que era a saída descartada como cara em v1.7 e custou seis linhas. Virou RF-44, depois de DEF-03 mostrar o oposto na prática                                                                                                                                                                                                                                        |
 | **Q-29** | _(v1.9)_ Vale aplicar a nova velocidade à fala **em curso**, e não só à próxima?                                                                           | **Recusado, com o motivo no mecanismo.** O piper sintetiza o áudio inteiro antes de tocar (`synthesize` lê todo o stdout e só então o `Clip` abre): não há stream a reajustar. Aplicar no meio seria re-sintetizar do zero e reposicionar por frame — fila e posição, exatamente o que RNF-23 mantém fora. O custo real é baixo: a fala típica dura segundos, e parar e tocar de novo já resolve                                                                                           |
 | **Q-30** | ~~_(v1.9.3)_ O trecho enviado por `Ctrl+Alt+K` chega à sessão da janela dedicada?~~ | ✅ **RESPONDIDA em 2026-08-08 por T-3.59: chega.** O `@test.md#L3` apareceu na nossa pane com `1 line selected`. **Logo DEF-08 é ergonomia, não integração** — o conteúdo atravessa, só o foco vai para a janela errada. Rebaixa a prioridade do defeito e muda o conserto plausível: não é preciso tocar em protocolo, basta uma ação nossa |
+| **Q-32** | _(v1.10)_ Instalado o `wl-clipboard`, o `Ctrl+V` com imagem chega ao CLI dentro da janela dedicada, ou é consumido antes pela ação de colagem da plataforma? | Em aberto, e é o **único** ponto não medido do Achado 33. A ordem em `JBTerminalPanel.handleKeyEvent` está lida (pre-handlers → escape listener → JediTerm), mas ler a ordem não diz quem consome o evento na prática. **Decide se RF-52 vira código ou é arquivada.** Mede-se com T-3.62, que exige o pacote instalado primeiro |
 | **Q-31** | _(v1.9.4)_ Por que uma pane às vezes **não conecta** ao servidor MCP, ficando sem o indicador `In <arquivo>` e sem receber o `Ctrl+Alt+K`? | Em aberto. Observado em T-3.60: das duas panes, só a segunda estava conectada. Hipóteses não medidas: corrida entre a partida da sessão e o servidor do plugin oficial, ou sessão criada antes de o servidor subir. **Afeta RF-37**, que assume integração em todas as panes — e T-3.36 já mostrou as duas conectadas, então não é impossível, é intermitente · 🔍 **Mecanismo identificado em 2026-08-08 (Achado 32)**: `CLAUDE_CODE_SSE_PORT` cai em `0` por `getOrDefault`, e a mitigação de corrida do oficial só alcança a tool window `"Terminal"`. **Falta medir** — T-3.61 · ⚠️ **T-3.61 não reproduziu** (2026-08-08): duas panes integradas, mesma porta real `33471`. Controle passou; a hipótese continua **sem medição** · ⚰️ **ARQUIVADA em 2026-08-08** após **duas** não-reproduções, a segunda com a condição específica. Causa do caso de T-3.60 desconhecida; `deferSessionStartUntilUiShown` é a explicação provável de por que não nos atinge |
 | **Q-28** | _(v1.8)_ Vale arrastar panes com o mouse para reorganizá-las, como o editor faz com as abas?                                                               | **Avaliado e adiado, com o levantamento feito.** Mecanismo existe (`DnDSupport`; `DockManager`/`DockContainer`). O que falta é **onde agarrar**: o editor arrasta o rótulo da aba, e as nossas panes não têm aba — a superfície delas é do terminal, onde arrastar é selecionar texto (RF-26). Exigiria barra de título por pane, UI permanente para ação ocasional. RF-43 cobre o uso de 2–4 panes por ações. Reabrir se o uso mostrar aninhamento profundo, onde trocar/girar não bastam |
 | **Q-27** | _(v1.7)_ As degradações graciosas de engine (CB-26, CB-36, CB-47, R-15) deveriam ser removidas agora que o Achado 27 provou que a sessão é sempre CLASSIC? | Não. Custam uma linha (`?: return`) e protegem contra a plataforma mudar o retorno de `createTerminalWidget` num upgrade. O que mudou foi a **probabilidade** de R-15, não a decisão                                                                                                                                                                                                                                                                                                       |
@@ -2589,6 +2841,10 @@ Registrado em R-23 com teto explícito de dois botões. O próximo pedido de bot
 pela mesma pergunta antes de virar RF: **isso existe em algum outro lugar?** Se existir, o lugar
 certo já tem dono.
 
+> **Revogado em v1.10 (Achado 34).** A pergunta acima nunca foi feita ao botão de copiar, que
+> ela também reprovaria — `Ctrl+C` já copiava. O critério media a existência da capacidade e
+> ignorava o custo de alcançá-la. RF-50 aceita o play; o critério em vigor está no Achado 34.
+
 ### Achado 27 — Uma premissa carregada por seis rodadas estava errada _(v1.7)_
 
 Desde a v1.2 o documento hedgeia contra "e se a sessão não for JediTerm?": CB-26 ("fora do
@@ -2659,6 +2915,79 @@ a sessão morta, e as ações do cabeçalho paravam de achar sessão até algué
 usuário a encontra. Ao ligar um ponto de extensão herdado, ler os rótulos que vêm junto e
 perguntar se descrevem o que a ação faz **no nosso contexto** — no do terminal nativo, "Close
 Tab" estava certo.
+
+---
+
+### Achado 33 — o recurso pedido já existia, e faltava um pacote do sistema _(v1.10)_
+
+**Pedido:** colar print screen na janela do plugin. **Resultado da avaliação: não vira RF** — pelo
+menos não a parte que resolve o problema.
+
+O caminho de menor resistência era projetar interceptação de `Ctrl+V` no plugin. Teria funcionado,
+e teria sido **a resposta certa para a pergunta errada**. A pergunta que mudou tudo foi a que este
+documento já aprendeu a fazer no Achado 25: **de onde vem o dado?** Aqui, de `xclip`/`wl-paste` —
+lidos no binário do CLI, não deduzidos —, e **nenhum dos dois está instalado nesta máquina**.
+
+**O relato trazia a evidência decisiva e ela quase passou batido:** "o mesmo problema acontece
+quando executo claude code no terminal". Nenhuma linha do plugin roda no terminal comum. Uma causa
+que alcança os dois ambientes **não pode** estar no plugin — e essa frase, sozinha, já apontava
+para fora antes de qualquer código ser lido.
+
+**Lição registrada, e ela é irmã do Achado 17.** Antes de perguntar "conseguimos implementar?", vale
+perguntar **"isto já não está implementado, e quebrado por outro motivo?"**. O custo da pergunta é
+um `command -v`; o custo de pulá-la teria sido uma feature inteira para substituir uma que já
+existe — e que continuaria quebrada no terminal do usuário.
+
+**O que sobrou é honesto e pequeno:** uma pergunta medida (Q-32), um teste que a responde (T-3.62)
+e um RF **condicional** (RF-52) que só existe se a medição pedir. Publicar RF-52 como decidido
+seria repetir o Achado 30.
+
+### Achado 34 — o teto de dois botões caiu, e o critério que o sustentava também _(v1.10)_
+
+O popup da seleção tinha teto declarado de dois botões (R-23), e o play foi **recusado** duas
+vezes: como RF-30 em v1.5.1, e de novo no Achado 26. O critério era **"isso já existe em outro
+lugar da UI?"** — e existia, no menu "Áudio".
+
+**O critério estava errado, e dá para dizer exatamente onde.** Ele mede a **existência** da
+capacidade e ignora o **custo de chegar até ela**. Pelo mesmo critério, o botão de copiar do popup
+nunca deveria ter existido: `Ctrl+C` já copiava. Ele existe porque atalho é invisível para quem
+está com a mão no mouse — o próprio comentário do `ClaudeSelectionCopyButton` diz isso, com estas
+palavras. **O argumento que salvou o botão de copiar salva o play**, e não foi aplicado a ele.
+
+Há um agravante que só ficou visível depois: entre a recusa de v1.5.1 e hoje, o item "Tocar
+seleção" do menu **não funcionava** (DEF-07, consertado só na v1.9). Ou seja, o play foi recusado
+por já existir em um lugar onde, de fato, ele não existia.
+
+**Critério novo, mais estreito que o antigo:** entra no popup o que opera **sobre o trecho
+selecionado** e cabe em **um clique**. Copiar, exportar e tocar passam; qualquer coisa que precise
+de diálogo, submenu ou alvo diferente do trecho, não. **Três é o novo teto** (R-29), e o próximo
+pedido passa por essa pergunta antes de virar RF.
+
+**Lição registrada:** um critério declarado não é um critério correto. Este durou três rodadas
+porque nunca foi testado contra o caso que ele próprio já tinha aprovado — o botão de copiar.
+
+### Achado 35 — o recurso foi aceito e o formato pedido, recusado _(v1.10)_
+
+O pedido foi "um popup com o resumo de uso". A entrega é **um botão que envia `/usage` à sessão**.
+Não é a mesma coisa, e a diferença é deliberada.
+
+**O que separa os dois é onde mora o dado.** O `/usage` não imprime texto: desenha uma tela de TUI.
+Não existe subcomando `claude usage` — a lista de comandos foi lida, e não está lá. O
+`stats-cache.json` local guarda atividade, não limite de plano. O número que o popup mostraria vem
+de `/api/oauth/usage`, autenticado com o token de `~/.claude/.credentials.json`.
+
+**Então o popup tem um preço, e o preço é ler o segredo do usuário.** O plugin passaria a abrir um
+arquivo `600` de credenciais e a falar com um endpoint não documentado — contra RNF-04, contra a
+regra de segredos do `CLAUDE.md`, e quebrável em qualquer release do CLI. Raspar o buffer do
+terminal para montar o popup também não serve: é o DEF-01 de volta (conteúdo repetido a cada
+repintura), agora sobre uma tela que muda a cada frame.
+
+**O botão entrega o que o pedido queria de fato** — parar de digitar `/usage` — e custa uma linha.
+O popup entregaria a forma, e custaria a superfície de segurança do plugin.
+
+**Lição registrada, e é a mesma do Achado 17 vista de outro ângulo:** quando o formato pedido é
+caro e o valor pedido é barato, entrega-se o valor e explica-se a troca. O que não se faz é
+implementar o formato caro em silêncio, nem recusar o pedido inteiro porque o formato não cabe.
 
 ---
 
