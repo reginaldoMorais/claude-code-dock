@@ -463,6 +463,31 @@ class ClaudeDockSessions(private val project: Project) :
         findToolWindow()?.activate(null)
     }
 
+    /**
+     * Envia `/usage` à sessão em foco (RF-51).
+     *
+     * **O resultado aparece na própria sessão, e não em popup — é o desenho, não uma limitação
+     * contornável (D-43).** O `/usage` não imprime texto: desenha uma tela de TUI. Não há
+     * subcomando `claude usage` para chamar em modo `-p`, o `stats-cache.json` local guarda
+     * atividade e não limite de plano, e o número real vem de `/api/oauth/usage` autenticado com
+     * o token do usuário — que o plugin não lê (RNF-34). Raspar o buffer para montar um popup
+     * traria o DEF-01 de volta, agora sobre conteúdo que muda a cada repintura.
+     *
+     * Por não esperar resposta, esta é a mais simples das três saídas por PTY: não há arquivo a
+     * sondar como em [copySelectedSession], nem prazo a estourar.
+     */
+    fun openUsage() {
+        val widget = selectedWidget()
+            ?: return notify("Nenhuma sessão aberta para consultar o uso.", NotificationType.WARNING)
+
+        if (!ClaudeTerminalSessionFactory.sendInput(widget, USAGE_COMMAND)) {
+            return notify("A sessão ainda não iniciou; tente de novo em instantes.", NotificationType.WARNING)
+        }
+
+        // O usuário precisa ver a tela que acabou de pedir.
+        findToolWindow()?.activate(null)
+    }
+
     private fun selectedWidget(): TerminalWidget? =
         findToolWindow()?.contentManager?.selectedContent?.getUserData(SESSION_WIDGET)
 
@@ -504,6 +529,9 @@ class ClaudeDockSessions(private val project: Project) :
 
         /** Slash command do CLI, seguido de CR — o mesmo que digitar e pressionar Enter. */
         private const val EXPORT_COMMAND = "/export\r"
+
+        /** _(v1.10, RF-51)_ Mesma convenção do [EXPORT_COMMAND]: CR, e não LF. */
+        internal const val USAGE_COMMAND = "/usage\r"
 
         /**
          * Liga a aba à sessão em foco, para as ações que operam sobre a sessão selecionada.
