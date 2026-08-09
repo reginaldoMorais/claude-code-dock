@@ -13,9 +13,8 @@
 **Fase: v1.10.2 — RF-50, RF-51 e RF-53 implementados; o terceiro pedido virou `apt install`
 (Achado 33).** **142 testes verdes — medidos em 2026-08-09 00:06 com `--rerun`.**
 
-**Roteiros manuais: T-3.65 ✅ (`/usage`), T-3.63 ✅ (play tocou), T-3.69 ✅ (barra estável com e
-sem `Shift`, três botões funcionando), ícone cinza ✅ aprovado. Pendentes: T-3.64, T-3.66, T-3.62
-(depende de `wl-clipboard`).**
+**Roteiros manuais: TODOS aprovados em 2026-08-09** — T-3.62, T-3.63, T-3.64, T-3.65, T-3.66,
+T-3.69 e o ícone cinza. **RF-52 arquivado sem código** e **Q-32 respondida** por T-3.62.
 
 **Fase anterior: v1.9.4 — RF-49: ação própria que entrega a seleção a *uma* pane, fechando DEF-08.**
 **A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79` e a
@@ -548,7 +547,7 @@ autor dela calibrou, e não a um número escolhido por nós. Custo da decisão: 
 | **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos                       | 🟢 Baixo     |
 | **Q-16** | _(v1.4)_ Trocar o prazo fixo da capa por detecção de que o CLI já pintou? Avaliado: viável via `addModelListener` + `getScreenLines()`, mas acopla ao texto do banner | 🟢 Baixo     |
 | **Q-17** | _(v1.4)_ Reintroduzir a capa sobre uma partida sem eco (D-20), deixando-a só como acabamento? O pior caso do prazo viraria "tela vazia", não "eco visível"            | 🟢 Baixo     |
-| **Q-32** | _(v1.10)_ Instalado o `wl-clipboard`, o `Ctrl+V` com imagem chega ao CLI dentro da janela dedicada, ou a plataforma consome antes? **Decide se RF-52 existe.** Mede-se com T-3.62 | 🟡 Médio     |
+| **Q-32** | ✅ **RESOLVIDA em 2026-08-09 (T-3.62): o `Ctrl+V` chega.** Com o `wl-clipboard` instalado, o print colado foi anexado e o arquivo apareceu em `~/.claude/image-cache/`. Ninguém consome a tecla antes do PTY. **RF-52 arquivado sem código** | ✅ Resolvido |
 
 ---
 
@@ -612,6 +611,26 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 ---
 
 ## Log
+
+### 2026-08-09 (madrugada/2) — todos os roteiros fecharam, e o melhor recurso da rodada não teve código
+
+T-3.64, T-3.66 e T-3.62 aprovados no IDE real. Com eles, **a v1.10 fecha inteira**: RF-50, RF-51 e
+RF-53 entregues e medidos, RF-52 arquivado.
+
+**T-3.62 é o resultado que vale registrar.** Depois de `sudo apt install wl-clipboard`, colar um
+print com `Ctrl+V` **funcionou**, e o arquivo apareceu em `~/.claude/image-cache/<sessionId>/N.png`
+— exatamente o destino que o Achado 33 tinha previsto lendo o binário do CLI. **Q-32 respondida:**
+ninguém consome o `Ctrl+V` antes do PTY; a ordem do `JBTerminalPanel.handleKeyEvent` nunca foi
+problema.
+
+**Então o pedido "colar print screen" foi entregue com zero linha de código nossa.** A recusa de
+virar RF, lá na avaliação, era o desfecho certo — e o que a sustentou foi uma pergunta barata
+(`command -v xclip`) feita antes de desenhar interceptação de teclado. **Um `apt install` resolveu
+o que teria sido uma feature inteira.**
+
+Contraste que a rodada deixa claro, e que vale mais que qualquer dos dois isolado: o recurso mais
+barato foi o que eu quase implementei sem medir; o mais caro (DEF-09) foi o que eu declarei
+consertado **tendo** medido — só que a coisa errada.
 
 ### 2026-08-09 (madrugada) — o conserto do DEF-09 falhou, e a instrumentação disse por quê
 
