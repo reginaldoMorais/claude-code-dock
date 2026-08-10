@@ -4,6 +4,7 @@ import com.intellij.notification.Notification
 import com.intellij.notification.Notifications
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
+import dev.reginaldomorais.claudedock.settings.TtsEngine
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -27,10 +28,10 @@ class ClaudeTtaSessionsTest : BasePlatformTestCase() {
      * porque o `update()` do menu desabilita o item; o popup não tem `update()`, e o clique seria
      * o no-op mudo do DEF-07 outra vez.
      */
-    fun `test T-1_62 piper ausente notifica e volta a Idle`() {
+    fun `test T-1_62 motor ausente notifica e volta a Idle`() {
         // Modelo inexistente força `canSynthesize` a `false` sem depender do que há na máquina —
         // se o Piper estiver instalado de verdade aqui, o teste continua medindo o mesmo ramo.
-        withPiperModel("/tmp/modelo-que-nao-existe.onnx") {
+        withEngine(TtsEngine.PIPER, "/tmp/modelo-que-nao-existe.onnx") {
             val received = captureNotifications()
 
             ClaudeTtaSessions.getInstance(project).playText("qualquer trecho")
@@ -63,14 +64,17 @@ class ClaudeTtaSessionsTest : BasePlatformTestCase() {
 
     // -- apoio ------------------------------------------------------------------------------
 
-    private fun withPiperModel(model: String, body: () -> Unit) {
+    private fun withEngine(engine: TtsEngine, model: String, body: () -> Unit) {
         val settings = ClaudeDockSettings.getInstance()
-        val previous = settings.piperModel
+        val previousEngine = settings.ttsEngine
+        val previousModel = settings.piperModel
+        settings.ttsEngine = engine
         settings.piperModel = model
         try {
             body()
         } finally {
-            settings.piperModel = previous
+            settings.ttsEngine = previousEngine
+            settings.piperModel = previousModel
         }
     }
 

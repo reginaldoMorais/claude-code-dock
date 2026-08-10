@@ -35,6 +35,17 @@ kotlin {
 }
 
 intellijPlatform {
+    // O `buildSearchableOptions` sobe uma segunda instância do IDE, em headless, só para indexar
+    // os campos da nossa tela de configuração na busca do Settings. Ele falha com "Only one
+    // instance of IDEA can be run at a time" sempre que o IDE do autor está aberto — que é o caso
+    // normal de quem está desenvolvendo o plugin.
+    //
+    // Custo de desligar: os campos da tela deixam de aparecer ao digitar no campo de busca do
+    // Settings. A tela em si continua em Tools > Claude Code Dock, navegável como sempre. Este
+    // plugin é de instalação local, sem publicação na Marketplace, então o índice não paga o
+    // atrito de build.
+    buildSearchableOptions = false
+
     pluginConfiguration {
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
