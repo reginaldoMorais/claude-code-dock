@@ -78,20 +78,69 @@ class ClaudeDockSettingsTest {
     @Test
     fun `velocidade fora da tabela vira a mais proxima`() {
         assertEquals(200, ClaudeDockSettings().apply { speechSpeed = 9999 }.effectiveSpeechSpeed())
-        assertEquals(25, ClaudeDockSettings().apply { speechSpeed = 0 }.effectiveSpeechSpeed())
+        assertEquals(50, ClaudeDockSettings().apply { speechSpeed = 0 }.effectiveSpeechSpeed())
         assertEquals(100, ClaudeDockSettings().apply { speechSpeed = 110 }.effectiveSpeechSpeed())
         assertEquals(125, ClaudeDockSettings().apply { speechSpeed = 130 }.effectiveSpeechSpeed())
     }
 
     /** T-1.54: a tabela é a fonte única do menu e da tela — as duas UIs não podem divergir. */
     @Test
-    fun `tabela de velocidades cobre de 0,25x a 2x`() {
+    fun `tabela de velocidades cobre de 0,5x a 2x`() {
         assertEquals(
-            listOf(25, 50, 75, 100, 125, 150, 175, 200),
+            listOf(50, 75, 100, 125, 150, 175, 200),
             ClaudeDockSettings.SPEECH_SPEEDS.keys.toList(),
         )
-        assertEquals("0,25x", ClaudeDockSettings.speechSpeedLabel(25))
+        assertEquals("0,5x", ClaudeDockSettings.speechSpeedLabel(50))
         assertEquals("1,75x", ClaudeDockSettings.speechSpeedLabel(175))
         assertEquals("110%", ClaudeDockSettings.speechSpeedLabel(110))
+    }
+
+    /**
+     * T-1.83 (D-45): quem já tinha 0,25x gravado migra sozinho.
+     *
+     * 0,25x saiu da tabela porque o `create()` do Kokoro tem `assert speed >= 0.5`. Não existe
+     * código de migração: quem aproxima é o [ClaudeDockSettings.effectiveSpeechSpeed], que já
+     * escolhia o valor mais próximo em vez de só limitar a faixa. Sem este teste, isso é
+     * esperança, não garantia.
+     */
+    @Test
+    fun `velocidade 25 gravada antes da v1_11 vira 50`() {
+        val antigo = ClaudeDockSettings().apply { speechSpeed = 25 }
+        val atual = ClaudeDockSettings()
+
+        atual.loadState(antigo.state)
+
+        assertEquals(50, atual.effectiveSpeechSpeed())
+    }
+
+    /** T-1.84 (RF-54): o motor nasce no Kokoro e sobrevive ao loadState. */
+    @Test
+    fun `motor de voz nasce no kokoro e persiste`() {
+        assertEquals(TtsEngine.KOKORO, ClaudeDockSettings().ttsEngine)
+        assertEquals(ClaudeDockSettings.DEFAULT_KOKORO_VOICE, ClaudeDockSettings().effectiveKokoroVoice())
+        assertEquals(ClaudeDockSettings.DEFAULT_KOKORO_PYTHON, ClaudeDockSettings().effectiveKokoroPython())
+
+        val source = ClaudeDockSettings().apply {
+            ttsEngine = TtsEngine.PIPER
+            kokoroVoice = "pm_alex"
+        }
+        val target = ClaudeDockSettings()
+
+        target.loadState(source.state)
+
+        assertEquals(TtsEngine.PIPER, target.ttsEngine)
+        assertEquals("pm_alex", target.effectiveKokoroVoice())
+    }
+
+    /** Campo limpo na tela cai no padrão, em vez de desabilitar a síntese sem explicação. */
+    @Test
+    fun `campos do kokoro em branco caem no padrao`() {
+        val settings = ClaudeDockSettings().apply {
+            kokoroPython = "   "
+            kokoroVoice = ""
+        }
+
+        assertEquals(ClaudeDockSettings.DEFAULT_KOKORO_PYTHON, settings.effectiveKokoroPython())
+        assertEquals(ClaudeDockSettings.DEFAULT_KOKORO_VOICE, settings.effectiveKokoroVoice())
     }
 }

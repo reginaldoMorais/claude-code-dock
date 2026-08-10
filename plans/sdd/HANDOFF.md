@@ -4,17 +4,39 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-08
+- **Última atualização:** 2026-08-10 (noite)
 
 ---
 
 ## Estado atual
 
-**Fase: v1.10.2 — RF-50, RF-51 e RF-53 implementados; o terceiro pedido virou `apt install`
-(Achado 33).** **142 testes verdes — medidos em 2026-08-09 00:06 com `--rerun`.**
+**Fase: v1.11 — Kokoro-ONNX entra como motor de voz padrão, e a reprodução passa a ser em
+streaming.** **163 testes verdes, zero warnings — medidos em 2026-08-10 com `--rerun`.**
+Branch `feature/kokoro-onnx-tts`, **ainda não commitada**.
 
-**Roteiros manuais: TODOS aprovados em 2026-08-09** — T-3.62, T-3.63, T-3.64, T-3.65, T-3.66,
-T-3.69 e o ícone cinza. **RF-52 arquivado sem código** e **Q-32 respondida** por T-3.62.
+**O eixo da rodada mudou duas vezes, e as duas por medição.** O pedido era trocar o motor; a
+investigação mostrou que **o `Clip` era o gargalo, não o motor** (Achado 39) — os dois motores
+sempre emitiram PCM incrementalmente, e o desenho de v1.5 jogava isso fora. E a pergunta "dá para
+listar as vozes do Piper?" abriu o arquivo que descreve cada voz, onde apareceu **DEF-10**: 40 das
+173 vozes do Piper tocavam 38% aceleradas, por sample rate fixo no código.
+
+**Validado no IDE real em 2026-08-10, em duas sessões (11 min e 1 min 36 s), sem uma exceção
+sequer:** T-3.79 aprovado, T-3.70/T-3.71/T-3.74 aprovados em parte. **O T-3.74 passou de ouvido, e
+não no cronômetro** — o relato foi "pareceu que o Kokoro carregou mais rápido a primeira fala",
+consistente com os 2,41 s medidos fora do IDE, mas o número dentro dele segue sem medição.
+**Pendentes: T-3.72, T-3.73, T-3.75, T-3.76, T-3.77 e T-3.78** — o T-3.77 é o que fecha DEF-10 e
+exige baixar uma voz `low` do Piper.
+
+**Quatro otimizações foram medidas e recusadas**, com os números registrados para não voltarem:
+daemon (D-48), modelo int8 (D-50), rampa de pedaços (D-51) e cache de grafo do ONNX (D-52).
+
+**Fase anterior: v1.10.2 — RF-50, RF-51 e RF-53 implementados; o terceiro pedido virou
+`apt install` (Achado 33).** 142 testes verdes em 2026-08-09.
+
+**Roteiros manuais da v1.10: todos aprovados em 2026-08-09** — T-3.62, T-3.63, T-3.64, T-3.65,
+T-3.66, T-3.69 e o ícone cinza. **RF-52 arquivado sem código** e **Q-32 respondida** por T-3.62.
+T-3.67 e T-3.68 reprovaram e foram superados por T-3.69. **Seguem pendentes os oito roteiros
+herdados de rodadas anteriores** — T-3.5, T-3.6, T-3.18 a T-3.20, T-3.48, T-3.52 e T-3.53.
 
 **Fase anterior: v1.9.4 — RF-49: ação própria que entrega a seleção a _uma_ pane, fechando DEF-08.**
 **A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79` e a
@@ -30,10 +52,11 @@ v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 20
 | Artefato                                                         | Estado                                                                                                                                              |
 | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                                                                                                        |
-| [SPEC.md](SPEC.md)                                               | ✅ **v1.10.2** — RF-50, RF-51, RF-53; RF-52 condicional; DEF-09; Achados 33/34/35/36; Q-32 (executável) e Q-33 (fechada); R-23 substituído por R-29 |
+| [SPEC.md](SPEC.md)                                               | ✅ **v1.11** — RF-54 a RF-57, RNF-35/RNF-36, DEF-10, Achados 37 a 41; RNF-19 e RNF-22 revistos |
+| [SPEC.md](SPEC.md) _(anterior)_                                  | **v1.10.2** — RF-50, RF-51, RF-53; RF-52 condicional; DEF-09; Achados 33/34/35/36; Q-32 (executável) e Q-33 (fechada); R-23 substituído por R-29 |
 | `HANDOFF.md`                                                     | ✅ Este arquivo, com RF-49, a receita do cache do Gradle e o inventário de roteiros                                                                 |
 | [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.9.0** (2026-08-09)                                                                                 |
-| Código do plugin                                                 | ✅ **142 testes, 0 falhas, 0 erros** em 25 classes; **zero warnings**. RF-50 e RF-51 entram nesta contagem                                          |
+| Código do plugin                                                 | ✅ **163 testes, 0 falhas, 0 erros**; **zero warnings**. A v1.11 acrescentou 21 testes                                                             |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                                                                                           |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                                                                                             |
 | T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                                                                                              |
@@ -318,6 +341,28 @@ self.config.length_scale`, ou seja, o `config.json` que acompanha o `.onnx`.
 - Esse modelo traz `length_scale: 1` no `config.json`, então para **ele** omitir a flag coincide
   com 1.0. Não generalizar: é coincidência de uma voz, não regra.
 
+### `buildSearchableOptions` falha com o IDE aberto (2026-08-10)
+
+`./gradlew buildPlugin` falhava com:
+
+```
+> Task :buildSearchableOptions FAILED
+Only one instance of IDEA can be run at a time.
+```
+
+**Não é o atrito de cache da seção acima, e `--stop` não resolve.** A tarefa sobe uma **segunda
+instância do IDE**, em headless, só para indexar os campos da nossa tela de configuração na busca
+do Settings. Com o IDE do autor aberto — o caso normal de quem desenvolve o plugin — as duas
+disputam o lock e a segunda perde.
+
+**Resolvido desligando a tarefa** (`buildSearchableOptions = false` no `build.gradle.kts`).
+Custo: os campos da nossa tela deixam de aparecer ao digitar no campo de busca do Settings; a tela
+continua em Tools > Claude Code Dock, navegável como sempre. Este plugin é de instalação local, sem
+Marketplace (Fora de Escopo do SPEC), então o índice não paga o atrito de build.
+
+A alternativa era fechar o IDE a cada `buildPlugin`, o que troca um atrito recorrente por outro
+maior.
+
 ### O atrito do `runIde` com o cache do Gradle (2026-08-08)
 
 > **Bateu três vezes numa sessão só. Ler antes de perder tempo diagnosticando.**
@@ -529,6 +574,88 @@ da voz por 1.0 — que **não é a mesma coisa**, ainda que coincida em muitos m
 Por isso o preset de 100% se chama "1x (padrão do modelo)" e não "1x": ele devolve a voz ao que o
 autor dela calibrou, e não a um número escolhido por nós. Custo da decisão: um `if` (CB-62).
 
+### D-45 — 0,25x sai da tabela de velocidades, e a migração é de graça _(v1.11)_
+
+O `create()` do Kokoro tem `assert speed >= 0.5 and speed <= 2.0`. A tabela `SPEECH_SPEEDS` é
+compartilhada pelos dois motores — é o que impede o menu e a tela de divergirem —, então manter
+0,25x significaria ou mostrar na tela uma velocidade que o motor recusa, ou fazer a tabela variar
+por motor, deixando duas telas cientes do motor.
+
+**Não há código de migração**, e isso não é descuido: `effectiveSpeechSpeed()` já escolhia o valor
+**mais próximo** em vez de apenas limitar a faixa, justamente porque o XML é editável à mão. Quem
+tinha `25` gravado passa a 50 sozinho. Um teste fixa isso (T-1.83) — sem ele, é esperança.
+
+### D-46 — as vozes vêm da fonte, nos dois motores _(v1.11)_
+
+Kokoro: o `voices-*.bin` é um `.npz`, que é um ZIP — `java.util.zip` lista as 54 vozes em
+**0,40–2,20 ms**, uma vez por abertura da tela. Piper: os `.onnx` irmãos do modelo configurado,
+com idioma e taxa vindos do `.onnx.json` de cada um.
+
+Foi avaliado fixar as três vozes pt-BR num enum. **Custaria mais linhas do que a leitura do ZIP**,
+entregaria 3 vozes em vez de 54, e envelheceria a cada release de vozes.
+
+### D-47 — script Python embutido, sem arquivo e sem CLI próprio _(v1.11)_
+
+O `kokoro-onnx` não publica CLI (Achado 37), então o motor é alcançado por um script de ~25 linhas
+executado com `python -c`. Ele mora numa constante Kotlin, e não em `resources`: sem extração para
+disco, sem cache a invalidar, sem versão defasada, e testável como valor puro.
+
+**Um CLI próprio foi avaliado e recusado.** Seria o mesmo script morando em outro lugar: não
+acelera nada e cria duas coisas que hoje não existem — um passo de instalação para o usuário e
+defasagem de versão entre plugin e CLI. Isso mudaria se houvesse daemon; não há.
+
+### D-48 — daemon avaliado e recusado, com números _(v1.11)_
+
+Manter o modelo carregado entre falas compraria o custo fixo de 1,50 s. Cobraria **496 MB
+residentes parados** (pico medido de 961 MB durante a síntese), protocolo de IPC, ciclo de vida de
+processo e risco de zumbi.
+
+Ganho medido por tamanho de texto: 2,5× no curto, 1,4× no médio, **1,1× no longo** — some
+justamente onde a espera incomoda. E com o streaming (Achado 39) o que restava virou a diferença
+entre falar em 2,5 s e falar em 1 s. Se um dia o uso for quase só de frases curtas, volta como
+mudança aditiva.
+
+### D-49 — sidecar do Piper lido por regex, sem dependência nova _(v1.11)_
+
+Ler a taxa e o idioma do `.onnx.json` precisa de um inteiro e dois rótulos. **Não há parser JSON na
+plataforma** — nem Gson nem Jackson nos jars de `lib/` do IDE instalado, verificado —, então a
+alternativa seria adicionar uma dependência ao plugin para extrair um número.
+
+Regex sobre JSON é frágil por natureza, e aqui é sobre campos de arquivo gerado por pipeline, com
+queda segura para 22050 Hz e para o nome do arquivo quando não casa.
+
+### D-50 — modelo int8 medido e recusado _(v1.11)_
+
+| Modelo         | Carga  | RSS na carga | RTF (4 threads) |
+| -------------- | ------ | ------------ | --------------- |
+| f32 (325,5 MB) | 1,20 s | 483 MB       | **0,34**        |
+| int8 (92,4 MB) | 0,80 s | 216 MB       | **1,55**        |
+
+**O int8 é ~4,5× mais lento, não mais rápido**, e o número que encerra a discussão é o RTF 1,55:
+acima de 1,0 o motor fica mais lento que a reprodução, e o streaming engasgaria. Ele se desqualifica
+pela velocidade antes de qualquer discussão de qualidade. Reproduzido nas três configurações de
+thread (2,30 / 1,55 / 1,74 contra 0,40 / 0,34 / 0,40 do f32).
+
+Explicação provável: quantização dinâmica caindo em kernels sem caminho int8 otimizado no
+onnxruntime de CPU. **Verificado o efeito, não a causa** — e a causa não muda a decisão.
+
+### D-51 — teto de palavras no primeiro pedaço, e só nele _(v1.11)_
+
+Uma rampa de pedaços crescentes `(40, 80, 160)` foi projetada e medida contra a alternativa mais
+simples — cortar em toda pontuação, com teto de palavras só no primeiro pedaço. **Empataram**
+(0,73 s contra 0,72 s no primeiro pedaço; 14,56 s contra 14,79 s no total), e a rampa tem mais
+código.
+
+A justificativa que eu havia escrito para a rampa era que blocos maiores seriam mais eficientes.
+**São não**: 16 pedaços e 5 pedaços medem o mesmo tempo total. A rampa foi descartada por não pagar
+o próprio custo. O prefixo `" . "` passou a valer só no primeiro pedaço (Achado 41).
+
+### D-52 — cache de grafo otimizado do ONNX recusado _(v1.11)_
+
+`optimized_model_filepath` leva a carga de 1,157 s para 0,946 s. **0,2 s**, ao preço de mais 325 MB
+em disco e de um artefato que o próprio onnxruntime avisa ser específico do hardware em que foi
+gerado. A carga é I/O de 325 MB, não otimização de grafo.
+
 ---
 
 ## Desafios em aberto
@@ -538,13 +665,13 @@ autor dela calibrou, e não a um número escolhido por nós. Custo da decisão: 
 | **Q-01** | ✅ **RESOLVIDO em 2026-08-01.** O customizer alcança sim — validado por `TerminalCustomizerReachTest` (T-4), com teste de controle. R-02 fechado                                                                                             | ✅ Resolvido |
 | **Q-02** | ~~Duas sessões simultâneas no mesmo servidor MCP: qual "possui" um diff aberto?~~ ✅ **RESOLVIDO em 2026-08-08 (T-3.59): ninguém.** O envio é broadcast; a noção de dono não existe nessa camada                                             | ✅ Resolvido |
 | **Q-03** | Semântica exata de `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` — string encontrada, comportamento não verificado                                                                                                                              | 🟢 Baixo     |
-| **Q-04** | `TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?                                                                                                                                                             | 🟡 Médio     |
+| **Q-04** | ~~`TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?~~ ✅ **RESOLVIDO em 2026-08-03 (Achado 27):** a sessão é **sempre** JediTerm/CLASSIC, qualquer que seja o engine configurado. Fixado como guarda de regressão por T-2.6 (v1.9.2) | ✅ Resolvido |
 | **Q-05** | Vale ocultar o ponto de entrada do oficial para evitar confusão? Depende de Q-03                                                                                                                                                             | 🟢 Baixo     |
 | **Q-06** | Remote Dev / split mode / WSL — declarados fora de escopo, reavaliar depois                                                                                                                                                                  | 🟢 Baixo     |
 | **Q-07** | Restaurar sessões ao reabrir o projeto? Sem demanda comprovada                                                                                                                                                                               | 🟢 Baixo     |
 | **Q-08** | `since-build` definido como `252` por conservadorismo, mas **só `262` foi testado**                                                                                                                                                          | 🟢 Baixo     |
 | **Q-09** | _(v1.1)_ `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto? Exigiria diálogo a cada "Nova sessão"                                                                                                                                        | 🟢 Baixo     |
-| **Q-10** | _(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`? Lá o caminho é `Terminal.Escape` + EP `escapeHandler`, não o pre-handler. Ligado a Q-04                                                                                             | 🟡 Médio     |
+| **Q-10** | ~~_(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`?~~ ✅ **RESOLVIDO em 2026-08-03**, junto de Q-04: o engine nunca é `REWORKED` na nossa janela, então o caminho `Terminal.Escape` + EP `escapeHandler` não nos alcança. T-2.6 guarda a premissa | ✅ Resolvido |
 | **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável em `.idea/` em vez de ficar no workspace?                                                                                                                                               | 🟢 Baixo     |
 | **Q-12** | _(v1.2)_ Vale passar `[filename]` ao `/export` e abrir o arquivo no editor? Economiza cliques, mas exige adivinhar a semântica do argumento                                                                                                  | 🟢 Baixo     |
 | **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos                                                                                              | 🟢 Baixo     |
@@ -571,7 +698,7 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 1. **Roteiros manuais em aberto — o inventário completo**, que até 2026-08-08 estava espalhado em
    dois lugares e omitia dois blocos:
 
-   | Bloco            | Roteiros            | Estado em 2026-08-08                                               |
+   | Bloco            | Roteiros            | Estado em 2026-08-10                                               |
    | ---------------- | ------------------- | ------------------------------------------------------------------ |
    | Base             | T-3.4               | ✅ aprovado (`--resume`)                                           |
    | Base             | ~~T-3.3~~           | ⚰️ **inválido** — DEF-08; substituído por T-3.59, este ✅ aprovado |
@@ -582,6 +709,12 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
    | v1.7 (split)     | T-3.34 a T-3.41     | ✅ aprovados, incluindo T-3.36 (diff por pane)                     |
    | v1.7.1 / v1.8    | T-3.42 a T-3.47     | ✅ uso real desde a release 0.7.0 — não por roteiro                |
    | v1.8.2           | **T-3.48, 52, 53**  | ⏳ **status nunca declarado** — T-3.48 aparece só como hipótese    |
+   | v1.9 (fala)      | T-3.54 a T-3.58     | ✅ uso real — RF-47 e RF-48 validados no IDE                       |
+   | v1.9.3 / v1.9.4  | T-3.59, T-3.60      | ✅ aprovados 2026-08-08 — fecham DEF-08 via RF-49                  |
+   | v1.9.5           | ~~T-3.61~~          | ⚰️ **não reproduziu** duas vezes; Q-31 arquivada                   |
+   | v1.10            | T-3.62 a T-3.66     | ✅ aprovados 2026-08-09 — RF-50, RF-51, e RF-52 arquivado          |
+   | v1.10.1          | ~~T-3.67, T-3.68~~  | ⚰️ **superados por T-3.69** — mediam o conserto que falhou         |
+   | v1.10.2          | T-3.69              | ✅ aprovado 2026-08-09 — RF-53, com e sem `Shift`                  |
 
 2. ~~**Q-02** — ambiguidade de sessão dupla~~ ✅ respondida em 2026-08-08 por T-3.59: é broadcast,
    ninguém possui.
@@ -603,18 +736,102 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
    `ClaudeDockSessions.openUsage()` + `UsageSessionAction`, entre `ResumeSessionAction` e
    `SplitSessionMenuAction`. T-1.65 e T-1.66 verdes.
 
-8. **Rodar os roteiros manuais da v1.10 — T-3.63 a T-3.68.** T-3.65 já passou (o `/usage` abriu
-   na sessão). T-3.67 e T-3.68 são novos e medem DEF-09. É o que falta para RF-50/RF-51
-   saírem de "compila e passa" para "funciona". T-3.64 é o mais importante dos quatro: mede
-   justamente o aviso que não existia antes (DEF-07 de novo, se falhar).
+8. ~~**Rodar os roteiros manuais da v1.10 — T-3.63 a T-3.68.**~~ ✅ **fechado em 2026-08-09.**
+   T-3.63, T-3.64, T-3.65 e T-3.66 aprovados. T-3.67 e T-3.68 mediam o conserto da v1.10.1, que
+   **reprovou** — foram superados por T-3.69, aprovado depois de RF-53 (Achado 36).
 
-9. **v1.10 — rodar T-3.62 (colar print screen)**, e **primeiro** `sudo apt install wl-clipboard`.
-   O resultado decide se RF-52 vira código ou é arquivada (Q-32). **Não escrever código antes
-   desta medição** (D-44).
+9. ~~**v1.10 — rodar T-3.62 (colar print screen)**~~ ✅ **fechado em 2026-08-09.** Depois de
+   `sudo apt install wl-clipboard`, o `Ctrl+V` anexou a imagem: **Q-32 respondida** e **RF-52
+   arquivado sem código** (Achado 33, D-44).
+
+**Restante, e é só isto:** os oito roteiros manuais nunca executados — T-3.5, T-3.6 (base),
+T-3.18 a T-3.20 (v1.4) e T-3.48, T-3.52, T-3.53 (v1.8.2) — mais a decisão do stash (item 3) e a
+rodada nova do TTS agnóstico (item 5). **Nenhum código pendente:** 142 testes verdes em
+2026-08-10, árvore limpa, `pluginVersion = 0.9.0` alinhado à tag `v0.9.0`.
 
 ---
 
 ## Log
+
+### 2026-08-10 (noite/2) — o IDE real, e um WARN que era só cancelamento
+
+Duas sessões no sandbox, com a configuração semeada de propósito antes de subir (os três caminhos
+do Kokoro mais os dois do Piper) — sem isso a primeira tela abre vazia e o teste começa digitando
+caminho.
+
+**Resultado: nenhuma exceção nas duas sessões.** O que rendeu foram três achados de ergonomia e um
+de registro:
+
+- **O Kokoro agora é o primeiro botão do seletor**, a pedido. A ordem da tela é o que sinaliza qual
+  é o padrão, e ele estava em segundo.
+- **`buildSearchableOptions` falhava com o IDE aberto** — seção própria acima. Não é o atrito de
+  cache do Gradle, e `--stop` não resolve.
+- **Três `WARN ... exit code 137` no log eram cancelamento, não falha.** 137 é 128+9: o SIGKILL do
+  nosso próprio `destroyForcibly`. Quem para uma fala, ou começa outra por cima, produz isso — e
+  registrar como WARN polui o `idea.log` justamente para quem for diagnosticar uma falha real
+  depois. Agora o processo que **nós** matamos sai em `debug`, e WARN fica para falha de verdade,
+  com a saída de erro do motor anexada. Confirmado na segunda sessão: zero ocorrências.
+- **Os caminhos do Kokoro sobrevivem à macro `$USER_HOME$`.** O platform colapsa na gravação e
+  expande na leitura, como já fazia com os do Piper — verificado no XML do sandbox.
+
+**T-3.79 fechou por inspeção de descritores, e não por `pgrep`.** O roteiro dizia
+`pgrep -f kokoro`, e isso **casa com o próprio comando de busca** — o teste passaria sempre, pelo
+motivo errado. A verificação que vale é `/proc/*/fd`: depois de fechado o IDE, nenhum processo
+mantinha o modelo aberto. O roteiro no SPEC foi corrigido.
+
+**O que segue sem medição:** o tempo até a primeira fala **dentro** do IDE. Os 2,41 s são de
+bancada, com o script exato do plugin, mas a JVM, o `SourceDataLine` e o mixer não entram nessa
+conta. A impressão de ouvido bate; um cronômetro fecharia o assunto.
+
+### 2026-08-10 (noite) — o motor não era o gargalo, e o Piper tinha um bug de dois anos
+
+Pedido: trocar o Piper pelo Kokoro-ONNX, configurável pela tela, com as três vozes pt-BR e a
+velocidade que já existe. Dois bônus, ambos aceitos: outros idiomas e coexistência com o Piper.
+
+**A rodada teve quatro voltas de pergunta antes de qualquer código**, e cada uma mudou o plano:
+
+1. **"Vale um enum em vez de ler o ZIP? Vale um daemon? Vale um CLI? E o modelo menor?"** Todas
+   respondidas por medição, e três recusadas com número (D-46, D-48, D-47, D-50). O daemon compraria
+   1,50 s por 496 MB residentes. O int8 é **4,5× mais lento**, não mais rápido.
+2. **"Esperar quase 10 s é muito."** Os 17,71 s citados eram do desenho **atual**, não da proposta —
+   e ao medir tempo até o primeiro áudio em vez de tempo total apareceu o Achado 39: o `Clip` exige
+   o áudio inteiro antes de tocar, e os dois motores sempre emitiram em pedaços. Streaming leva o
+   Piper de 5,37 s para 2,21 s **de brinde**.
+3. **"Dá para listar as vozes do Piper?"** Dá — e o arquivo que descreve cada voz declara o
+   `sample_rate` porque ele **varia**. O código tinha 22050 fixo desde a v1.5. **DEF-10.**
+4. **"Quero reduzir esses 4 s, nem que seja para 3."** Medindo etapa por etapa em vez de chutar:
+   o tempo até falar depende **só da primeira frase** (Achado 40). Um teto de palavras no primeiro
+   pedaço entregou **2,4 s**.
+
+**A rampa que eu tinha proposto foi derrubada pela medição do usuário.** Ele testou em outra janela
+uma versão mais simples — cortar em toda pontuação — e a comparação lado a lado mostrou empate
+(0,73 s contra 0,72 s), com a rampa custando mais código. Pior: a justificativa que eu havia escrito
+para ela — blocos maiores seriam mais eficientes — é **falsa**: 16 pedaços e 5 pedaços medem o mesmo
+tempo total. Ficou a versão dele, com duas regras a mais (D-51).
+
+**Dois erros meus na execução, os dois de método:**
+
+- Comparei as estratégias de corte com uma versão **incompleta** da minha própria função — omiti a
+  quebra por palavra, que é justamente o que faz o trabalho — e quase concluí que empatavam por
+  motivo errado. Peguei ao ver que as duas colunas tinham o mesmo primeiro pedaço de 107 chars.
+- Escrevi um motor falso de teste que deixava um `sleep` **neto** segurando a ponta de escrita do
+  pipe. Matar o processo não desbloqueava a leitura, e passei uma iteração inteira consertando o
+  código de produção por causa de um cenário que motor real nenhum produz (piper e python são
+  processo único, e os shims do pyenv usam `exec`). O conserto certo era `exec` no fixture.
+
+**Medições que ficam:**
+
+| O quê                                | Antes    | Depois       |
+| ------------------------------------ | -------- | ------------ |
+| 1º áudio, Kokoro, trecho de 800 chars | 17,71 s  | **2,41 s**   |
+| 1º áudio, Piper, mesmo trecho         | 5,37 s   | **2,21 s**   |
+| RTF do Kokoro, threads default        | 1,56     | **0,37**     |
+| Testes                                | 142      | **163**      |
+
+**Onde parou:** código completo e suíte verde na branch `feature/kokoro-onnx-tts`, sem commit.
+Falta rodar T-3.70 a T-3.79 no IDE real — em especial **T-3.77**, que exige baixar
+`pt_BR-edresson-low` para confirmar o conserto de DEF-10, e **T-3.74**, que é o critério de aceite
+do streaming e pede julgamento de ouvido sobre os cortes.
 
 ### 2026-08-09 (madrugada/2) — todos os roteiros fecharam, e o melhor recurso da rodada não teve código
 

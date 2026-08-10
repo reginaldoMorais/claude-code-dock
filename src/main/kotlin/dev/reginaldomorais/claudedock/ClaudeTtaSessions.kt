@@ -8,6 +8,8 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.util.messages.Topic
 import dev.reginaldomorais.claudedock.settings.ClaudeDockSettings
+import dev.reginaldomorais.claudedock.settings.TtsEngine
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Serviço de projeto: gerencia estado único de reprodução (RNF-23).
@@ -22,58 +24,60 @@ class ClaudeTtaSessions(private val project: Project) {
     private var state: TtsState = TtsState.Idle
 
     /**
-     * Sintetiza e toca o texto. Pede ao ClaudePiperPlayback fora da EDT.
+     * Identifica a fala em curso.
+     *
+     * Com streaming, [ClaudeTtsPlayback.speak] bloqueia durante toda a reprodução. Sem este
+     * contador, a fala antiga — que a nova acabou de interromper — voltaria e marcaria `Idle`
+     * por cima da fala nova, que já está tocando.
+     */
+    private val playGeneration = AtomicLong()
+
+    /**
+     * Sintetiza e toca o texto. Pede ao [ClaudeTtsPlayback] fora da EDT.
      * Novo play interrompe anterior (RNF-23).
+     *
+     * A reprodução **não** volta para a EDT como antes: com streaming, tocar é o próprio laço que
+     * lê o stdout do motor, e ele bloqueia por toda a fala (RF-57). Só o estado é publicado.
      */
     fun playText(text: String) {
         if (text.isBlank()) return
 
         stop()  // Parar anterior
 
+        val generation = playGeneration.incrementAndGet()
         state = TtsState.Playing
 
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
                 val settings = ClaudeDockSettings.getInstance()
-                val executable = settings.effectivePiperExecutable()
-                val model = settings.effectivePiperModel()
-                val speed = settings.effectiveSpeechSpeed()
 
-                if (!ClaudePiperPlayback.canSynthesize(executable, model)) {
-                    LOG.warn("Piper not available for synthesis")
-                    state = TtsState.Idle
-                    notifyStateChanged()
-                    notifyPiperMissing()
+                if (!ClaudeTtsPlayback.canSynthesize(settings)) {
+                    LOG.warn("TTS engine ${settings.ttsEngine} is not available for synthesis")
+                    finish(generation)
+                    notifyEngineMissing(settings.ttsEngine)
                     return@executeOnPooledThread
                 }
 
-                val pcm = ClaudePiperPlayback.synthesize(text, executable, model, speed)
-                if (pcm == null) {
-                    state = TtsState.Idle
-                    notifyStateChanged()
-                    return@executeOnPooledThread
-                }
-
-                // Voltar para EDT para tocar
-                ApplicationManager.getApplication().invokeLater {
-                    if (ClaudePiperPlayback.playBytes(pcm)) {
-                        state = TtsState.Playing
-                    } else {
-                        state = TtsState.Idle
-                    }
-                    notifyStateChanged()
-                }
+                ClaudeTtsPlayback.speak(text, ClaudeTtsPlayback.buildCommand(settings))
+                finish(generation)
             } catch (e: Exception) {
                 LOG.warn("Failed to play text", e)
-                state = TtsState.Idle
-                ApplicationManager.getApplication().invokeLater { notifyStateChanged() }
+                finish(generation)
             }
         }
     }
 
+    /** Volta para `Idle` só se ninguém tiver começado outra fala no meio-tempo. */
+    private fun finish(generation: Long) {
+        if (playGeneration.get() != generation) return
+
+        state = TtsState.Idle
+        notifyStateChanged()
+    }
+
     fun pause() {
         if (state == TtsState.Playing) {
-            ClaudePiperPlayback.pause()
+            ClaudeTtsPlayback.pause()
             state = TtsState.Paused
             notifyStateChanged()
         }
@@ -81,7 +85,7 @@ class ClaudeTtaSessions(private val project: Project) {
 
     fun resume() {
         if (state == TtsState.Paused) {
-            ClaudePiperPlayback.resume()
+            ClaudeTtsPlayback.resume()
             state = TtsState.Playing
             notifyStateChanged()
         }
@@ -93,7 +97,7 @@ class ClaudeTtaSessions(private val project: Project) {
 
     fun stop() {
         if (state != TtsState.Idle) {
-            ClaudePiperPlayback.stop()
+            ClaudeTtsPlayback.stop()
             state = TtsState.Idle
             notifyStateChanged()
         }
@@ -110,7 +114,7 @@ class ClaudeTtaSessions(private val project: Project) {
     }
 
     /**
-     * Avisa que o Piper não está configurado (RNF-33, D-42).
+     * Avisa que o motor de voz não está configurado (RNF-33, D-42).
      *
      * **Fica aqui, e não no chamador, de propósito.** Os dois pontos que tocam um trecho — o item
      * "Tocar seleção" do menu "Áudio" (RF-48) e o botão do popup da seleção (RF-50) — passam por
@@ -121,12 +125,17 @@ class ClaudeTtaSessions(private val project: Project) {
      * configurado. **O popup não tem `update()`** — o botão está sempre lá, e sem este aviso o
      * clique seria de novo o no-op mudo do DEF-07.
      */
-    private fun notifyPiperMissing() {
+    private fun notifyEngineMissing(engine: TtsEngine) {
         // Roda em thread de pool, e o projeto pode ter fechado no meio da verificação em disco.
         if (project.isDisposed) return
 
+        val name = when (engine) {
+            TtsEngine.PIPER -> "Piper"
+            TtsEngine.KOKORO -> "Kokoro"
+        }
+
         ClaudeDockSessions.getInstance(project).notify(
-            "Piper não está configurado. Ajuste o executável e o modelo em " +
+            "$name não está configurado. Ajuste os caminhos em " +
                 "Settings > Tools > Claude Code Dock.",
             NotificationType.WARNING,
         )

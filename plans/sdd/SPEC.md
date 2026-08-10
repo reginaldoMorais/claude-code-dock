@@ -1,10 +1,16 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.10.2
-- **Data:** 2026-08-09
-- **Status:** RF-50, RF-51 e RF-53 **implementados e aprovados no IDE real**. Roteiros T-3.62 a
-  T-3.69 aprovados. **RF-52 arquivado sem código** — Achado 33 confirmado por medição, e Q-32
-  respondida: o `Ctrl+V` chega ao CLI dentro da janela dedicada
+- **Versão:** 1.11
+- **Data:** 2026-08-10
+- **Status:** **RF-54 a RF-57 e DEF-10 implementados; 163 testes verdes, zero warnings.**
+  Validado no IDE real: **T-3.79 aprovado**, **T-3.70, T-3.71 e T-3.74 aprovados em parte** —
+  duas sessões sem nenhuma exceção. **Seguem pendentes: T-3.72, T-3.73, T-3.75, T-3.76, T-3.77 e
+  T-3.78** — o **T-3.77** é o que fecha DEF-10, e exige baixar uma voz `low` do Piper. Da rodada anterior: RF-50, RF-51 e RF-53
+  **implementados e aprovados no IDE real**. Roteiros T-3.62 a
+  T-3.66 e T-3.69 aprovados; **T-3.67 e T-3.68 reprovaram** na v1.10.1 e foram superados por
+  T-3.69 (Achado 36). **RF-52 arquivado sem código** — Achado 33 confirmado por medição, e Q-32
+  respondida: o `Ctrl+V` chega ao CLI dentro da janela dedicada. **Pendentes de IDE real:** os
+  oito roteiros herdados — T-3.5, T-3.6, T-3.18 a T-3.20, T-3.48, T-3.52 e T-3.53
 - **Autor:** Reginaldo Morais (com assistência do Claude Code)
 
 > **Histórico de versões**
@@ -30,6 +36,7 @@
 > | 1.9.2  | 2026-08-08 | **T-2.1 a T-2.6 implementados** — a lacuna de integração mais antiga do projeto. T-2.6 fixa o Achado 27 como guarda de regressão e **corrige a razão pela qual Q-04/Q-10 estavam resolvidos**. Registra o que o ambiente headless não entrega (PTY) e o que fica com os roteiros manuais                                                                                                                                               |
 > | 1.9.3  | 2026-08-08 | **DEF-08**: o `Ctrl+Alt+K` do plugin oficial nunca poderia chegar à nossa janela — `focusClaudeInTerminal` e `openClaudeInTerminal` estão presos ao literal `"Terminal"`. T-3.3 reescrito: era roteiro sobre premissa falsa. T-3.36 e T-3.4 aprovados                                                                                                                                                                                  |
 > | 1.9.4  | 2026-08-08 | **RF-49** — ação própria de enviar a seleção do editor para a pane **em foco**, fechando DEF-08 sem tocar no protocolo privado. D-41. T-1.57 a T-1.61                                                                                                                                                                                                                                                                                  |
+> | 1.11   | 2026-08-10 | **Kokoro-ONNX como motor de voz (RF-54/RF-55), seletor de voz também para o Piper (RF-56) e reprodução em streaming (RF-57).** O `Clip` era o gargalo, não o motor: os dois motores sempre emitiram PCM incrementalmente (Achado 39). **DEF-10** — 40 das 173 vozes do Piper tocavam 38% aceleradas, por sample rate fixo no código. Daemon, modelo int8, CLI próprio e cache de grafo **medidos e recusados** (D-48, D-50 a D-52)                                                                                                          |
 > | 1.10.2 | 2026-08-09 | **DEF-09 resolvido, e não era o que a v1.10.1 dizia.** A barra da seleção deixa de ser `JBPopup` e vira filho do `JLayeredPane` em `POPUP_LAYER` (**RF-53**): quem a derrubava era o `IdePopupManager.closeAllPopups`, medido com instrumentação. Funciona com e sem `Shift` — exigir `Shift` foi proposto e recusado. **Achado 36**: mecanismo confirmado ≠ causa observada                                                           |
 > | 1.10.1 | 2026-08-09 | **DEF-09, primeira tentativa — não resolveu.** Atribuiu o sintoma ao `TerminalPanel.scrollArea`, que chama `updateSelection(null)` incondicionalmente. O mecanismo é real e verificado no bytecode, mas não era a causa. Sobraram duas mudanças que se sustentam sozinhas: não ouvir `TerminalSelectionChangesListener` e agir sobre o trecho capturado ([snapshot]). Ícone de RF-51 para o cinza neutro (`AllIcons.Actions.Profile`)  |
 > | 1.10   | 2026-08-08 | Três pedidos avaliados. **RF-50** — play do trecho no popup da seleção, **revogando o teto de dois botões de R-23** com critério novo (Achado 34). **RF-51** — `/usage` no cabeçalho, entregue como envio à sessão e **não** como popup, porque o popup exigiria o token do usuário (Achado 35). **Colar print screen recusado como RF**: o CLI já implementa o caminho e o que falta é um pacote do sistema (Achado 33, Q-32, T-3.62) |
@@ -458,6 +465,23 @@ embutidos, o **Piper é obrigatoriamente configurável**. "Piper instalado" = ex
 **E** caminho válido para um modelo `.onnx` configurado. A ausência de qualquer um disso disable
 o botão play.
 
+### Kokoro-ONNX no ambiente _(verificado em v1.11)_
+
+| Item                    | Valor verificado                                                              | Como foi verificado                              |
+| ----------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------ |
+| Pacote                  | `kokoro-onnx` 0.5.0, `onnxruntime` 1.27.0, sob `~/.pyenv/shims/python3`        | `importlib.metadata`                             |
+| **Não tem CLI**         | `entry_points: []` — não há binário para chamar, ao contrário do Piper         | `importlib.metadata.distributions()`             |
+| Modelo e vozes          | `~/.local/share/kokoro-onnx/kokoro-v1.0.onnx` (325 MB) + `voices-v1.0.bin`     | `ls -la`; síntese bem-sucedida                   |
+| Saída de síntese        | `float32` normalizado a **24000 Hz** — precisa virar `int16` LE                | `kokoro_onnx/config.py`; `create()` devolve `sr` |
+| Arquivo de vozes        | É um **ZIP** (`PK\x03\x04`), 54 entradas `.npy` em 9 idiomas                   | `zipfile`; leitura na JVM em 0,40–2,20 ms        |
+| Faixa de velocidade     | `assert speed >= 0.5 and speed <= 2.0` dentro de `create()`                   | `kokoro_onnx/__init__.py:183`                    |
+| Fonemização             | `espeak-ng` 1.51 do sistema; `pt-br`, `en-us`, `es`, `fr-fr`, `it`, `ja`, ...  | `espeak-ng --voices`                             |
+| Custo fixo por fala     | ~1,50 s: `import` 0,45 s + carga do modelo 1,05 s                             | medição por etapa, JVM fora do caminho           |
+
+**Descoberta que define a integração (v1.11):** sem CLI, o motor é alcançado por um script Python
+**embutido no plugin** e executado com `python -c`. Sem arquivo em `resources`, sem extração para
+disco, sem cache a invalidar e sem defasagem de versão entre plugin e script (D-47).
+
 ### Gravar um trecho em arquivo: o que a plataforma já dá _(verificado em v1.6)_
 
 O diálogo de "salvar como" não precisa ser construído — a plataforma tem o nativo, e ele é o
@@ -798,6 +822,115 @@ Um filho do `JLayeredPane` desenha por cima do terminal do mesmo jeito, e o `clo
 **não o enxerga** — não há registro na plataforma para fechar. Some junto o cancelamento por
 clique fora, por desativação de janela, e as restrições de `xdg_popup` do Wayland
 (`sun.awt.wl.WLToolkit`). **Funciona com e sem `Shift`** ✅ aprovado no IDE real em 2026-08-09.
+
+### DEF-10 — 40 vozes do Piper tocavam no tom errado _(v1.11)_
+
+`ClaudePiperPlayback.playBytes` abria a linha de áudio com `AudioFormat(22050f, …)` — **taxa fixa
+no código**. Ela está fixa desde a v1.5, e a v1.5 a verificou: a voz do autor, `pt_BR-faber-medium`,
+é 22050 Hz mesmo.
+
+**O que a v1.5 não perguntou foi se a taxa varia.** Varia, e o próprio Piper declara isso no
+`.onnx.json` que acompanha cada voz. Baixando um sidecar de cada qualidade do índice oficial:
+
+| Qualidade | Sample rate | Vozes no índice |
+| --------- | ----------- | --------------- |
+| `x_low`   | **16000 Hz** | 14             |
+| `low`     | **16000 Hz** | 26             |
+| `medium`  | 22050 Hz     | 119            |
+| `high`    | 22050 Hz     | 14             |
+
+**40 das 173 vozes tocariam 38% aceleradas e com o tom alterado**, e uma delas é pt-BR
+(`pt_BR-edresson-low`). Nunca foi observado em uso porque a única voz instalada é `medium`.
+
+O conserto é ler a taxa do sidecar (RNF-36), e é **o mesmo trabalho** de listar as vozes para
+RF-56 — o defeito apareceu justamente porque a pergunta "dá para listar as vozes do Piper?" levou
+a abrir o arquivo que descreve cada uma.
+
+**A lição não é sobre áudio.** Um valor verificado uma vez virou constante, e a verificação media
+uma amostra de um. O sintoma seria "a voz saiu esquisita", que ninguém liga a uma constante.
+
+### Achado 37 — o Kokoro não tem CLI, e isso decide a integração _(v1.11)_
+
+O Piper é um binário: `piper -m modelo --output-raw`, texto no stdin, PCM no stdout. O
+`kokoro-onnx` é **só uma biblioteca Python** — `entry_points: []`, não existe comando.
+
+A integração passa então por um script embutido no plugin e executado com `python -c`, mantendo
+**o mesmo contrato dos dois motores**: texto no stdin, PCM cru no stdout. É o que permite um
+`TtsCommand` só e um caminho de processo só.
+
+Custo fixo medido por fala: **~1,50 s** (`import` 0,45 s + carga do modelo 1,05 s). Não encolhe:
+o daemon foi recusado por memória (D-48), o modelo menor saiu mais lento (D-50) e o cache de grafo
+não paga (D-52).
+
+### Achado 38 — o default de threads do onnxruntime torna o Kokoro inútil _(v1.11)_
+
+O `Kokoro.__init__` cria a `InferenceSession` **sem `SessionOptions`**. Com o default do
+onnxruntime numa máquina de 12 núcleos, o motor mede **RTF 1,56 — mais lento que tempo real**.
+Um trecho de 724 caracteres levava **65,35 s**.
+
+Com `intra_op_num_threads = 4`: **15,45 s**, RTF 0,37. **4,2× mais rápido**, e é a diferença entre
+recurso viável e inútil. Fixo em 4 e não em `cpu_count()`: 12 threads mediu **pior** que 4
+(RTF 0,56 contra 0,39).
+
+É um botão de calibração, não detalhe de implementação — e ele só existe porque a biblioteca não
+o expõe: a única forma de passar `SessionOptions` é `Kokoro.from_session`, que usa
+`session._model_path`, atributo privado do onnxruntime. Verificado em 1.27.0, com queda para o
+construtor normal se um upgrade quebrar.
+
+### Achado 39 — o `Clip` era o gargalo, e o motor levou a culpa _(v1.11)_
+
+A troca do Piper pelo Kokoro parecia ser uma escolha entre qualidade de voz e tempo de espera: o
+Kokoro levava 17,71 s para começar a falar um trecho longo, contra 5,37 s do Piper.
+
+**Nenhum dos dois números era do motor.** Eram do desenho de v1.5, que lê o stdout **inteiro**
+antes de abrir o `Clip` — e `Clip` exige o áudio completo em memória para tocar. Os dois motores
+sempre emitiram PCM incrementalmente; o Piper entrega o primeiro byte em 2,21 s de um áudio de 47 s.
+
+Trocando `Clip` por `SourceDataLine` e emitindo por pedaço, medido nos dois motores e em três
+tamanhos de texto:
+
+| Texto | chars | Piper | Kokoro |
+| ----- | ----- | ------ | ------ |
+| curto | 56    | 2,02 s | 2,56 s |
+| médio | 202   | 2,09 s | 2,48 s |
+| longo | 808   | 3,13 s | 2,41 s |
+
+**O tempo até falar é praticamente constante no tamanho do trecho**, e a diferença entre os motores
+cai para ~0,4 s — no texto longo o Kokoro passa na frente. A escolha entre motores volta a ser
+qualidade de voz, que é o que motivou o pedido.
+
+De brinde, a contrapressão da linha de áudio faz a **pausa parar também a síntese**: o buffer
+enche, o `write` bloqueia, o pipe do processo enche e o motor para sozinho.
+
+### Achado 40 — o tempo até falar depende só da primeira frase _(v1.11)_
+
+Medindo etapa por etapa em vez de chutar otimização: custo fixo de 1,50 s, mais uma síntese que
+cresce **linearmente** com o tamanho do primeiro pedaço — 0,65 s a cada 30 caracteres.
+
+`1,50 + 2,07 = 3,57 s` era exatamente o medido, porque a primeira frase do texto tinha ~108
+caracteres. **O trecho inteiro nunca importou.** Um teto de palavras aplicado **só ao primeiro
+pedaço** leva esse termo de 1,81 s para 0,72 s.
+
+Três estratégias de corte foram medidas lado a lado:
+
+| Estratégia                                    | pedaços | 1º pedaço  | síntese total |
+| --------------------------------------------- | ------- | ---------- | ------------- |
+| Corte em toda pontuação                       | 16      | 1,81 s     | 14,79 s       |
+| Rampa dobrando `(40, 80, 160)`                | 5       | **0,73 s** | 14,56 s       |
+| **Toda pontuação + teto no 1º pedaço**        | 17      | **0,72 s** | 14,79 s       |
+
+**O número de pedaços não afeta o tempo total** (16 contra 5 medem igual). Isso derruba a
+justificativa da rampa, que era supor blocos maiores mais eficientes — **a rampa foi projetada,
+medida e descartada** por não pagar o próprio custo (D-51).
+
+### Achado 41 — cortar o texto estica a fala _(v1.11)_
+
+O Kokoro sintetiza cada pedaço isoladamente, então a prosódia reinicia a cada corte. O mesmo texto
+mede **16,1 s numa tacada só** contra **18,4 s cortado** (+14%).
+
+Parte disso era autoinfligido: o prefixo `" . "` — que existe para a primeira palavra não sair
+cortada — estava sendo repetido em **todo** pedaço. Aplicando-o só no primeiro, cai para 17,8 s.
+Os ~1,7 s restantes são inerentes ao corte, e são o preço de não esperar a síntese inteira.
 
 ### Achado 36 — o mecanismo era real, o lugar era errado _(v1.10.2)_
 
@@ -1186,12 +1319,16 @@ reimplementação frágil.**
 | **RF-46**     | _(v1.8.2)_ O menu "Dividir" DEVE distinguir, **pelo nome**, quantas sessões cada fechamento encerra: "Fechar esta sessão" (a pane em foco) e "Fechar todas as sessões" (a aba inteira, com todas as divisões).                                                                                                                                                                                                                                                                                                    |
 | **RF-45**     | _(v1.8.1)_ As ações que exigem divisão ("Trocar de lado", "Girar divisão", "Fechar divisão") DEVEM aparecer **desabilitadas** quando a aba não está dividida, em vez de avisar depois do clique.                                                                                                                                                                                                                                                                                                                  |
 | **RF-43**     | _(v1.8)_ O menu "Dividir" DEVE oferecer "Trocar de lado" (inverte a sessão em foco com a vizinha) e "Girar divisão" (alterna lado a lado ↔ empilhado). Sem divisão, as duas DEVEM avisar em vez de agir.                                                                                                                                                                                                                                                                                                          |
-| **RF-47**     | _(v1.9)_ O plugin DEVE permitir configurar a **velocidade da fala** do Piper em **dois lugares ligados ao mesmo valor e à mesma lista**: um submenu "Velocidade" dentro do menu "Áudio" e um seletor em Settings > Tools > Claude Code Dock. A lista é 0,25x / 0,5x / 0,75x / 1x / 1,25x / 1,5x / 1,75x / 2x, e os dois pontos DEVEM oferecer exatamente ela — sem campo numérico livre. O padrão, "1x", DEVE preservar o padrão **do próprio modelo**, não impor 1.0. A velocidade vale para a **próxima** fala. |
+| **RF-47**     | _(v1.9)_ O plugin DEVE permitir configurar a **velocidade da fala** do Piper em **dois lugares ligados ao mesmo valor e à mesma lista**: um submenu "Velocidade" dentro do menu "Áudio" e um seletor em Settings > Tools > Claude Code Dock. A lista é 0,5x / 0,75x / 1x / 1,25x / 1,5x / 1,75x / 2x, e os dois pontos DEVEM oferecer exatamente ela — sem campo numérico livre. **0,25x saiu na v1.11**, porque o `create()` do Kokoro recusa velocidade abaixo de 0,5 e a lista é compartilhada pelos dois motores (D-45). O padrão, "1x", DEVE preservar o padrão **do próprio modelo**, não impor 1.0. A velocidade vale para a **próxima** fala. |
 | **RF-48**     | _(v1.9)_ O menu "Áudio" DEVE tocar o trecho **selecionado** na sessão em foco, obtendo a seleção pelo mesmo caminho das demais ações do cabeçalho. Sem sessão aberta, ou sem seleção, DEVE avisar em vez de não fazer nada em silêncio (DEF-07).                                                                                                                                                                                                                                                                  |
 | **RF-49**     | _(v1.9.4)_ O plugin DEVE oferecer ação própria que envie a referência do trecho selecionado no editor (`@arquivo#Lx-y`) para a sessão **em foco** da janela dedicada, e traga a janela à frente. Sem sessão aberta, DEVE avisar. **Não substitui o `Ctrl+Alt+K` do oficial** — resolve o que ele não faz: entregar a uma pane só, e nesta janela (DEF-08, Q-02). NÃO DEVE definir atalho padrão (RF-13).                                                                                                          |
 | **RF-50**     | _(v1.10)_ O popup flutuante da seleção DEVE oferecer um **terceiro** botão, "Tocar seleção", que sintetiza o trecho já selecionado chamando o **mesmo** `ClaudeTtaSessions.playText` do menu "Áudio" (RF-31) — sem caminho de síntese próprio. **Revoga o teto de dois botões de R-23**, sob critério novo e declarado (Achado 34).                                                                                                                                                                               |
 | **RF-51**     | _(v1.10)_ O cabeçalho DEVE oferecer, **depois** de "Retomar Sessão", uma ação "Uso" que envie `/usage` à sessão **em foco**, pelo mesmo `sendInput` de RF-24 e RF-49. O resultado aparece **na própria sessão**, como tela de TUI — **não** em popup (Achado 35). Sem sessão aberta, ou sem PTY ainda, DEVE avisar.                                                                                                                                                                                               |
 | **RF-53**     | _(v1.10.2)_ A barra flutuante da seleção NÃO DEVE ser um popup da plataforma. DEVE ser componente do `JLayeredPane` em `POPUP_LAYER`, para ficar fora do alcance de `IdePopupManager.closeAllPopups` (DEF-09). DEVE funcionar **com e sem `Shift`** — exigir `Shift` foi proposto e **recusado**.                                                                                                                                                                                                                 |
+| **RF-54**     | _(v1.11)_ O plugin DEVE permitir escolher o **motor de voz** entre Piper e Kokoro-ONNX em Settings > Tools > Claude Code Dock, com **Kokoro como padrão**. Cada motor DEVE ter os próprios campos, e a tela DEVE mostrar apenas os do motor escolhido. A configuração existente do Piper DEVE continuar valendo sem migração.                                                                                                                                                                                              |
+| **RF-55**     | _(v1.11)_ A voz do Kokoro DEVE ser escolhida numa lista **lida do próprio arquivo de vozes**, rotulada por idioma e agrupada por ele — sem tabela fixa no código. As três vozes pt-BR (`pf_dora`, `pm_alex`, `pm_santa`) DEVEM aparecer, e as demais também: o arquivo traz 54 vozes em 9 idiomas. O idioma passado ao motor DEVE vir do **prefixo da voz**, não de configuração à parte.                                                                                                                                     |
+| **RF-56**     | _(v1.11)_ A voz do Piper DEVE ser escolhida numa lista dos `.onnx` **instalados junto ao modelo configurado**, rotulada pelo idioma que o arquivo `.onnx.json` de cada voz declara.                                                                                                                                                                                                                                                                                                                                        |
+| **RF-57**     | _(v1.11)_ A fala DEVE começar assim que o **primeiro pedaço** de áudio existir, e não ao fim da síntese — vale para os **dois** motores. O tempo até a primeira palavra DEVE ser praticamente constante no tamanho do trecho.                                                                                                                                                                                                                                                                                              |
 | ~~**RF-52**~~ | _(v1.10; **ARQUIVADO em 2026-08-09, sem código**)_ Interceptar `Ctrl+V` para colar imagem. **A condição que o autorizaria nunca se cumpriu:** T-3.62 rodou depois de `sudo apt install wl-clipboard` e a imagem **foi anexada** — o `Ctrl+V` chega ao CLI dentro da janela dedicada (Q-32 respondida). A causa era o pacote ausente, não o plugin (Achado 33).                                                                                                                                                    |
 
 ---
@@ -1342,6 +1479,22 @@ reimplementação frágil.**
 - **RNF-34** _(v1.10, novo)_ — A ação de `/usage` NÃO DEVE ler `~/.claude/.credentials.json` nem
   chamar `/api/oauth/usage`. O token de acesso é do CLI; o plugin não entra nesse caminho
   (RNF-04, e a regra de segredos do `CLAUDE.md`).
+
+### Requisitos novos em v1.11 — Kokoro-ONNX e streaming
+
+- **RNF-35** _(v1.11, novo)_ — O prazo da síntese vale **até o primeiro byte de áudio**, e é por
+  motor. **Revoga o prazo total** que RNF-20 impunha: com reprodução em streaming o processo vive
+  legitimamente enquanto a fala toca — 47 s de áudio, mais o tempo que o usuário deixar pausado — e
+  um teto total mataria a fala no meio. O que o prazo protege é o caso de o motor não produzir nada.
+- **RNF-36** _(v1.11, novo)_ — O **sample rate DEVE vir da voz**, nunca de constante no código.
+  Kokoro é sempre 24000 Hz; o Piper varia por qualidade e declara a taxa no `.onnx.json` da voz.
+  Esta é a regra que DEF-10 violava.
+- **RNF-22 revisto** _(v1.11)_ — a reprodução passa de `Clip` para `SourceDataLine`, porque `Clip`
+  exige o áudio inteiro em memória antes de tocar. A obrigação continua idêntica: nenhuma linha
+  DEVE ficar aberta após play/pause/stop.
+- **RNF-19 ampliado** _(v1.11)_ — a classe única de acoplamento agora cobre **dois** motores e a
+  reprodução em streaming. O que varia entre motores DEVE ser **dado** (`TtsCommand`), não fluxo:
+  existe um único `createProcess()` no plugin (RNF-32).
 
 ---
 
@@ -2382,12 +2535,22 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.59**     | _(v1.9.3)_ **Substitui T-3.3.** Com uma sessão viva na janela dedicada, selecionar código e acionar `Ctrl+Alt+K`: o foco vai para o Terminal nativo (esperado, DEF-08) — **a pergunta é se a referência do trecho aparece na nossa pane**. Voltar para a janela dedicada **sem** tocar na nativa e conferir. Responde Q-30 ✅ **executado 2026-08-08** — chegou, e chegou nas **duas** panes                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | **T-3.60**     | _(v1.9.4)_ Com a aba **dividida**, selecionar código e acionar "Enviar Seleção para o Claude Code" pelo menu de contexto do editor: a menção `@arquivo#Lx-y` aparece **só na pane em foco** — a diferença para o `Ctrl+Alt+K`, que entrega às duas —, a janela vem à frente e o cursor fica na pane certa (RF-49) ✅ **aprovado 2026-08-08** — print mostra a menção `@test.md#L3` **só na pane esquerda**, a direita vazia; e saiu `#L3`, não `#L3-4`, com a barra de status em `3:12 (30 chars)`: a correção de `inclusiveEndLine` vale no editor real, não só em T-1.60                                                                                                                                                                                                                                                              |
 | **T-3.62**     | _(v1.10)_ **Mede o Achado 33.** ✅ **APROVADO em 2026-08-09**, depois de `sudo apt install wl-clipboard`: print screen colado com `Ctrl+V` **foi anexado** na sessão da janela dedicada, e o arquivo apareceu em `~/.claude/image-cache/<sessionId>/N.png` — o destino que o Achado 33 previu. Fecha como problema de ambiente; RF-52 arquivado sem código                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **T-3.70**     | _(v1.11)_ **Mede RF-54.** Em Settings > Tools > Claude Code Dock, alternar entre "Kokoro-ONNX" e "Piper": só os campos do motor escolhido aparecem, e a velocidade continua visível nos dois ✅ **aprovado em parte em 2026-08-10** — a tela foi exercitada e os campos do Kokoro funcionam; **a alternância para o Piper não tem evidência registrada**. Nesta rodada o Kokoro passou a ser o primeiro botão, a pedido: a ordem da tela é o que sinaliza qual é o padrão                                                                                                                                                                                                                                                              |
+| **T-3.71**     | _(v1.11)_ **Mede RF-55.** O combo de voz do Kokoro lista as 54 vozes do arquivo, rotuladas por idioma e agrupadas por ele. Tocar o mesmo trecho com `pf_dora`, `pm_alex` e `pm_santa`: vozes audivelmente distintas, todas em pt-BR ✅ **aprovado em parte em 2026-08-10** — a lista apareceu e a troca de voz funcionou (`pm_santa` foi escolhida e persistiu no XML do sandbox); **a comparação lado a lado das três não foi registrada**                                                                                                                                                                                                                        |
+| **T-3.72**     | _(v1.11)_ **Mede RF-47 no motor novo.** Velocidade em 0,5x, 1x e 2x com o Kokoro: a duração muda na proporção, sem alteração de tom. Confirmar que 0,25x **não** aparece mais na lista (D-45)                                                                                                                                                                                                                                                             |
+| **T-3.73**     | _(v1.11)_ **Mede RF-55 (idioma).** Uma voz `en-us` (`af_heart`) e uma `es` (`ef_dora`) pronunciam o mesmo trecho no idioma certo — o idioma vem do prefixo da voz, sem configuração à parte                                                                                                                                                                                                                                                               |
+| **T-3.74**     | _(v1.11)_ **Mede RF-57, o critério de aceite do streaming.** Trecho de ~800 caracteres começa a falar em **~2,5 s**, e não em ~18 s. Medido fora do IDE: 2,49 s com o script exato do plugin ✅ **aprovado de ouvido em 2026-08-10** — relato do autor: "no teste de ouvido pareceu que o Kokoro carregou mais rápido a primeira fala". **Sem cronômetro**: a impressão é consistente com a medição (2,41 s contra 3,13 s do Piper no trecho longo), mas o número no IDE real segue não medido. Os cortes não foram reprovados de ouvido, então `first_cap` fica em 40 (Achado 41)                                                                                                                                 |
+| **T-3.75**     | _(v1.11)_ **Mede RNF-22/RNF-35.** Pausar no meio de um trecho longo e retomar: o áudio continua de onde parou, sem estouro e sem repetir trecho. A síntese também deve parar enquanto pausado — é a contrapressão da linha de áudio (Achado 39)                                                                                                                                                                                                           |
+| **T-3.76**     | _(v1.11)_ **Não-regressão do Piper, com ganho.** Motor `PIPER`: continua tocando, e agora começa em ~2 s em vez de ~5 s no trecho longo                                                                                                                                                                                                                                                                                                                   |
+| **T-3.77**     | _(v1.11)_ **Mede DEF-10.** Baixar `pt_BR-edresson-low` (`python -m piper.download_voices pt_BR-edresson-low`), escolher no combo e ouvir: a fala sai no tom certo. Antes desta rodada sairia 38% acelerada, porque a voz é 16000 Hz e o código tocava tudo a 22050                                                                                                                                                                                        |
+| **T-3.78**     | _(v1.11)_ **DEF-07 no motor novo.** Motor Kokoro com o caminho do modelo vazio: o menu "Áudio" fica desabilitado **e** o botão do popup avisa, em vez de ficar mudo (RNF-33)                                                                                                                                                                                                                                                                              |
+| **T-3.79**     | _(v1.11)_ **Mede RNF-23.** Parar no meio de uma fala longa do Kokoro: o processo Python morre e o áudio não volta depois ✅ **aprovado em 2026-08-10** — três falas foram interrompidas na sessão (exit 137 = SIGKILL, o `destroyForcibly` do plugin), e depois de fechado o IDE **nenhum processo mantinha o modelo aberto** (`/proc/*/fd`). Verificado por inspeção de descritores, e não por `pgrep`, que casa com o próprio comando de busca                                                                                                                                                                                                                                                                                             |
 | **T-3.69**     | _(v1.10.2)_ **Mede RF-53.** Com a sessão do CLI ativa, selecionar **sem** `Shift`: a barra aparece, **fica de pé**, e os três botões funcionam ✅ **aprovado em 2026-08-09**. Com `Shift`: idem ✅                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| **T-3.67**     | _(v1.10.1)_ **Mede DEF-09.** Com a sessão **produzindo saída** (logo depois de uma resposta, ou dentro da tela do `/usage`), selecionar um trecho: o popup **permanece** até o próximo clique. Antes de v1.10.1 ele sumia no primeiro frame que rolasse                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **T-3.68**     | _(v1.10.1)_ **Mede o segundo defeito do par.** Selecionar um trecho, **esperar o CLI imprimir algo**, e só então clicar em copiar: o conteúdo colado é o trecho selecionado, e não vazio. Este nunca foi visto porque DEF-09 fechava o popup antes de dar tempo                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| **T-3.63**     | _(v1.10)_ Selecionar um trecho, clicar no play do popup: **sai som**, e o menu "Áudio" passa a oferecer pausa — a prova de que o estado é compartilhado e não duplicado (RF-50, RNF-32)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ~~**T-3.67**~~ | _(v1.10.1)_ **Mediu DEF-09.** Com a sessão **produzindo saída**, selecionar um trecho: o popup **permanece** até o próximo clique ⚰️ **REPROVOU em 2026-08-09** — o sintoma não mudou, porque o `scrollArea` não era a causa (Achado 36). **Superado por T-3.69**, que mede o mesmo sobre a correção certa (RF-53) |
+| ~~**T-3.68**~~ | _(v1.10.1)_ **Media o segundo defeito do par.** Selecionar um trecho, esperar o CLI imprimir algo, e só então clicar em copiar: o conteúdo colado é o trecho selecionado, e não vazio ⚰️ **nunca executado isoladamente** — a mudança que ele media (agir sobre o `snapshot`) sobreviveu à v1.10.2, e **T-3.69 a exerce**: os três botões funcionam sobre uma sessão viva |
+| **T-3.63**     | _(v1.10)_ Selecionar um trecho, clicar no play do popup: **sai som**, e o menu "Áudio" passa a oferecer pausa — a prova de que o estado é compartilhado e não duplicado (RF-50, RNF-32) ✅ **aprovado em 2026-08-09** |
 | **T-3.64**     | _(v1.10)_ ✅ **APROVADO em 2026-08-09.** Com o Piper **desconfigurado** de propósito, clicar no play da barra: aparece **notificação**. É o teste que distingue "não configurado" de "quebrado em silêncio", e que só existe por causa do DEF-07 (RF-50, RNF-33)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **T-3.65**     | _(v1.10)_ Clicar em "Uso" no cabeçalho: a tela de uso do CLI abre **na sessão em foco**; `Esc` (ou `Ctrl+Backspace`) sai dela e devolve o prompt (RF-51, RF-17)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **T-3.65**     | _(v1.10)_ Clicar em "Uso" no cabeçalho: a tela de uso do CLI abre **na sessão em foco**; `Esc` (ou `Ctrl+Backspace`) sai dela e devolve o prompt (RF-51, RF-17) ✅ **aprovado em 2026-08-09** |
 | **T-3.66**     | _(v1.10)_ ✅ **APROVADO em 2026-08-09.** Com a aba dividida, a tela de uso abre **na pane em foco**, não na irmã — mesma garantia de RF-38                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | **T-3.61**     | _(v1.9.5)_ **Mede o Achado 32.** Numa pane **sem** o indicador de integração no rodapé (`In <arquivo>`), rodar `echo $CLAUDE_CODE_SSE_PORT`: se sair **`0`**, a causa da desintegração é a corrida do `getOrDefault`, e Q-31 fecha. Conferir numa pane **com** o indicador que sai a porta real — é o controle que impede concluir pelo motivo errado ⚠️ **executado 2026-08-08 — não reproduziu.** As duas panes ficaram integradas e o `echo` deu a **mesma porta real (`33471`)** nas duas. Isso **valida o controle** (o customizer alcança as panes de split em produção, não só em T-4) e **deixa a hipótese sem medição**: o caso da pane desintegrada não ocorreu nesta sessão · **2ª execução, com a IDE reiniciada e a pane nascida na inicialização: também não reproduziu** — mesma porta real nas duas. Hipótese arquivada |
 
@@ -2682,7 +2845,7 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-26** | ~~_(v1.7)_ Com a aba dividida, o que o título "(encerrado)" deveria significar?~~                                                                                                                                                                                                                                                             | ✅ **RESOLVIDO em v1.8.1 pelo uso real.** Significa "não há mais sessão viva nesta aba" — contando as panes na árvore, que era a saída descartada como cara em v1.7 e custou seis linhas. Virou RF-44, depois de DEF-03 mostrar o oposto na prática                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Q-29** | _(v1.9)_ Vale aplicar a nova velocidade à fala **em curso**, e não só à próxima?                                                                                                                                                                                                                                                              | **Recusado, com o motivo no mecanismo.** O piper sintetiza o áudio inteiro antes de tocar (`synthesize` lê todo o stdout e só então o `Clip` abre): não há stream a reajustar. Aplicar no meio seria re-sintetizar do zero e reposicionar por frame — fila e posição, exatamente o que RNF-23 mantém fora. O custo real é baixo: a fala típica dura segundos, e parar e tocar de novo já resolve                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Q-30** | ~~_(v1.9.3)_ O trecho enviado por `Ctrl+Alt+K` chega à sessão da janela dedicada?~~                                                                                                                                                                                                                                                           | ✅ **RESPONDIDA em 2026-08-08 por T-3.59: chega.** O `@test.md#L3` apareceu na nossa pane com `1 line selected`. **Logo DEF-08 é ergonomia, não integração** — o conteúdo atravessa, só o foco vai para a janela errada. Rebaixa a prioridade do defeito e muda o conserto plausível: não é preciso tocar em protocolo, basta uma ação nossa                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Q-33** | _(v1.10.2)_ Com o mouse reporting do CLI ligado (`?1000h`/`?1006h`), o popup da seleção tem lugar? Selecionar com `Shift` devolve a seleção ao JediTerm e estabiliza o popup?                                                                                                                                                                 | Em aberto. Medido: quem fecha é `IdePopupManager.closeAllPopups` via evento de foco, 268 ms após nascer; geometria e contagem de botões **descartadas** pelo log. **Decide o destino de RF-26/RF-33/RF-50**: exigir `Shift`, ou aposentar o popup agora que o CLI copia sozinho ao selecionar                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Q-33** | ~~_(v1.10.2)_ Com o mouse reporting do CLI ligado (`?1000h`/`?1006h`), o popup da seleção tem lugar? Selecionar com `Shift` devolve a seleção ao JediTerm e estabiliza o popup?~~ | ✅ **RESPONDIDA em 2026-08-09 (T-3.69): tem lugar, e sem exigir `Shift`.** A pergunta pressupunha escolher entre exigir `Shift` e aposentar o popup — **as duas saídas foram recusadas** por RF-53: deixando de ser `JBPopup`, a barra fica fora do alcance de `IdePopupManager.closeAllPopups` e funciona **com e sem** `Shift`. RF-26/RF-33/RF-50 seguem de pé, sem mudança |
 | **Q-32** | ~~_(v1.10)_ Instalado o `wl-clipboard`, o `Ctrl+V` com imagem chega ao CLI dentro da janela dedicada, ou é consumido antes pela ação de colagem da plataforma?~~ ✅ **RESOLVIDA em 2026-08-09 (T-3.62): chega.** A ordem lida no `JBTerminalPanel.handleKeyEvent` não impedia nada — ninguém consome o `Ctrl+V` antes do PTY. RF-52 arquivado | Em aberto, e é o **único** ponto não medido do Achado 33. A ordem em `JBTerminalPanel.handleKeyEvent` está lida (pre-handlers → escape listener → JediTerm), mas ler a ordem não diz quem consome o evento na prática. **Decide se RF-52 vira código ou é arquivada.** Mede-se com T-3.62, que exige o pacote instalado primeiro                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Q-31** | _(v1.9.4)_ Por que uma pane às vezes **não conecta** ao servidor MCP, ficando sem o indicador `In <arquivo>` e sem receber o `Ctrl+Alt+K`?                                                                                                                                                                                                    | Em aberto. Observado em T-3.60: das duas panes, só a segunda estava conectada. Hipóteses não medidas: corrida entre a partida da sessão e o servidor do plugin oficial, ou sessão criada antes de o servidor subir. **Afeta RF-37**, que assume integração em todas as panes — e T-3.36 já mostrou as duas conectadas, então não é impossível, é intermitente · 🔍 **Mecanismo identificado em 2026-08-08 (Achado 32)**: `CLAUDE_CODE_SSE_PORT` cai em `0` por `getOrDefault`, e a mitigação de corrida do oficial só alcança a tool window `"Terminal"`. **Falta medir** — T-3.61 · ⚠️ **T-3.61 não reproduziu** (2026-08-08): duas panes integradas, mesma porta real `33471`. Controle passou; a hipótese continua **sem medição** · ⚰️ **ARQUIVADA em 2026-08-08** após **duas** não-reproduções, a segunda com a condição específica. Causa do caso de T-3.60 desconhecida; `deferSessionStartUntilUiShown` é a explicação provável de por que não nos atinge |
 | **Q-28** | _(v1.8)_ Vale arrastar panes com o mouse para reorganizá-las, como o editor faz com as abas?                                                                                                                                                                                                                                                  | **Avaliado e adiado, com o levantamento feito.** Mecanismo existe (`DnDSupport`; `DockManager`/`DockContainer`). O que falta é **onde agarrar**: o editor arrasta o rótulo da aba, e as nossas panes não têm aba — a superfície delas é do terminal, onde arrastar é selecionar texto (RF-26). Exigiria barra de título por pane, UI permanente para ação ocasional. RF-43 cobre o uso de 2–4 panes por ações. Reabrir se o uso mostrar aninhamento profundo, onde trocar/girar não bastam                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |

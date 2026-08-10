@@ -7,6 +7,9 @@ import com.intellij.openapi.components.Storage
 import com.intellij.util.xmlb.XmlSerializerUtil
 import kotlin.math.abs
 
+/** Motores de voz suportados (RF-54). */
+enum class TtsEngine { PIPER, KOKORO }
+
 /**
  * Configuração persistida do plugin.
  *
@@ -28,11 +31,26 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
     @Deprecated("Sempre Backspace em GoLand; Esc em IntelliJ")
     var escapeKeyName: String = "BACKSPACE"
 
+    /** Motor de voz em uso. Kokoro é o padrão desde a v1.11 (RF-54). */
+    var ttsEngine: TtsEngine = TtsEngine.KOKORO
+
     /** Caminho do Piper TTS. O padrão resolve pelo PATH. */
     var piperExecutable: String = "piper"
 
     /** Caminho absoluto para o arquivo .onnx do modelo de voz. Vazio desabilita síntese. */
     var piperModel: String = ""
+
+    /** Interpretador Python com `kokoro-onnx` instalado. O padrão resolve pelo PATH. */
+    var kokoroPython: String = DEFAULT_KOKORO_PYTHON
+
+    /** Caminho absoluto do `kokoro-v1.0.onnx`. Vazio desabilita síntese. */
+    var kokoroModel: String = ""
+
+    /** Caminho absoluto do `voices-v1.0.bin`. Vazio desabilita síntese. */
+    var kokoroVoices: String = ""
+
+    /** Voz do Kokoro, como aparece no arquivo de vozes. */
+    var kokoroVoice: String = DEFAULT_KOKORO_VOICE
 
     /** Velocidade da fala em porcentagem, sempre uma das oferecidas em [SPEECH_SPEEDS]. */
     var speechSpeed: Int = DEFAULT_SPEECH_SPEED
@@ -63,6 +81,20 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
     /** Caminho do modelo: vazio significa síntese desabilitada. */
     fun effectivePiperModel(): String = piperModel.trim()
 
+    /** Interpretador do Kokoro: cai no padrão se o usuário limpar o campo. */
+    fun effectiveKokoroPython(): String =
+        kokoroPython.trim().ifEmpty { DEFAULT_KOKORO_PYTHON }
+
+    /** Caminho do modelo: vazio significa síntese desabilitada. */
+    fun effectiveKokoroModel(): String = kokoroModel.trim()
+
+    /** Caminho do arquivo de vozes: vazio significa síntese desabilitada. */
+    fun effectiveKokoroVoices(): String = kokoroVoices.trim()
+
+    /** Voz do Kokoro: cai no padrão se o usuário limpar o campo. */
+    fun effectiveKokoroVoice(): String =
+        kokoroVoice.trim().ifEmpty { DEFAULT_KOKORO_VOICE }
+
     /**
      * Velocidade efetiva: sempre uma das oferecidas, a mais próxima do que está gravado.
      *
@@ -77,15 +109,20 @@ class ClaudeDockSettings : PersistentStateComponent<ClaudeDockSettings> {
         const val MIN_PADDING = 0
         const val MAX_PADDING = 48
         const val DEFAULT_SPEECH_SPEED = 100
+        const val DEFAULT_KOKORO_PYTHON = "python3"
+        const val DEFAULT_KOKORO_VOICE = "pf_dora"
 
         /**
          * Velocidades oferecidas, na ordem de exibição.
          *
          * Fonte única do menu "Áudio" e da tela de configuração — é o que impede os dois de
          * divergirem. Mora aqui, e não nas actions, porque é o domínio do valor.
+         *
+         * 0,25x saiu na v1.11: o `create()` do Kokoro tem `assert speed >= 0.5`, e a tabela é
+         * compartilhada pelos dois motores (D-45). Quem tinha 25 gravado migra sozinho pelo
+         * [effectiveSpeechSpeed], que aproxima em vez de apenas limitar a faixa.
          */
         val SPEECH_SPEEDS: Map<Int, String> = linkedMapOf(
-            25 to "0,25x",
             50 to "0,5x",
             75 to "0,75x",
             100 to "1x (padrão do modelo)",
