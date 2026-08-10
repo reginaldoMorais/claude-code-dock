@@ -7,6 +7,78 @@ segue [SemVer](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [0.10.0] — 2026-08-10
+
+Versão da **voz**. Entra o Kokoro-ONNX, com vozes bem melhores e escolha entre as 54 do modelo, em
+9 idiomas. E a fala deixa de esperar: antes o plugin sintetizava o trecho **inteiro** antes de
+emitir o primeiro som — um parágrafo grande custava uns 18 segundos de silêncio. Agora começa a
+falar em torno de 2,5 segundos, independente do tamanho do trecho. O Piper continua disponível, e
+ganha a mesma melhoria de brinde.
+
+### Adicionado
+
+- **Kokoro-ONNX como motor de voz**, agora o padrão. Escolha entre ele e o Piper em
+  _Settings → Tools → Claude Code Dock_. Quem já tinha o Piper configurado continua funcionando
+  sem mexer em nada. O Kokoro precisa de um Python com os pacotes `kokoro-onnx` e `onnxruntime`,
+  mais o modelo e o arquivo de vozes — os três se apontam na mesma tela.
+- **Seletor de voz para os dois motores.** As vozes do Kokoro são lidas do próprio arquivo de
+  vozes e vêm rotuladas por idioma: as três de português (`pf_dora`, `pm_alex`, `pm_santa`) e mais
+  51 em inglês, espanhol, francês, italiano, hindi, japonês e mandarim. As do Piper são as vozes
+  instaladas ao lado do modelo escolhido, rotuladas pelo idioma que cada arquivo declara.
+
+### Alterado
+
+- **A fala começa assim que o primeiro pedaço de áudio existe**, em vez de esperar a síntese
+  terminar. No mesmo trecho de ~800 caracteres: Kokoro saiu de ~18 s para ~2,4 s, e o Piper de
+  ~5,4 s para ~2,2 s. O tempo até a primeira palavra passa a ser praticamente o mesmo para um
+  parágrafo ou para a tela inteira.
+- **Pausar agora pausa também a síntese**, e não só o som — consequência natural da reprodução
+  contínua.
+- **0,25x saiu da lista de velocidades.** O Kokoro não aceita nada abaixo de 0,5x, e a lista é a
+  mesma para os dois motores. Quem tinha 0,25x escolhido passa a 0,5x automaticamente, sem precisar
+  reconfigurar.
+
+### Corrigido
+
+- **Vozes do Piper em qualidade `low` e `x_low` tocavam aceleradas e com o tom alterado.** Elas são
+  gravadas a 16000 Hz, e o plugin tocava tudo a 22050 Hz — 38% mais rápido. São 40 das 173 vozes do
+  catálogo oficial, uma delas em português (`pt_BR-edresson-low`). A taxa passa a ser lida do
+  arquivo que acompanha cada voz. Quem usa vozes `medium` ou `high`, como a `pt_BR-faber-medium`,
+  nunca foi afetado.
+- **Parar uma fala deixou de ser registrado como erro no log.** Interromper uma fala, ou começar
+  outra por cima, produzia um aviso de falha no `idea.log` — barulho que atrapalha justamente quem
+  for investigar um problema real.
+
+### Notas
+
+- **O motor não era o gargalo — a reprodução era.** Os dois motores sempre produziram áudio aos
+  poucos; o desenho anterior descartava isso ao exigir a fala inteira em memória antes de tocar.
+  Por isso o Piper, sem nenhuma mudança própria, ficou mais rápido nesta versão.
+- **Quatro otimizações foram medidas e descartadas**, com os números registrados para não voltarem
+  como sugestão: manter o modelo carregado em segundo plano (compraria 1,6 s ao custo de ~500 MB
+  parados), o modelo `int8` de 92 MB (**4,5× mais lento**, não mais rápido), um utilitário de linha
+  de comando próprio, e o cache de grafo do ONNX.
+- **Se a primeira fala demorar muito mais que isso**, o suspeito é o Python: o caminho do
+  interpretador precisa apontar para aquele que tem os pacotes instalados. Em instalações com
+  `pyenv` ou `asdf`, use o caminho absoluto — o PATH que o IDE herda pode não incluir a pasta dos
+  atalhos.
+
+### Documentação
+
+- `plans/sdd/SPEC.md` evoluiu de 1.10.2 para 1.11: RF-54 a RF-57, RNF-35 e RNF-36, o defeito das
+  vozes `low` (DEF-10) e os achados 37 a 41.
+- **Achado 39:** o `Clip` era o gargalo, e o motor levou a culpa. A troca de motor parecia uma
+  escolha entre qualidade de voz e tempo de espera; medir o tempo até o **primeiro som**, em vez do
+  tempo total, mostrou que nenhum dos dois números era do motor.
+- **DEF-10 registra uma lição que não é sobre áudio:** um valor verificado uma vez virou constante
+  no código, e a verificação media uma amostra de um.
+
+### Testes
+
+163 testes automatizados (eram 142 na 0.9.0), todos passando, sem avisos de compilação.
+
+---
+
 ## [0.9.0] — 2026-08-09
 
 Versão do **trecho selecionado**: a barra flutuante ganha um play e, enfim, fica de pé sobre uma
@@ -216,6 +288,7 @@ As versões `0.5.x` e anteriores são anteriores a este arquivo e não estão de
 histórico completo, com as decisões de projeto e as descobertas de cada rodada, está em
 [`plans/sdd/HANDOFF.md`](plans/sdd/HANDOFF.md).
 
+[0.10.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.7.0...v0.8.0
