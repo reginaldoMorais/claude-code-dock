@@ -4,7 +4,7 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-08
+- **Última atualização:** 2026-08-10
 
 ---
 
@@ -13,8 +13,10 @@
 **Fase: v1.10.2 — RF-50, RF-51 e RF-53 implementados; o terceiro pedido virou `apt install`
 (Achado 33).** **142 testes verdes — medidos em 2026-08-09 00:06 com `--rerun`.**
 
-**Roteiros manuais: TODOS aprovados em 2026-08-09** — T-3.62, T-3.63, T-3.64, T-3.65, T-3.66,
-T-3.69 e o ícone cinza. **RF-52 arquivado sem código** e **Q-32 respondida** por T-3.62.
+**Roteiros manuais da v1.10: todos aprovados em 2026-08-09** — T-3.62, T-3.63, T-3.64, T-3.65,
+T-3.66, T-3.69 e o ícone cinza. **RF-52 arquivado sem código** e **Q-32 respondida** por T-3.62.
+T-3.67 e T-3.68 reprovaram e foram superados por T-3.69. **Seguem pendentes os oito roteiros
+herdados de rodadas anteriores** — T-3.5, T-3.6, T-3.18 a T-3.20, T-3.48, T-3.52 e T-3.53.
 
 **Fase anterior: v1.9.4 — RF-49: ação própria que entrega a seleção a _uma_ pane, fechando DEF-08.**
 **A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79` e a
@@ -538,13 +540,13 @@ autor dela calibrou, e não a um número escolhido por nós. Custo da decisão: 
 | **Q-01** | ✅ **RESOLVIDO em 2026-08-01.** O customizer alcança sim — validado por `TerminalCustomizerReachTest` (T-4), com teste de controle. R-02 fechado                                                                                             | ✅ Resolvido |
 | **Q-02** | ~~Duas sessões simultâneas no mesmo servidor MCP: qual "possui" um diff aberto?~~ ✅ **RESOLVIDO em 2026-08-08 (T-3.59): ninguém.** O envio é broadcast; a noção de dono não existe nessa camada                                             | ✅ Resolvido |
 | **Q-03** | Semântica exata de `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` — string encontrada, comportamento não verificado                                                                                                                              | 🟢 Baixo     |
-| **Q-04** | `TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?                                                                                                                                                             | 🟡 Médio     |
+| **Q-04** | ~~`TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?~~ ✅ **RESOLVIDO em 2026-08-03 (Achado 27):** a sessão é **sempre** JediTerm/CLASSIC, qualquer que seja o engine configurado. Fixado como guarda de regressão por T-2.6 (v1.9.2) | ✅ Resolvido |
 | **Q-05** | Vale ocultar o ponto de entrada do oficial para evitar confusão? Depende de Q-03                                                                                                                                                             | 🟢 Baixo     |
 | **Q-06** | Remote Dev / split mode / WSL — declarados fora de escopo, reavaliar depois                                                                                                                                                                  | 🟢 Baixo     |
 | **Q-07** | Restaurar sessões ao reabrir o projeto? Sem demanda comprovada                                                                                                                                                                               | 🟢 Baixo     |
 | **Q-08** | `since-build` definido como `252` por conservadorismo, mas **só `262` foi testado**                                                                                                                                                          | 🟢 Baixo     |
 | **Q-09** | _(v1.1)_ `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto? Exigiria diálogo a cada "Nova sessão"                                                                                                                                        | 🟢 Baixo     |
-| **Q-10** | _(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`? Lá o caminho é `Terminal.Escape` + EP `escapeHandler`, não o pre-handler. Ligado a Q-04                                                                                             | 🟡 Médio     |
+| **Q-10** | ~~_(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`?~~ ✅ **RESOLVIDO em 2026-08-03**, junto de Q-04: o engine nunca é `REWORKED` na nossa janela, então o caminho `Terminal.Escape` + EP `escapeHandler` não nos alcança. T-2.6 guarda a premissa | ✅ Resolvido |
 | **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável em `.idea/` em vez de ficar no workspace?                                                                                                                                               | 🟢 Baixo     |
 | **Q-12** | _(v1.2)_ Vale passar `[filename]` ao `/export` e abrir o arquivo no editor? Economiza cliques, mas exige adivinhar a semântica do argumento                                                                                                  | 🟢 Baixo     |
 | **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos                                                                                              | 🟢 Baixo     |
@@ -571,7 +573,7 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 1. **Roteiros manuais em aberto — o inventário completo**, que até 2026-08-08 estava espalhado em
    dois lugares e omitia dois blocos:
 
-   | Bloco            | Roteiros            | Estado em 2026-08-08                                               |
+   | Bloco            | Roteiros            | Estado em 2026-08-10                                               |
    | ---------------- | ------------------- | ------------------------------------------------------------------ |
    | Base             | T-3.4               | ✅ aprovado (`--resume`)                                           |
    | Base             | ~~T-3.3~~           | ⚰️ **inválido** — DEF-08; substituído por T-3.59, este ✅ aprovado |
@@ -582,6 +584,12 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
    | v1.7 (split)     | T-3.34 a T-3.41     | ✅ aprovados, incluindo T-3.36 (diff por pane)                     |
    | v1.7.1 / v1.8    | T-3.42 a T-3.47     | ✅ uso real desde a release 0.7.0 — não por roteiro                |
    | v1.8.2           | **T-3.48, 52, 53**  | ⏳ **status nunca declarado** — T-3.48 aparece só como hipótese    |
+   | v1.9 (fala)      | T-3.54 a T-3.58     | ✅ uso real — RF-47 e RF-48 validados no IDE                       |
+   | v1.9.3 / v1.9.4  | T-3.59, T-3.60      | ✅ aprovados 2026-08-08 — fecham DEF-08 via RF-49                  |
+   | v1.9.5           | ~~T-3.61~~          | ⚰️ **não reproduziu** duas vezes; Q-31 arquivada                   |
+   | v1.10            | T-3.62 a T-3.66     | ✅ aprovados 2026-08-09 — RF-50, RF-51, e RF-52 arquivado          |
+   | v1.10.1          | ~~T-3.67, T-3.68~~  | ⚰️ **superados por T-3.69** — mediam o conserto que falhou         |
+   | v1.10.2          | T-3.69              | ✅ aprovado 2026-08-09 — RF-53, com e sem `Shift`                  |
 
 2. ~~**Q-02** — ambiguidade de sessão dupla~~ ✅ respondida em 2026-08-08 por T-3.59: é broadcast,
    ninguém possui.
@@ -603,14 +611,18 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
    `ClaudeDockSessions.openUsage()` + `UsageSessionAction`, entre `ResumeSessionAction` e
    `SplitSessionMenuAction`. T-1.65 e T-1.66 verdes.
 
-8. **Rodar os roteiros manuais da v1.10 — T-3.63 a T-3.68.** T-3.65 já passou (o `/usage` abriu
-   na sessão). T-3.67 e T-3.68 são novos e medem DEF-09. É o que falta para RF-50/RF-51
-   saírem de "compila e passa" para "funciona". T-3.64 é o mais importante dos quatro: mede
-   justamente o aviso que não existia antes (DEF-07 de novo, se falhar).
+8. ~~**Rodar os roteiros manuais da v1.10 — T-3.63 a T-3.68.**~~ ✅ **fechado em 2026-08-09.**
+   T-3.63, T-3.64, T-3.65 e T-3.66 aprovados. T-3.67 e T-3.68 mediam o conserto da v1.10.1, que
+   **reprovou** — foram superados por T-3.69, aprovado depois de RF-53 (Achado 36).
 
-9. **v1.10 — rodar T-3.62 (colar print screen)**, e **primeiro** `sudo apt install wl-clipboard`.
-   O resultado decide se RF-52 vira código ou é arquivada (Q-32). **Não escrever código antes
-   desta medição** (D-44).
+9. ~~**v1.10 — rodar T-3.62 (colar print screen)**~~ ✅ **fechado em 2026-08-09.** Depois de
+   `sudo apt install wl-clipboard`, o `Ctrl+V` anexou a imagem: **Q-32 respondida** e **RF-52
+   arquivado sem código** (Achado 33, D-44).
+
+**Restante, e é só isto:** os oito roteiros manuais nunca executados — T-3.5, T-3.6 (base),
+T-3.18 a T-3.20 (v1.4) e T-3.48, T-3.52, T-3.53 (v1.8.2) — mais a decisão do stash (item 3) e a
+rodada nova do TTS agnóstico (item 5). **Nenhum código pendente:** 142 testes verdes em
+2026-08-10, árvore limpa, `pluginVersion = 0.9.0` alinhado à tag `v0.9.0`.
 
 ---
 
