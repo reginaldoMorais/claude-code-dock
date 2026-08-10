@@ -55,7 +55,7 @@ Parâmetros ficam em [gradle.properties](gradle.properties):
 | Propriedade        | Valor                            | Descrição                         |
 | ------------------ | -------------------------------- | --------------------------------- |
 | `pluginGroup`      | `dev.reginaldomorais.claudedock` | groupId do artefato               |
-| `pluginVersion`    | `0.1.0`                          | versão do plugin                  |
+| `pluginVersion`    | `0.9.0`                          | versão do plugin                  |
 | `platformVersion`  | `2026.2`                         | IntelliJ IDEA usado na compilação |
 | `pluginSinceBuild` | `252`                            | build mínima suportada            |
 

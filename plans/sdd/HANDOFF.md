@@ -16,7 +16,7 @@
 **Roteiros manuais: TODOS aprovados em 2026-08-09** — T-3.62, T-3.63, T-3.64, T-3.65, T-3.66,
 T-3.69 e o ícone cinza. **RF-52 arquivado sem código** e **Q-32 respondida** por T-3.62.
 
-**Fase anterior: v1.9.4 — RF-49: ação própria que entrega a seleção a *uma* pane, fechando DEF-08.**
+**Fase anterior: v1.9.4 — RF-49: ação própria que entrega a seleção a _uma_ pane, fechando DEF-08.**
 **A v1.9 saiu como release `v0.8.0` (tag em `c50861c`); a v1.9.1 (Achado 31) está em `2b7ef79` e a
 v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 2026-08-08 17:15 com
 `--rerun`. Nada disso foi publicado: são rodadas de dívida e de ergonomia, não de release.**
@@ -24,51 +24,52 @@ v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 20
 > **Duas numerações, e não são a mesma.** O `SPEC.md` tem versionamento próprio (`v1.x`), que
 > conta rodadas de especificação; o release segue SemVer (`0.x.y`), no `CHANGELOG.md` e nas tags
 > do git. Mapa do que já saiu: **0.6.0** ← SPEC v1.5.1 · **0.7.0** ← SPEC v1.8.2 · **0.8.0** ←
-> SPEC v1.9. Cada release tem também uma tag `-rc` no commit do código, anterior ao da publicação.
+> SPEC v1.9 · **0.8.1** ← SPEC v1.9.4 · **0.9.0** ← SPEC v1.10.2. Cada release tem também uma
+> tag `-rc` no commit do código, anterior ao da publicação.
 
-| Artefato                                                         | Estado                                                                    |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                              |
-| [SPEC.md](SPEC.md) | ✅ **v1.10.2** — RF-50, RF-51, RF-53; RF-52 condicional; DEF-09; Achados 33/34/35/36; Q-32 (executável) e Q-33 (fechada); R-23 substituído por R-29 |
-| `HANDOFF.md` | ✅ Este arquivo, com RF-49, a receita do cache do Gradle e o inventário de roteiros |
-| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.8.0** (2026-08-07)       |
-| Código do plugin | ✅ **142 testes, 0 falhas, 0 erros** em 25 classes; **zero warnings**. RF-50 e RF-51 entram nesta contagem |
-| **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                 |
-| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                   |
-| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                    |
-| RF-22 (`/export`), RF-24 (cópia), RF-26 (botão de seleção)       | ✅ Implementados e em uso                                                 |
-| RF-27 (saída plana)                                              | ⚰️ **REMOVIDO em v1.4** — funcionava, e não era o que servia              |
-| RF-28 (respiro nas bordas)                                       | ✅ Implementado e **validado no IDE**, em 20px por padrão                 |
-| RF-29 (capa de carregamento)                                     | ✅ Implementado e **validado no IDE**, prazo de 3 s                       |
-| Tela de configurações                                            | ✅ Reescrita em Kotlin UI DSL; v1.5 adiciona Piper fields                 |
-| T-1.21 (teste dos diretórios de fallback)                        | ✅ Implementado, com controle contra passar pelo motivo errado            |
-| **RF-31/RF-32 (Piper TTS)**                                      | ✅ **COMPLETOS** — menu "Áudio" no cabeçalho; config executável + modelo  |
-| `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23                  |
-| **RF-30 (play no popup)**                                        | ⚰️ **DESCARTADO em v1.5.1** — UX redundante; menu Áudio (RF-31) já cobre  |
-| **RF-47 (velocidade da fala)**                                   | ✅ Submenu + seletor em Settings, 0,25x a 2x — **validado no IDE**        |
-| **RF-48 / DEF-07 ("Tocar seleção")**                             | ✅ Corrigido em v1.9 e **validado no IDE** (T-3.54)                       |
-| **RF-33/34/35 (export do trecho)**                               | ✅ Implementados e **validados no IDE** pelo usuário                      |
-| `ClaudeSelectionExport`                                          | ✅ Objeto puro: nome sugerido + gravação (RNF-26)                         |
-| **RF-36 a RF-40 (split da aba)**                                 | ✅ Implementados e **validados no IDE** pelo usuário (4 panes)            |
-| **RF-41/RF-42 (fechar a divisão)**                               | ✅ Item "Fechar divisão" no cabeçalho + foco reassumido (v1.7.1)          |
-| **DEF-02 (navegação com uma aba)**                               | ✅ Corrigido em v1.7.2 — guarda em `ClaudeTabNavigation` (T-1.40)         |
-| **RF-43 (trocar de lado / girar)**                               | ✅ Implementado em v1.8, sobre `Splitter.swapComponents()`                |
-| **DEF-03 ("encerrado" com sessão viva)**                         | ✅ Corrigido em v1.8.1 — callback por pane + `isDescendingFrom`           |
-| **DEF-04 (menu "Dividir" vazio)**                                | ✅ Era sintoma de DEF-05; diagnóstico anterior revogado (Achado 30)       |
-| **DEF-05 (cabeçalho morto após fechar pane)**                    | ✅ Corrigido — `preferredFocusableComponent` passa à sobrevivente         |
-| **DEF-06 (nome ambíguo do fechamento)**                          | ✅ "Fechar esta sessão" e "Fechar todas as sessões" (RF-46)               |
-| Q-26 ("encerrado" numa aba dividida)                             | ✅ Respondida pelo uso real: é "sem sessão viva" (RF-44)                  |
-| **DnD de panes (Q-28)**                                          | ⚰️ **Avaliado e recusado** — falta onde agarrar, não mecanismo            |
-| Roteiros T-3.42-47 (fechar/reposicionar) | ✅ Validados pelo **uso real** desde a release 0.7.0 — não por roteiro |
-| `ClaudeSessionSplitter`                                          | ✅ Objeto puro de Swing: árvore de panes (RNF-29, RNF-30)                 |
-| **Premissa de engine (CB-26/36/47, R-15)**                       | ✅ **CORRIGIDA** — a sessão é sempre JediTerm/CLASSIC (Achado 27)         |
-| Testes de integração T-2.\* | ✅ **Implementados em v1.9.2** — `ClaudeDockIntegrationTest`, 7 casos |
-| Roteiros T-3.21-23, T-3.26, T-3.27 (Piper) | ✅ **Aprovados no IDE** em 2026-08-08, sandbox com Piper |
-| Roteiros de split (T-3.34-41) | ✅ **Aprovados em 2026-08-08**, menos T-3.36 (diff por pane), não executado |
-| **T-3.36 (diff por pane)** | ✅ **Aprovado 2026-08-08** — as duas panes com `In test.md` ao mesmo tempo |
-| **T-3.4 (`--resume`)** | ✅ **Aprovado 2026-08-08** |
-| **DEF-08 (`Ctrl+Alt+K`)** | ✅ **Contornado por RF-49** — entrega dirigida, **validada no IDE** (T-3.60) |
-| **Q-31 (pane sem integração)** | ⚰️ **Arquivada** após duas não-reproduções. Achado 32 documenta o mecanismo do oficial; a causa do caso real segue desconhecida |
+| Artefato                                                         | Estado                                                                                                                                              |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                                                                                                        |
+| [SPEC.md](SPEC.md)                                               | ✅ **v1.10.2** — RF-50, RF-51, RF-53; RF-52 condicional; DEF-09; Achados 33/34/35/36; Q-32 (executável) e Q-33 (fechada); R-23 substituído por R-29 |
+| `HANDOFF.md`                                                     | ✅ Este arquivo, com RF-49, a receita do cache do Gradle e o inventário de roteiros                                                                 |
+| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.9.0** (2026-08-09)                                                                                 |
+| Código do plugin                                                 | ✅ **142 testes, 0 falhas, 0 erros** em 25 classes; **zero warnings**. RF-50 e RF-51 entram nesta contagem                                          |
+| **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                                                                                           |
+| RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                                                                                             |
+| T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                                                                                              |
+| RF-22 (`/export`), RF-24 (cópia), RF-26 (botão de seleção)       | ✅ Implementados e em uso                                                                                                                           |
+| RF-27 (saída plana)                                              | ⚰️ **REMOVIDO em v1.4** — funcionava, e não era o que servia                                                                                        |
+| RF-28 (respiro nas bordas)                                       | ✅ Implementado e **validado no IDE**, em 20px por padrão                                                                                           |
+| RF-29 (capa de carregamento)                                     | ✅ Implementado e **validado no IDE**, prazo de 3 s                                                                                                 |
+| Tela de configurações                                            | ✅ Reescrita em Kotlin UI DSL; v1.5 adiciona Piper fields                                                                                           |
+| T-1.21 (teste dos diretórios de fallback)                        | ✅ Implementado, com controle contra passar pelo motivo errado                                                                                      |
+| **RF-31/RF-32 (Piper TTS)**                                      | ✅ **COMPLETOS** — menu "Áudio" no cabeçalho; config executável + modelo                                                                            |
+| `ClaudePiperPlayback`, `ClaudeTtaSessions`, Audio actions        | ✅ Código compilado, sem erros, seguindo RNF-19 a RNF-23                                                                                            |
+| **RF-30 (play no popup)**                                        | ⚰️ **DESCARTADO em v1.5.1** — UX redundante; menu Áudio (RF-31) já cobre                                                                            |
+| **RF-47 (velocidade da fala)**                                   | ✅ Submenu + seletor em Settings, 0,25x a 2x — **validado no IDE**                                                                                  |
+| **RF-48 / DEF-07 ("Tocar seleção")**                             | ✅ Corrigido em v1.9 e **validado no IDE** (T-3.54)                                                                                                 |
+| **RF-33/34/35 (export do trecho)**                               | ✅ Implementados e **validados no IDE** pelo usuário                                                                                                |
+| `ClaudeSelectionExport`                                          | ✅ Objeto puro: nome sugerido + gravação (RNF-26)                                                                                                   |
+| **RF-36 a RF-40 (split da aba)**                                 | ✅ Implementados e **validados no IDE** pelo usuário (4 panes)                                                                                      |
+| **RF-41/RF-42 (fechar a divisão)**                               | ✅ Item "Fechar divisão" no cabeçalho + foco reassumido (v1.7.1)                                                                                    |
+| **DEF-02 (navegação com uma aba)**                               | ✅ Corrigido em v1.7.2 — guarda em `ClaudeTabNavigation` (T-1.40)                                                                                   |
+| **RF-43 (trocar de lado / girar)**                               | ✅ Implementado em v1.8, sobre `Splitter.swapComponents()`                                                                                          |
+| **DEF-03 ("encerrado" com sessão viva)**                         | ✅ Corrigido em v1.8.1 — callback por pane + `isDescendingFrom`                                                                                     |
+| **DEF-04 (menu "Dividir" vazio)**                                | ✅ Era sintoma de DEF-05; diagnóstico anterior revogado (Achado 30)                                                                                 |
+| **DEF-05 (cabeçalho morto após fechar pane)**                    | ✅ Corrigido — `preferredFocusableComponent` passa à sobrevivente                                                                                   |
+| **DEF-06 (nome ambíguo do fechamento)**                          | ✅ "Fechar esta sessão" e "Fechar todas as sessões" (RF-46)                                                                                         |
+| Q-26 ("encerrado" numa aba dividida)                             | ✅ Respondida pelo uso real: é "sem sessão viva" (RF-44)                                                                                            |
+| **DnD de panes (Q-28)**                                          | ⚰️ **Avaliado e recusado** — falta onde agarrar, não mecanismo                                                                                      |
+| Roteiros T-3.42-47 (fechar/reposicionar)                         | ✅ Validados pelo **uso real** desde a release 0.7.0 — não por roteiro                                                                              |
+| `ClaudeSessionSplitter`                                          | ✅ Objeto puro de Swing: árvore de panes (RNF-29, RNF-30)                                                                                           |
+| **Premissa de engine (CB-26/36/47, R-15)**                       | ✅ **CORRIGIDA** — a sessão é sempre JediTerm/CLASSIC (Achado 27)                                                                                   |
+| Testes de integração T-2.\*                                      | ✅ **Implementados em v1.9.2** — `ClaudeDockIntegrationTest`, 7 casos                                                                               |
+| Roteiros T-3.21-23, T-3.26, T-3.27 (Piper)                       | ✅ **Aprovados no IDE** em 2026-08-08, sandbox com Piper                                                                                            |
+| Roteiros de split (T-3.34-41)                                    | ✅ **Aprovados em 2026-08-08**, menos T-3.36 (diff por pane), não executado                                                                         |
+| **T-3.36 (diff por pane)**                                       | ✅ **Aprovado 2026-08-08** — as duas panes com `In test.md` ao mesmo tempo                                                                          |
+| **T-3.4 (`--resume`)**                                           | ✅ **Aprovado 2026-08-08**                                                                                                                          |
+| **DEF-08 (`Ctrl+Alt+K`)**                                        | ✅ **Contornado por RF-49** — entrega dirigida, **validada no IDE** (T-3.60)                                                                        |
+| **Q-31 (pane sem integração)**                                   | ⚰️ **Arquivada** após duas não-reproduções. Achado 32 documenta o mecanismo do oficial; a causa do caso real segue desconhecida                     |
 
 **Estado do repositório:** `main` na v1.9.2. A v1.9.1 (Achado 31) foi commitada em `2b7ef79`;
 a v1.9.2 (`ClaudeDockIntegrationTest`) ainda está na árvore de trabalho. Tags da última release:
@@ -88,9 +89,10 @@ duas por efeito, e reprovam sob mutação.
 **Dívida conhecida (código morto):** ~~`ClaudeTerminalSessionFactory.readText`~~ removido em
 2026-08-08 — sem chamadores desde que RF-24 substituiu RF-21.
 
-**Dívida conhecida (versão do plugin):** `gradle.properties` está em `pluginVersion = 0.1.0`
-enquanto a tag é `v0.8.0` — o plugin instalado se identifica como 0.1.0 em _Settings > Plugins_.
-Não corrigido aqui: subir a versão publicada é decisão de release do usuário.
+**Dívida conhecida (versão do plugin):** ~~`gradle.properties` em `pluginVersion = 0.1.0`~~
+quitada em 2026-08-10 — a propriedade subiu para **0.9.0**, junto do registro das releases 0.8.1
+e 0.9.0 no `CHANGELOG.md`. O plugin instalado deixa de se identificar como 0.1.0 em
+_Settings > Plugins_ a partir do próximo build.
 
 ---
 
@@ -342,6 +344,7 @@ The contents of the immutable workspace '~/.gradle/caches/9.2.0/transforms/<hash
   > **vazio** e o `--stop` sozinho resolveu, sem `rm` nenhum. Foi conclusão tirada de uma sequência
   > sem variar um fator de cada vez, e custou pedir ao usuário duas vezes um comando destrutivo
   > que não fazia falta. **Mesmo padrão do Achado 30, agora em procedimento de build.**
+
 - **Depois de destravar, `./gradlew test` fica `UP-TO-DATE`** e não reexecuta nada: os XMLs
   continuam com a data antiga. Para ter medição de agora, `./gradlew test --rerun`.
 - **Consequência para a leitura de resultados:** com o build travado, `./gradlew test` não roda e os
@@ -357,13 +360,13 @@ rodar roteiro que dependa dele — senão o roteiro falha por ausência e parece
 
 > **Leia antes de mexer em criação de sessão.** Explica Q-31 e o Achado 32.
 
-| Fato                                                                                                                                                    | Onde foi lido                                             |
-| --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `TerminalCustomizer` injeta `CLAUDE_CODE_SSE_PORT = getRunningMcpServerPorts().getOrDefault(project.locationHash, 0)` — **o default é `0`, não ausente** | `javap -c` de `TerminalCustomizer`                        |
-| O mapa é estático, por `locationHash`, e só é populado por `MCPService.start()`                                                                        | `javap -c` de `MCPService.start`                          |
-| `start()` roda no `PostStartupActivity` → **existe janela entre abrir o projeto e a porta existir**                                                     | `plugin.xml` do oficial + `javap` do activity             |
-| O oficial mitiga a corrida com `restartClaudeInExistingTerminals`, chamado logo após `start()`                                                          | `javap -c` de `PostStartupActivity`                       |
-| **A mitigação varre só a tool window `"Terminal"`** e só abas cujo título começa com `"Claude Code"`                                                    | `javap -c` de `restartClaudeInExistingTerminals$lambda$14` |
+| Fato                                                                                                                                                     | Onde foi lido                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `TerminalCustomizer` injeta `CLAUDE_CODE_SSE_PORT = getRunningMcpServerPorts().getOrDefault(project.locationHash, 0)` — **o default é `0`, não ausente** | `javap -c` de `TerminalCustomizer`                         |
+| O mapa é estático, por `locationHash`, e só é populado por `MCPService.start()`                                                                          | `javap -c` de `MCPService.start`                           |
+| `start()` roda no `PostStartupActivity` → **existe janela entre abrir o projeto e a porta existir**                                                      | `plugin.xml` do oficial + `javap` do activity              |
+| O oficial mitiga a corrida com `restartClaudeInExistingTerminals`, chamado logo após `start()`                                                           | `javap -c` de `PostStartupActivity`                        |
+| **A mitigação varre só a tool window `"Terminal"`** e só abas cujo título começa com `"Claude Code"`                                                     | `javap -c` de `restartClaudeInExistingTerminals$lambda$14` |
 
 **Consequência:** uma pane criada antes do `PostStartupActivity` recebe porta `0` e **nunca**
 conecta — ambiente de processo é fixado no `exec`. A mitigação que consertaria isso não nos
@@ -530,23 +533,23 @@ autor dela calibrou, e não a um número escolhido por nós. Custo da decisão: 
 
 ## Desafios em aberto
 
-| #        | Desafio                                                                                                                                                               | Criticidade  |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| **Q-01** | ✅ **RESOLVIDO em 2026-08-01.** O customizer alcança sim — validado por `TerminalCustomizerReachTest` (T-4), com teste de controle. R-02 fechado                      | ✅ Resolvido |
-| **Q-02** | ~~Duas sessões simultâneas no mesmo servidor MCP: qual "possui" um diff aberto?~~ ✅ **RESOLVIDO em 2026-08-08 (T-3.59): ninguém.** O envio é broadcast; a noção de dono não existe nessa camada | ✅ Resolvido |
-| **Q-03** | Semântica exata de `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` — string encontrada, comportamento não verificado                                                       | 🟢 Baixo     |
-| **Q-04** | `TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?                                                                                      | 🟡 Médio     |
-| **Q-05** | Vale ocultar o ponto de entrada do oficial para evitar confusão? Depende de Q-03                                                                                      | 🟢 Baixo     |
-| **Q-06** | Remote Dev / split mode / WSL — declarados fora de escopo, reavaliar depois                                                                                           | 🟢 Baixo     |
-| **Q-07** | Restaurar sessões ao reabrir o projeto? Sem demanda comprovada                                                                                                        | 🟢 Baixo     |
-| **Q-08** | `since-build` definido como `252` por conservadorismo, mas **só `262` foi testado**                                                                                   | 🟢 Baixo     |
-| **Q-09** | _(v1.1)_ `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto? Exigiria diálogo a cada "Nova sessão"                                                                 | 🟢 Baixo     |
-| **Q-10** | _(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`? Lá o caminho é `Terminal.Escape` + EP `escapeHandler`, não o pre-handler. Ligado a Q-04                      | 🟡 Médio     |
-| **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável em `.idea/` em vez de ficar no workspace?                                                                        | 🟢 Baixo     |
-| **Q-12** | _(v1.2)_ Vale passar `[filename]` ao `/export` e abrir o arquivo no editor? Economiza cliques, mas exige adivinhar a semântica do argumento                           | 🟢 Baixo     |
-| **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos                       | 🟢 Baixo     |
-| **Q-16** | _(v1.4)_ Trocar o prazo fixo da capa por detecção de que o CLI já pintou? Avaliado: viável via `addModelListener` + `getScreenLines()`, mas acopla ao texto do banner | 🟢 Baixo     |
-| **Q-17** | _(v1.4)_ Reintroduzir a capa sobre uma partida sem eco (D-20), deixando-a só como acabamento? O pior caso do prazo viraria "tela vazia", não "eco visível"            | 🟢 Baixo     |
+| #        | Desafio                                                                                                                                                                                                                                      | Criticidade  |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **Q-01** | ✅ **RESOLVIDO em 2026-08-01.** O customizer alcança sim — validado por `TerminalCustomizerReachTest` (T-4), com teste de controle. R-02 fechado                                                                                             | ✅ Resolvido |
+| **Q-02** | ~~Duas sessões simultâneas no mesmo servidor MCP: qual "possui" um diff aberto?~~ ✅ **RESOLVIDO em 2026-08-08 (T-3.59): ninguém.** O envio é broadcast; a noção de dono não existe nessa camada                                             | ✅ Resolvido |
+| **Q-03** | Semântica exata de `CLAUDE_CODE_JETBRAINS_PLUGIN_HIDE_BUTTON` — string encontrada, comportamento não verificado                                                                                                                              | 🟢 Baixo     |
+| **Q-04** | `TerminalEngine.REWORKED` se comporta como `CLASSIC` fora da tool window nativa?                                                                                                                                                             | 🟡 Médio     |
+| **Q-05** | Vale ocultar o ponto de entrada do oficial para evitar confusão? Depende de Q-03                                                                                                                                                             | 🟢 Baixo     |
+| **Q-06** | Remote Dev / split mode / WSL — declarados fora de escopo, reavaliar depois                                                                                                                                                                  | 🟢 Baixo     |
+| **Q-07** | Restaurar sessões ao reabrir o projeto? Sem demanda comprovada                                                                                                                                                                               | 🟢 Baixo     |
+| **Q-08** | `since-build` definido como `252` por conservadorismo, mas **só `262` foi testado**                                                                                                                                                          | 🟢 Baixo     |
+| **Q-09** | _(v1.1)_ `CLAUDE_CONFIG_DIR` **por aba**, e não só por projeto? Exigiria diálogo a cada "Nova sessão"                                                                                                                                        | 🟢 Baixo     |
+| **Q-10** | _(v1.1)_ O `Esc` se comporta igual no engine `REWORKED`? Lá o caminho é `Terminal.Escape` + EP `escapeHandler`, não o pre-handler. Ligado a Q-04                                                                                             | 🟡 Médio     |
+| **Q-11** | _(v1.1)_ `CLAUDE_CONFIG_DIR` deveria ser versionável em `.idea/` em vez de ficar no workspace?                                                                                                                                               | 🟢 Baixo     |
+| **Q-12** | _(v1.2)_ Vale passar `[filename]` ao `/export` e abrir o arquivo no editor? Economiza cliques, mas exige adivinhar a semântica do argumento                                                                                                  | 🟢 Baixo     |
+| **Q-13** | _(v1.2)_ A cópia deveria respeitar a seleção do mouse quando houver? `Ctrl+C` já cobre; `JBTerminalWidget.getSelectedText()` existe se mudarmos                                                                                              | 🟢 Baixo     |
+| **Q-16** | _(v1.4)_ Trocar o prazo fixo da capa por detecção de que o CLI já pintou? Avaliado: viável via `addModelListener` + `getScreenLines()`, mas acopla ao texto do banner                                                                        | 🟢 Baixo     |
+| **Q-17** | _(v1.4)_ Reintroduzir a capa sobre uma partida sem eco (D-20), deixando-a só como acabamento? O pior caso do prazo viraria "tela vazia", não "eco visível"                                                                                   | 🟢 Baixo     |
 | **Q-32** | ✅ **RESOLVIDA em 2026-08-09 (T-3.62): o `Ctrl+V` chega.** Com o `wl-clipboard` instalado, o print colado foi anexado e o arquivo apareceu em `~/.claude/image-cache/`. Ninguém consome a tecla antes do PTY. **RF-52 arquivado sem código** | ✅ Resolvido |
 
 ---
@@ -568,45 +571,46 @@ Concluído em 2026-08-08: ~~Achado 31 (prazo da síntese + cancelamento de RNF-2
 1. **Roteiros manuais em aberto — o inventário completo**, que até 2026-08-08 estava espalhado em
    dois lugares e omitia dois blocos:
 
-   | Bloco               | Roteiros           | Estado em 2026-08-08                                              |
-   | ------------------- | ------------------ | ----------------------------------------------------------------- |
-   | Base                | T-3.4              | ✅ aprovado (`--resume`)                                          |
-   | Base                | ~~T-3.3~~          | ⚰️ **inválido** — DEF-08; substituído por T-3.59, este ✅ aprovado |
-   | Base                | **T-3.5, T-3.6**   | ⏳ **pendentes** — outros IDEs, desinstalação                     |
-   | v1.4                | **T-3.18 a T-3.20**| ⏳ **pendentes** — tema, partida sem eco, diretório novo          |
-   | v1.5 (Piper)        | T-3.21 a T-3.23    | ✅ aprovados                                                      |
-   | v1.5 (RNF-20/23)    | T-3.26, T-3.27     | ✅ aprovados, **depois** da correção da v1.9.1                    |
-   | v1.7 (split)        | T-3.34 a T-3.41    | ✅ aprovados, incluindo T-3.36 (diff por pane)                    |
-   | v1.7.1 / v1.8       | T-3.42 a T-3.47    | ✅ uso real desde a release 0.7.0 — não por roteiro               |
-   | v1.8.2              | **T-3.48, 52, 53** | ⏳ **status nunca declarado** — T-3.48 aparece só como hipótese   |
+   | Bloco            | Roteiros            | Estado em 2026-08-08                                               |
+   | ---------------- | ------------------- | ------------------------------------------------------------------ |
+   | Base             | T-3.4               | ✅ aprovado (`--resume`)                                           |
+   | Base             | ~~T-3.3~~           | ⚰️ **inválido** — DEF-08; substituído por T-3.59, este ✅ aprovado |
+   | Base             | **T-3.5, T-3.6**    | ⏳ **pendentes** — outros IDEs, desinstalação                      |
+   | v1.4             | **T-3.18 a T-3.20** | ⏳ **pendentes** — tema, partida sem eco, diretório novo           |
+   | v1.5 (Piper)     | T-3.21 a T-3.23     | ✅ aprovados                                                       |
+   | v1.5 (RNF-20/23) | T-3.26, T-3.27      | ✅ aprovados, **depois** da correção da v1.9.1                     |
+   | v1.7 (split)     | T-3.34 a T-3.41     | ✅ aprovados, incluindo T-3.36 (diff por pane)                     |
+   | v1.7.1 / v1.8    | T-3.42 a T-3.47     | ✅ uso real desde a release 0.7.0 — não por roteiro                |
+   | v1.8.2           | **T-3.48, 52, 53**  | ⏳ **status nunca declarado** — T-3.48 aparece só como hipótese    |
 
-3. ~~**Q-02** — ambiguidade de sessão dupla~~ ✅ respondida em 2026-08-08 por T-3.59: é broadcast,
+2. ~~**Q-02** — ambiguidade de sessão dupla~~ ✅ respondida em 2026-08-08 por T-3.59: é broadcast,
    ninguém possui.
-4. **Decidir o destino do stash** `shell -i -c com exec`: mantê-lo como referência de D-20 ou
+3. **Decidir o destino do stash** `shell -i -c com exec`: mantê-lo como referência de D-20 ou
    descartar. Stash não é memória de longo prazo, e D-20 já registra a medição por escrito.
-5. **`gradle.properties` em `pluginVersion = 0.1.0`** contra a tag `v0.8.0` — decisão de release.
-6. **[TTS agnóstico](../20260807-tts-engine-agnostic.md)** _(rodada nova, não é dívida)_ — análise
+4. ~~**`gradle.properties` em `pluginVersion = 0.1.0`** contra a tag~~ ✅ quitado em 2026-08-10:
+   `pluginVersion = 0.9.0`, alinhado à tag `v0.9.0`.
+5. **[TTS agnóstico](../20260807-tts-engine-agnostic.md)** _(rodada nova, não é dívida)_ — análise
    Piper × Kokoro com latência medida e escopo de "motor de fala plugável". Depende de o
    `kokoro-tts.py` ganhar um modo que devolva os bytes: hoje ele toca sozinho e o plugin perderia
    `pause`/`resume`. O Kokoro **não está instalado** nesta máquina. ⚠️ **O rascunho reservava o
    número "v1.10" — que já foi usado por esta rodada.** Quando entrar, será v1.11 ou adiante.
 
-7. ~~**v1.10 — implementar RF-50 (play no popup)**~~ ✅ **feito em 2026-08-09.** Terceiro botão em
+6. ~~**v1.10 — implementar RF-50 (play no popup)**~~ ✅ **feito em 2026-08-09.** Terceiro botão em
    `ClaudeSelectionCopyButton`, guarda de notificação em `playText` (D-42), painel extraído para
    `buttonPanel` para poder testar o teto. T-1.62 a T-1.64 verdes.
 
-8. ~~**v1.10 — implementar RF-51 (`/usage` no cabeçalho)**~~ ✅ **feito em 2026-08-09.**
+7. ~~**v1.10 — implementar RF-51 (`/usage` no cabeçalho)**~~ ✅ **feito em 2026-08-09.**
    `ClaudeDockSessions.openUsage()` + `UsageSessionAction`, entre `ResumeSessionAction` e
    `SplitSessionMenuAction`. T-1.65 e T-1.66 verdes.
 
-9. **Rodar os roteiros manuais da v1.10 — T-3.63 a T-3.68.** T-3.65 já passou (o `/usage` abriu
+8. **Rodar os roteiros manuais da v1.10 — T-3.63 a T-3.68.** T-3.65 já passou (o `/usage` abriu
    na sessão). T-3.67 e T-3.68 são novos e medem DEF-09. É o que falta para RF-50/RF-51
    saírem de "compila e passa" para "funciona". T-3.64 é o mais importante dos quatro: mede
    justamente o aviso que não existia antes (DEF-07 de novo, se falhar).
 
-10. **v1.10 — rodar T-3.62 (colar print screen)**, e **primeiro** `sudo apt install wl-clipboard`.
-    O resultado decide se RF-52 vira código ou é arquivada (Q-32). **Não escrever código antes
-    desta medição** (D-44).
+9. **v1.10 — rodar T-3.62 (colar print screen)**, e **primeiro** `sudo apt install wl-clipboard`.
+   O resultado decide se RF-52 vira código ou é arquivada (Q-32). **Não escrever código antes
+   desta medição** (D-44).
 
 ---
 
@@ -652,7 +656,7 @@ espaço — **a contagem de botões nunca esteve no caminho causal**.
 
 **As duas pistas boas vieram do usuário, não da minha leitura de bytecode:**
 
-1. *"Por que com dois botões não dava e com três dá?"* — respondi que o `diff` era neutro. Verdade,
+1. _"Por que com dois botões não dava e com três dá?"_ — respondi que o `diff` era neutro. Verdade,
    e irrelevante: a pergunta apontava uma variável que eu não tinha **medido**. A resposta certa
    naquele momento era instrumentar, não argumentar.
 2. A captura de tela com **"copied N chars to clipboard"**, com a seleção sendo copiada **sem
@@ -681,8 +685,8 @@ em `POPUP_LAYER`. O `closeAllPopups` não a enxerga — não há popup registrad
 **Terceiro erro meu da rodada, e o mais barato de evitar:** ao propor a guarda, eu tratei uma
 limitação do ambiente como requisito do produto. O usuário não pediu para entender o mouse
 reporting — pediu que a barra aparecesse. **Explicar por que não dá não é entregar.** A saída
-existia (não ser popup) e estava a uma pergunta de distância: *"o que fecha popups não alcança o
-quê?"*
+existia (não ser popup) e estava a uma pergunta de distância: _"o que fecha popups não alcança o
+quê?"_
 
 **Lição — irmã do Achado 30, com uma volta a mais.** O Achado 30 foi publicar hipótese como
 conserto. Este foi publicar **hipótese verificada** como conserto, que é pior: a verificação dá
@@ -817,7 +821,7 @@ Agravante descoberto agora: entre a recusa de v1.5.1 e a v1.9, o item "Tocar sel
 Critério novo (Achado 34): entra no popup o que opera **sobre o trecho selecionado** e cabe em
 **um clique**. Teto de três. R-29 substitui R-23.
 
-**Uma coisa não é reuso, e é a única mudança real de comportamento:** `playText` hoje só *loga*
+**Uma coisa não é reuso, e é a única mudança real de comportamento:** `playText` hoje só _loga_
 quando o Piper não está configurado. Do cabeçalho isso não aparecia, porque o `update()` do menu
 desabilita o item antes do clique. **O popup não tem `update()`.** Sem aviso, o botão novo nasceria
 sendo o DEF-07 de novo. A guarda vai em `playText` (D-42) — um ponto, dois chamadores consertados.
@@ -991,10 +995,13 @@ qualquer outro.
 menção a partir da notificação MCP:
 
 ```js
-let r = path.relative(cwd(), e.filePath)
+let r = path.relative(cwd(), e.filePath);
 if (e.lineStart && e.lineEnd)
-  n = e.lineStart === e.lineEnd ? `@${r}#L${e.lineStart} ` : `@${r}#L${e.lineStart}-${e.lineEnd} `
-else n = `@${r} `
+  n =
+    e.lineStart === e.lineEnd
+      ? `@${r}#L${e.lineStart} `
+      : `@${r}#L${e.lineStart}-${e.lineEnd} `;
+else n = `@${r} `;
 ```
 
 Três regras que eu teria errado adivinhando, e cada uma virou teste: caminho **relativo ao cwd**,
@@ -1114,7 +1121,7 @@ T-3.36 seriam impossíveis de executar. `claude-code-jetbrains-plugin` foi copia
 > oficial depois de qualquer mudança de código**, ou os roteiros que dependem dele falham por
 > ausência e não por defeito. Foi conclusão tirada de duas observações sem variar a condição —
 > o mesmo erro de método do Achado 30. O servidor MCP subiu dentro do sandbox — lockfile `~/.claude/ide/41083.lock`, `transport: ws`,
-com o pid da IDE do sandbox. **Registrar isto poupa a próxima sessão de descobrir de novo.**
+> com o pid da IDE do sandbox. **Registrar isto poupa a próxima sessão de descobrir de novo.**
 
 ### 2026-08-08 (noite) — os roteiros de split, e a corroboração que veio do log
 

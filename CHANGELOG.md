@@ -7,6 +7,95 @@ segue [SemVer](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [0.9.0] — 2026-08-09
+
+Versão do **trecho selecionado**: a barra flutuante ganha um play e, enfim, fica de pé sobre uma
+sessão viva — sobre um TUI que rola sozinho ela nascia e sumia antes de dar tempo de clicar.
+Acompanha o consumo do Claude Code a um clique do cabeçalho.
+
+### Adicionado
+
+- **Tocar o trecho selecionado direto da barra flutuante** — terceiro botão, ao lado de copiar e
+  exportar. Passa pelo mesmo caminho de síntese do menu "Áudio", então a velocidade da fala
+  (v0.8.0), a pausa/retomada e a regra de uma fala por vez continuam valendo, com um dono só: o
+  play na barra e o do menu comandam a mesma reprodução.
+- **"Uso" no cabeçalho**, logo depois de "Retomar Sessão": envia `/usage` à sessão em foco. O
+  resultado aparece **dentro da própria sessão**, como a tela do CLI (`Esc` sai dela e devolve o
+  prompt), e não em popup. Sem sessão aberta, avisa.
+
+### Corrigido
+
+- **A barra da seleção aparecia e sumia sobre uma sessão em uso.** Ela nascia e era destruída
+  ~270 ms depois, "quase piscando", sem tempo de clicar em nada. Quem a derrubava era o
+  fechamento em massa de popups da plataforma, disparado por um evento de foco. A barra deixou de
+  ser um popup da plataforma: desenha igual, e agora fica de pé — com e sem `Shift`.
+- **Os botões liam a seleção na hora do clique.** Uma rolagem do terminal entre a barra aparecer e
+  o clique fazia copiar, exportar e tocar agirem sobre nada — em silêncio, no caso do copiar.
+  Agora agem sobre o trecho capturado no instante em que a barra aparece.
+- **Tocar sem o Piper configurado não dizia nada** — só registrava no log. Agora notifica, tanto
+  pelo botão quanto pelo menu: o aviso passou para o serviço, por onde os dois caminhos passam.
+
+### Notas
+
+- **Colar print screen com `Ctrl+V` já funciona** e não exigiu código: o `Ctrl+V` chega ao CLI
+  dentro da janela dedicada e a imagem é anexada normalmente. O que faltava era um pacote do
+  sistema (`wl-clipboard`, no Wayland). Avaliado como pedido e arquivado sem implementação.
+
+### Documentação
+
+- `plans/sdd/SPEC.md` evoluiu de 1.9 para 1.10.2: RF-50, RF-51 e RF-53; DEF-08 e DEF-09; decisões
+  D-41 e D-42; achados 32 a 36; e o teto de dois botões no popup (R-23) revogado e substituído por
+  um critério mais estreito (R-29): entra na barra o que opera sobre o trecho selecionado e cabe
+  em um clique.
+- **Achado 36:** mecanismo confirmado não é o mesmo que causa observada. O primeiro diagnóstico de
+  DEF-09 — a rolagem do terminal apagando a seleção — é real e verificado no bytecode, e **não**
+  era o que fechava a barra. Ficou registrado como tentativa fracassada, em vez de reescrito.
+- A investigação da pane que às vezes não conectava ao MCP foi **arquivada** após duas
+  não-reproduções: o Achado 32 documenta o mecanismo do plugin oficial, mas a causa do caso real
+  segue desconhecida.
+
+### Testes
+
+142 testes automatizados (eram 121 na 0.8.0), todos passando.
+
+---
+
+## [0.8.1] — 2026-08-09
+
+Versão de **dívida paga**: duas promessas que a documentação fazia desde a v0.6 e o código nunca
+cumpriu, e a lacuna de testes de integração mais antiga do projeto.
+
+### Adicionado
+
+- **"Enviar Seleção para o Claude Code"**, no menu de contexto do editor e no menu _Tools_: manda
+  a referência do trecho selecionado (`@arquivo#Lx-y`) para a sessão **em foco** e traz a janela à
+  frente. Não substitui o `Ctrl+Alt+K` do plugin oficial — resolve o que ele não faz: entregar a
+  uma pane só, e nesta janela. Sem atalho padrão, de propósito; quem quiser liga um em
+  _Settings > Keymap_.
+
+### Corrigido
+
+- **"Parar" não parava o Piper, e a síntese não tinha prazo.** O processo nunca era registrado,
+  então nem o limite de 20 s prometido desde a v0.6 nem a interrupção da fala anterior por um novo
+  play alcançavam o `piper` — o áudio em curso seguia até o fim, e uma síntese travada travava com
+  ela. A leitura da saída passou para thread própria: ela bloqueia até o processo terminar, e sem
+  isso o prazo seria decorativo.
+
+### Documentação
+
+- `plans/sdd/SPEC.md` evoluiu de 1.9 para 1.9.4. **DEF-08:** o `Ctrl+Alt+K` do plugin oficial
+  nunca poderia focar esta janela — ele varre só a tool window nativa "Terminal". O conteúdo do
+  trecho **chega** às nossas panes; o que vai para a janela errada é o foco. É defeito de
+  ergonomia, e a ação nova o contorna sem tocar no protocolo privado do oficial.
+
+### Testes
+
+136 testes automatizados (eram 121 na 0.8.0), com os **primeiros testes de integração** do projeto:
+registro da tool window, fiação da sessão, isolamento entre abas e a cadeia de `Disposable` que
+libera o PTY.
+
+---
+
 ## [0.8.0] — 2026-08-07
 
 Versão da **velocidade da fala**: o áudio do Piper deixa de sair sempre no ritmo do modelo.
@@ -127,6 +216,8 @@ As versões `0.5.x` e anteriores são anteriores a este arquivo e não estão de
 histórico completo, com as decisões de projeto e as descobertas de cada rodada, está em
 [`plans/sdd/HANDOFF.md`](plans/sdd/HANDOFF.md).
 
+[0.9.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.8.1...v0.9.0
+[0.8.1]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.5.2...v0.6.0
