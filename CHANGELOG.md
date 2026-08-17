@@ -7,6 +7,79 @@ segue [SemVer](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [0.11.0] — 2026-08-17
+
+Versão de **dar nome ao que se está fazendo**. Com quatro abas abertas, cada uma dividida em duas
+ou três sessões, a única pista de qual era qual era o índice automático — `Claude`, `Claude (2)`,
+`Claude (3)`. Agora a aba tem nome, e cada sessão dentro dela também.
+
+### Adicionado
+
+- **Renomear a aba**, por dois caminhos: botão direito no rótulo da aba, com edição no próprio
+  lugar (o mesmo gesto do terminal nativo do IDE), ou o item "Renomear a Aba…" no menu do
+  cabeçalho. O nome dado substitui o automático e vale enquanto a aba existir.
+- **Nomear cada sessão de uma aba dividida.** O nome aparece na faixa de respiro que já existe em
+  volta de cada sessão, então **não rouba nenhum pixel de altura do terminal**. É por isso que o
+  recurso cabe aqui: uma barra de título por sessão teria custado altura permanente em todas as
+  divisões, e foi recusada por isso na v0.7.0.
+- **Ao dividir, cada sessão já nasce rotulada** (`Sessão 1`, `Sessão 2`, …). É só um ponto de
+  partida: renomear por cima é um rename comum, e apagar deixando em branco limpa a faixa.
+
+### Alterado
+
+- **O menu "Dividir" do cabeçalho passou a se chamar "Sessões".** Dos oito itens dele, cinco não
+  dividem nada — renomear a aba, renomear a sessão, fechar a divisão, fechar todas e os dois de
+  reposicionar. Com o nome antigo, ninguém procurava "renomear" ali dentro.
+- **Deixar o nome em branco devolve o padrão**, em vez de recusar: a aba volta ao nome automático,
+  a sessão perde o rótulo. Cancelar o diálogo continua não alterando nada — apagar e desistir são
+  coisas diferentes.
+
+### Corrigido
+
+- **Os itens do menu do cabeçalho agiam sobre a sessão errada numa aba dividida.** Selecionar a
+  segunda sessão e pedir qualquer item do menu atingia a **primeira**. Atinge também **"Fechar
+  esta sessão", "Trocar de lado" e "Girar divisão"**, que carregam o defeito desde a v0.7.0 — e ele
+  passou despercebido porque, com duas sessões, trocar de lado fica igual acionado de qualquer uma,
+  e "fechar" acertando sempre a primeira parece intencional para quem acabou de clicar nela. Os
+  botões simples do cabeçalho, como "Uso", nunca foram afetados.
+- **O nome da aba e o sufixo "(encerrado)" apagavam um ao outro.** Renomear uma aba já encerrada
+  fazia o sufixo sumir — a aba passava a dizer que estava viva com o processo morto; e uma sessão
+  que encerrava depois de a aba ser renomeada fazia o nome dado voltar ao automático.
+- **Uma aba encerrada liberava o próprio nome para a aba seguinte.** Com `Claude (encerrado)` na
+  tela, a próxima aba nascia como `Claude`, duas abas visualmente iguais. Defeito antigo, corrigido
+  de passagem.
+
+### Notas
+
+- **Os nomes não sobrevivem ao fechamento do projeto**, como as abas e as divisões já não
+  sobreviviam. Guardar o nome sem guardar a aba seria guardar rótulo sem dono.
+- **O nome da sessão precisa de respiro para aparecer.** Ele é escrito na faixa em volta do
+  terminal; com o respiro zerado em _Settings → Tools → Claude Code Dock_ não há onde escrever, e o
+  nome fica guardado até você devolver algum espaço.
+
+### Documentação
+
+- `plans/sdd/SPEC.md` evoluiu de 1.11 para 1.12: RF-58 a RF-62, RNF-37 e RNF-38, decisões D-53 a
+  D-55, os defeitos DEF-11 e DEF-12, e os achados 42 a 44. A Q-34 (o nome do menu) foi **fechada
+  com evidência de uso**, e não por gosto.
+- **Achado 42:** metade do pedido já estava pronta na plataforma — a ação de renomear aba de tool
+  window existe e é pública, e o terminal do próprio IDE a usa. A outra metade esbarrava numa
+  recusa nossa (a barra de título por sessão), que **não foi revogada**: o critério dela era custo
+  de altura, e escrever na faixa que já é pintada não custa altura nenhuma.
+- **Achado 43:** o rótulo da aba nunca foi o nome dela — é nome + estado. Um rename ingênuo passa
+  em todo teste feliz e falha nas duas ordens de uso real.
+- **DEF-11 registra uma lição sobre o próprio processo:** três decisões de desenho ficaram sem
+  resposta e seguiram por padrão assumido. Duas se sustentaram; a terceira fez o recurso nascer
+  invisível, e o primeiro minuto de uso real derrubou.
+
+### Testes
+
+184 testes automatizados (eram 163 na 0.10.0), todos passando. Os dois pontos centrais foram
+verificados **por mutação**: quebrar a composição do nome derruba 5 testes, e remover a guarda que
+esconde o nome numa faixa curta derruba 1.
+
+---
+
 ## [0.10.0] — 2026-08-10
 
 Versão da **voz**. Entra o Kokoro-ONNX, com vozes bem melhores e escolha entre as 54 do modelo, em
@@ -288,6 +361,7 @@ As versões `0.5.x` e anteriores são anteriores a este arquivo e não estão de
 histórico completo, com as decisões de projeto e as descobertas de cada rodada, está em
 [`plans/sdd/HANDOFF.md`](plans/sdd/HANDOFF.md).
 
+[0.11.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.8.0...v0.8.1

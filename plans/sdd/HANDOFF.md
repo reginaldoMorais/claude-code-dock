@@ -105,7 +105,7 @@ v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 20
 > **Duas numerações, e não são a mesma.** O `SPEC.md` tem versionamento próprio (`v1.x`), que
 > conta rodadas de especificação; o release segue SemVer (`0.x.y`), no `CHANGELOG.md` e nas tags
 > do git. Mapa do que já saiu: **0.6.0** ← SPEC v1.5.1 · **0.7.0** ← SPEC v1.8.2 · **0.8.0** ←
-> SPEC v1.9 · **0.8.1** ← SPEC v1.9.4 · **0.9.0** ← SPEC v1.10.2 · **0.10.0** ← SPEC v1.11. Cada release tem também uma
+> SPEC v1.9 · **0.8.1** ← SPEC v1.9.4 · **0.9.0** ← SPEC v1.10.2 · **0.10.0** ← SPEC v1.11 · **0.11.0** ← SPEC v1.12. Cada release tem também uma
 > tag `-rc` no commit do código, anterior ao da publicação.
 
 | Artefato                                                         | Estado                                                                                                                                           |
@@ -115,7 +115,7 @@ v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 20
 | [SPEC.md](SPEC.md) _(anterior)_                                  | **v1.11** — RF-54 a RF-57, RNF-35/RNF-36, DEF-10, Achados 37 a 41; RNF-19 e RNF-22 revistos                                                     |
 | [SPEC.md](SPEC.md) _(anterior)_                                  | **v1.10.2** — RF-50, RF-51, RF-53; RF-52 condicional; DEF-09; Achados 33/34/35/36; Q-32 (executável) e Q-33 (fechada); R-23 substituído por R-29 |
 | `HANDOFF.md`                                                     | ✅ Este arquivo, com RF-49, a receita do cache do Gradle e o inventário de roteiros                                                              |
-| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.10.0** (2026-08-10)                                                                             |
+| [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.11.0** (2026-08-17). `gradle.properties` em `pluginVersion = 0.11.0`                            |
 | Código do plugin                                                 | ✅ **163 testes, 0 falhas, 0 erros**; **zero warnings**. A v1.11 acrescentou 21 testes                                                           |
 | **RF-58/RF-59/RF-62 (nome da aba, F1)**                          | ✅ **Implementados.** `ClaudeTabTitle.display`, `TAB_ENDED`, `applyTabName`, `RenameTabAction` + registro em `ToolWindowContextMenu`             |
 | **RF-60/RF-61 (subtítulo da pane, F2)**                          | ✅ **Implementados.** `PANE_SUBTITLE` + `drawSubtitle` na faixa que já era pintada                                                              |
