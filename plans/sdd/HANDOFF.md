@@ -4,13 +4,72 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-10 (noite)
+- **Última atualização:** 2026-08-17
 
 ---
 
 ## Estado atual
 
-**Fase: v1.11 — Kokoro-ONNX entra como motor de voz padrão, e a reprodução passa a ser em
+**Fase: v1.12 — F1 e F2 implementados; falta rodar F3 no IDE real.** Renomear a aba e nomear a
+sessão dividida (RF-58 a RF-62). **181 testes verdes** (eram 163; 18 casos novos), medidos em
+2026-08-17 com `clean test buildPlugin --rerun-tasks`.
+
+```
+SDD ✅ → F1 ✅ → F2 ✅ → F3 🔄 aprovado no essencial; DEF-11 e DEF-12 achados e corrigidos
+```
+
+**184 testes verdes.** O F3 aprovou no IDE real: rename da aba, rename de pane **em aba dividida**,
+nomes distintos entre abas e em divisão empilhada. **Pendem T-3.82 (aba única) e T-3.84 (respiro
+em 0)** — os dois que o headless não alcança.
+
+**O F3 pagou duas vezes.** Achou **DEF-11** (o subtítulo nascia vazio, então o recurso era
+invisível e o alvo do menu não tinha marca na tela) e, depois de corrigido, **DEF-12** — que
+estava embaixo e é **anterior ao rename**: todo item de **menu popup** agia sobre a pane errada,
+porque `preferredFocusableComponent` ficava preso à pane original e a plataforma devolvia o foco
+para lá ao abrir o popup, reescrevendo `SESSION_WIDGET` antes de a ação rodar. Atinge também
+**"Fechar esta sessão" (RF-41)** e **"Trocar de lado"/"Girar divisão" (RF-43)**, desde a v1.7/v1.8.
+
+**O F3 pagou por si na primeira tentativa.** O rename da aba funcionou — a aba virou "Aba 1" — e o
+subtítulo da pane **não apareceu**. Não por bug de pintura: um diagnóstico no ambiente de
+plataforma mediu `insets.top=20`, fonte 11pt de altura 13, cor `120,120,120` e **143 pixels
+alterados na faixa**. O subtítulo pinta. O que falhou foi o **desenho**: o default "vazio até
+nomear" tornou o recurso invisível, e o item age sobre a pane **em foco** sem que nada na tela
+diga qual é — daí "o segundo split não tem como renomear". **DEF-11**, corrigido com rótulo
+automático por pane e o menu renomeado de "Dividir" para **"Sessões"** (fecha Q-34). **183 testes.**
+
+**As duas lógicas centrais reprovam sob mutação**, e isso foi medido, não presumido: fazer
+`display` ignorar o estado derruba **5** testes; tirar a guarda de altura da faixa derruba **1**.
+Sem essa checagem, os 18 casos novos seriam decoração.
+
+⚠️ **"Zero warnings" deixou de valer, e não por causa desta rodada.** A compilação emite
+`w: settings/ClaudeDockConfigurable.kt:136 Unnecessary safe call on a non-null receiver of type
+'File'` — `it?.let` sobre um `File` que não é nulo. A linha é **idêntica no commit anterior** e o
+arquivo não foi tocado aqui. Eu repeti "zero warnings" no SPEC v1.12 sem ter medido; o número que
+eu havia conferido era o de testes. Conserto é de um caractere, e ficou de fora por ser escopo
+alheio — decidir se entra nesta branch ou numa de limpeza.
+
+**O achado que define a rodada: metade do pedido já estava pronta na plataforma.**
+`com.intellij.ide.actions.ToolWindowTabRenameActionBase` existe em
+`lib/intellij.platform.ide.impl.jar`, é pública, não é `@ApiStatus.Internal`, e o próprio Terminal
+a registra no grupo `ToolWindowContextMenu`. O rename in-place da aba custa **zero linha de UI
+nossa** — é a terceira vez que a resposta é "já existe" (D-33, Achado 33, agora Achado 42).
+
+**A outra metade esbarrou numa recusa nossa, e ela não foi revogada.** Q-28 recusou barra de
+título por pane em v1.8 pelo custo de **altura**. O subtítulo do split é pintado na faixa de
+respiro que `ClaudeSessionPadding` já desenha a cada frame (`ClaudeSessionPadding.kt:52-65`):
+altura zero, objeção de Q-28 não se aplica, decisão dela continua de pé (D-54).
+
+**A armadilha, e é o centro da rodada:** o rótulo da aba **nunca foi** o nome da aba. É
+`"$title (encerrado)"`, montado em `markEndedWhenLast` a partir de `TAB_TITLE`
+(`ClaudeDockSessions.kt:123-137`). Um rename que escreva só `displayName` quebra nas duas ordens —
+e **passa em qualquer teste feliz** (Achado 43). O conserto é `ClaudeTabTitle.display(base, ended)`
+com dois chamadores e mais nada.
+
+**Três perguntas foram feitas ao usuário e ficaram sem resposta**; o SPEC assumiu o default e
+registrou a alternativa descartada em cada caso: onde pintar o subtítulo (faixa, não barra),
+quantas entradas o rename tem (in-place + cabeçalho, D-55) e se a pane nasce nomeada (não).
+
+**Fase anterior: v1.11 — Kokoro-ONNX entra como motor de voz padrão, e a reprodução passa a ser em
 streaming.** **163 testes verdes, zero warnings — medidos em 2026-08-10 com `--rerun`.**
 Branch `feature/kokoro-onnx-tts`, **ainda não commitada**.
 
@@ -52,11 +111,16 @@ v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 20
 | Artefato                                                         | Estado                                                                                                                                           |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [../20260801-initial-project.md](../20260801-initial-project.md) | Documento de origem (contexto + roteiro SDD)                                                                                                     |
-| [SPEC.md](SPEC.md)                                               | ✅ **v1.11** — RF-54 a RF-57, RNF-35/RNF-36, DEF-10, Achados 37 a 41; RNF-19 e RNF-22 revistos                                                   |
+| [SPEC.md](SPEC.md)                                               | ✅ **v1.12** — RF-58 a RF-62, RNF-37/RNF-38, D-53 a D-55, CB-68 a CB-75, R-31/R-32, CA-34 a CA-38, Q-34/Q-35, Achados 42 a 44                    |
+| [SPEC.md](SPEC.md) _(anterior)_                                  | **v1.11** — RF-54 a RF-57, RNF-35/RNF-36, DEF-10, Achados 37 a 41; RNF-19 e RNF-22 revistos                                                     |
 | [SPEC.md](SPEC.md) _(anterior)_                                  | **v1.10.2** — RF-50, RF-51, RF-53; RF-52 condicional; DEF-09; Achados 33/34/35/36; Q-32 (executável) e Q-33 (fechada); R-23 substituído por R-29 |
 | `HANDOFF.md`                                                     | ✅ Este arquivo, com RF-49, a receita do cache do Gradle e o inventário de roteiros                                                              |
 | [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.10.0** (2026-08-10)                                                                             |
 | Código do plugin                                                 | ✅ **163 testes, 0 falhas, 0 erros**; **zero warnings**. A v1.11 acrescentou 21 testes                                                           |
+| **RF-58/RF-59/RF-62 (nome da aba, F1)**                          | ✅ **Implementados.** `ClaudeTabTitle.display`, `TAB_ENDED`, `applyTabName`, `RenameTabAction` + registro em `ToolWindowContextMenu`             |
+| **RF-60/RF-61 (subtítulo da pane, F2)**                          | ✅ **Implementados.** `PANE_SUBTITLE` + `drawSubtitle` na faixa que já era pintada                                                              |
+| **Roteiros T-3.80 a T-3.86**                                     | ⬜ **Pendentes — é o que falta.** **T-3.82 (aba única) e T-3.84 (respiro em 0)** decidem; nenhum dos dois é alcançável pelo headless            |
+| Código do plugin _(v1.12)_                                       | ✅ **181 testes, 0 falhas, 0 erros**; 1 warning **pré-existente** e alheio (`ClaudeDockConfigurable.kt:136`)                                    |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                                                                                        |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                                                                                          |
 | T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                                                                                           |
@@ -108,6 +172,16 @@ T-3.18-3.20 (tema, partida sem eco, diretório não confiável). Split, Piper, d
 `currentProcess`. A auditoria achou uma segunda promessa inerte no mesmo campo: o cancelamento de
 **RNF-23** ("novo play interrompe o anterior") nunca alcançou o piper. T-1.55 e T-1.56 provam as
 duas por efeito, e reprovam sob mutação.
+
+**Dívida conhecida (descarga dinâmica) — achada em 2026-08-17, e é anterior a esta rodada.** O
+plugin **não sobrevive a um unload a quente**: ao descarregar, o `ClaudeDockTab` criado em
+`ClaudeDockSessions.addSession` (`Disposer.newDisposable`, hoje na linha 86) segue pendurado em
+`ROOT_DISPOSABLE` sem ser disposto, e a plataforma registra `SEVERE — Memory leak detected`. A
+linha é **idêntica no commit anterior** (`git show HEAD:` confirma), então não é regressão do
+rename — apareceu agora só porque o hot-reload acidental exercitou o caminho pela primeira vez.
+**É exatamente o que o T-3.6 (desinstalação) mediria**, e o T-3.6 é um dos oito roteiros herdados
+nunca executados. Conserto provável: descartar as abas quando o plugin é descarregado, ou declarar
+`require-restart`. Não foi feito aqui por ser escopo alheio ao rename.
 
 **Dívida conhecida (código morto):** ~~`ClaudeTerminalSessionFactory.readText`~~ removido em
 2026-08-08 — sem chamadores desde que RF-24 substituiu RF-21.
@@ -396,6 +470,15 @@ The contents of the immutable workspace '~/.gradle/caches/9.2.0/transforms/<hash
   XMLs em `build/test-results` ficam **velhos**. Contar teste a partir deles nesse estado dá um
   número que parece atual e não é — conferir a data do arquivo antes de citar o total.
 
+**Rodar `runIde` com um sandbox já aberto derruba o que está aberto (2026-08-17).** O segundo
+`runIde` não abre janela nenhuma: vê a instância viva, entrega o pedido a ela e sai em 2 s com
+`BUILD SUCCESSFUL`. Pior, o `prepareSandbox` reescreve o jar do plugin **debaixo** da instância em
+execução, e como o sandbox roda com `-Didea.auto.reload.plugins=true` a IDE tenta descarregar o
+plugin a quente — falha, registra `Memory leak detected: 'ClaudeDockTab'` e morre com exit 2. O
+`runIde` do Gradle então reporta falha. **Nada disso é defeito do código sob teste.** Receita:
+**fechar o sandbox antes de subir outro**, e conferir com
+`pgrep -af "Didea.plugin.in.sandbox.mode=true"`.
+
 **E o `prepareSandbox` apaga o diretório de plugins quando roda de verdade.** Ele fica
 `UP-TO-DATE` enquanto nenhum fonte muda, o que dá a falsa impressão de que a cópia manual do
 plugin oficial sobrevive. **Depois de qualquer mudança de código, reinstalar o oficial** antes de
@@ -467,6 +550,33 @@ Ler a ordem não diz quem consome na prática. **T-3.62 mede, depois do `apt ins
 
 **Consequência:** popup exigiria o plugin ler o segredo do usuário. Recusado (RNF-34). O botão que
 envia `/usage` à sessão fica (RF-51).
+
+### O rename de aba de tool window é da plataforma (2026-08-17)
+
+> **Não reinvestigar.** Tudo obtido por `javap` sobre a distribuição **2026.2** que o build usa.
+> Revalidar só após upgrade de IDE.
+
+| Fato                                                                   | Como foi obtido                                                                                                              |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `com.intellij.ide.actions.ToolWindowTabRenameActionBase` existe        | `lib/intellij.platform.ide.impl.jar` — varrido com `zipfile` em Python, **não** com `grep` (ver a armadilha do `grep -a` já registrada) |
+| É `public`, não é `@ApiStatus.Internal`                                | `javap -v`: as únicas anotações da classe são `kotlin.Metadata` e `@NotNull`                                                  |
+| Estende `com.intellij.openapi.wm.ToolWindowContextMenuActionBase`      | pacote de API pública; a base já entrega `getActionUpdateThread()` e `isDumbAware()`                                          |
+| `update` habilita por `id` de tool window                              | bytecode: `setEnabledAndVisible(project != null && areEqual(toolWindow.id, toolWindowId) && content != null)`                 |
+| Dois ganchos `open` para sobrescrever                                  | `getContentDisplayNameToEdit(content, project)` e `applyContentDisplayName(content, project, newName)`                        |
+| Funciona **com uma aba só**                                            | `actionPerformed` lê `PlatformCoreDataKeys.CONTEXT_COMPONENT`; não sendo `BaseLabel`, cai para `ToolWindowContentUi.SELECTED_CONTENT_TAB_LABEL` |
+| O grupo do menu de contexto de aba é `ToolWindowContextMenu`           | literal dentro de `com/intellij/openapi/wm/impl/content/ToolWindowContentUi.class`                                            |
+| O Terminal registra a dele exatamente assim                            | `terminal.jar!/META-INF/plugin.xml:174-176` — `Terminal.RenameSession` → `TerminalRenameTabAction`, `add-to-group ToolWindowContextMenu` |
+| `RenameTerminalSessionAction` estende a mesma base                     | `javap -c`: lê o `TerminalTitle` no primeiro gancho, grava `state.userDefinedTitle` no segundo                                |
+
+**Onde isto **não** serve:** `TerminalWidget.terminalTitle` nomeia a aba da tool window
+`"Terminal"`, cujo `ContentManager` não contém as nossas panes — é o mesmo fato que produziu
+DEF-08. Escrever ali não pinta nada na nossa janela.
+
+**Nota de método, repetida porque a armadilha voltou.** A primeira varredura com
+`for j in $IDE/lib/*.jar; do unzip -l ... | grep ...` deu **falso negativo** e quase fez concluir
+que a classe não existia. A varredura que funcionou foi um laço `zipfile` em Python sobre **todos**
+os jars, inclusive `plugins/*/lib/`. É a terceira vez que uma busca mal montada quase decide um
+desenho — a primeira foi o `grep` sem `-a` de 2026-08-01.
 
 ### API de terminal disponível na build 262
 
@@ -656,6 +766,42 @@ o próprio custo. O prefixo `" . "` passou a valer só no primeiro pedaço (Acha
 em disco e de um artefato que o próprio onnxruntime avisa ser específico do hardware em que foi
 gerado. A carga é I/O de 325 MB, não otimização de grafo.
 
+### D-53 — o rename in-place da aba é da plataforma, e não escrevemos UI _(v1.12)_
+
+`ToolWindowTabRenameActionBase` faz a edição sobre o rótulo, com o campo, o posicionamento e o
+ciclo de vida do popup. Subclassear e sobrescrever dois métodos é todo o nosso lado. Escrever um
+diálogo próprio para a aba teria funcionado — e é justamente por funcionar que esse tipo de
+trabalho inútil passa despercebido.
+
+**Contrapartida aceita:** a classe vive em `intellij.platform.ide.impl` e pode sumir num upgrade
+(R-31). A capacidade **degrada, não morre**, porque o caminho do cabeçalho não depende dela.
+
+### D-54 — o subtítulo da pane é pintado no respiro, não numa barra _(v1.12)_
+
+Q-28 recusou barra de título por pane porque ela custa altura permanente para servir uma ação
+ocasional. O critério continua correto. O que mudou foi o **suporte**: a faixa de respiro de
+RF-28 já existe, já é pintada a cada `paintBorder`, e escrever nela custa zero altura.
+
+Não é revogação de Q-28 — é constatação de que a objeção dela não alcança este desenho. A barra
+continua recusada, e Q-28 continua sendo o lugar onde essa discussão vive se o subtítulo na faixa
+se mostrar ilegível no uso real.
+
+**Teto conhecido:** `MIN_PADDING = 0` (`settings/ClaudeDockSettings.kt:110`). Respiro zerado ⇒ sem
+faixa ⇒ sem subtítulo. Degrada em silêncio em vez de forçar o respiro a crescer, porque crescer
+seria desfazer o layout que o usuário pediu (R-32, CB-69).
+
+### D-55 — um escritor de nome, duas entradas _(v1.12)_
+
+`applyTabName(content, name)` é o único ponto que toca `TAB_TITLE` e `displayName`. O menu de
+contexto da aba e o item do cabeçalho apenas o chamam.
+
+**Por que duas entradas, se o RF-30 foi recusado por ser "segundo caminho"?** Porque o critério de
+v1.5.1 era sobre **alcance**, não sobre contagem: lá o primeiro caminho era o menu "Áudio" do
+nosso cabeçalho, visível e já usado. Aqui o primeiro caminho é o menu de contexto da **aba**, onde
+o plugin nunca pôs nada em onze versões — ninguém clica ali procurando função nova. É a situação
+do Achado 29, não a do RF-30. Critério escrito no Achado 44, para a próxima rodada poder aplicá-lo
+em vez de reabrir a discussão.
+
 ---
 
 ## Desafios em aberto
@@ -678,6 +824,9 @@ gerado. A carga é I/O de 325 MB, não otimização de grafo.
 | **Q-16** | _(v1.4)_ Trocar o prazo fixo da capa por detecção de que o CLI já pintou? Avaliado: viável via `addModelListener` + `getScreenLines()`, mas acopla ao texto do banner                                                                                               | 🟢 Baixo     |
 | **Q-17** | _(v1.4)_ Reintroduzir a capa sobre uma partida sem eco (D-20), deixando-a só como acabamento? O pior caso do prazo viraria "tela vazia", não "eco visível"                                                                                                          | 🟢 Baixo     |
 | **Q-32** | ✅ **RESOLVIDA em 2026-08-09 (T-3.62): o `Ctrl+V` chega.** Com o `wl-clipboard` instalado, o print colado foi anexado e o arquivo apareceu em `~/.claude/image-cache/`. Ninguém consome a tecla antes do PTY. **RF-52 arquivado sem código**                        | ✅ Resolvido |
+| **Q-34** | _(v1.12)_ O menu "Dividir" ainda se chama pelo que faz? Já hospeda fechar, e agora renomear — quatro dos oito itens não dividem nada. Renomear para "Sessões" descreveria melhor, mas mistura duas mudanças no mesmo passo. **Decidir depois de T-3.80–86**; o precedente de nome errado de menu é o DEF-06 | 🟢 Baixo     |
+| **Q-35** | _(v1.12)_ O nome da aba deveria alimentar o `claude --resume`? **Não** — o nome morre com a janela, o histórico vive no CLI (D-02). Ligar os dois exigiria persistir um mapa sessão↔nome e casá-lo com identificadores que o CLI não promete manter. Reabrir só se Q-07 reabrir                                | 🟢 Baixo     |
+| **R-32** | _(v1.12)_ Subtítulo de pane depende de `effectivePadding() > 0`. Com o respiro zerado o recurso some sem explicar por quê. Padrão é 20px e zerar exige ir a Settings de propósito, então a exposição é baixa — mas **não medida**: é o T-3.84                                                               | 🟢 Baixo     |
 
 ---
 
@@ -751,7 +900,205 @@ rodada nova do TTS agnóstico (item 5). **Nenhum código pendente:** 142 testes 
 
 ---
 
+### v1.12 — implementação, quando o SPEC for aprovado
+
+**Nada abaixo foi iniciado.** A ordem é deliberada: F1 fecha a armadilha do `(encerrado)` antes de
+qualquer UI nova, porque é ela que decide se o resto nasce certo.
+
+| Fase   | Escopo                                                                                                                                                     | Testes que fecham a fase                          |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **F1** | `ClaudeTabTitle.display(base, ended)` · `TAB_ENDED` · `applyTabName` · `renameSelectedTab` · `nextTabTitle` lendo o nome base · `RenameTabAction` + registro em `plugin-terminal.xml` · item no menu do cabeçalho | T-1.67 a T-1.71, T-1.75 · `./gradlew test`        |
+| **F2** | `PANE_SUBTITLE` · desenho na faixa em `TerminalBackgroundBorder` com guarda de altura e `clipRect` · `renameSelectedPane` · item no menu do cabeçalho       | T-1.72 a T-1.74 · `./gradlew test`                |
+| **F3** | Roteiros manuais no IDE real                                                                                                                               | T-3.80 a T-3.86 — **T-3.82 e T-3.84 são os que decidem** |
+
+**Arquivos previstos:** `ClaudeTabTitle.kt`, `ClaudeDockSessions.kt`, `ClaudeSessionPadding.kt`,
+`actions/RenameTabAction.kt` _(novo)_, `actions/SplitSessionAction.kt`,
+`META-INF/plugin-terminal.xml`, e os testes de `ClaudeTabTitleTest`, `ClaudeSessionPaddingTest`,
+`ClaudeSessionSplitterTest` e `ClaudeDockSessionsUsageTest`.
+
+**Linha de base a não regredir: 163 testes verdes, zero warnings.** Conforme o `CLAUDE.md`, a
+suíte roda ao fim de cada fase, e cada código novo ou alterado leva teste junto.
+
+---
+
 ## Log
+
+### 2026-08-17 (noite) — F3: dois defeitos, e o segundo era mais velho que a rodada
+
+**184 testes verdes. O rename está aprovado no IDE real** — aba, pane em aba dividida, nomes
+distintos entre abas e em divisão empilhada. Faltam T-3.82 e T-3.84.
+
+**O F3 se pagou duas vezes, e nenhuma das duas era alcançável por teste automatizado.**
+
+**DEF-11 — o recurso nasceu invisível.** Primeiro uso: nenhum subtítulo apareceu, e o relato foi
+"o segundo split não tem como renomear". **Antes de mexer em qualquer linha, medi a pintura** com
+um diagnóstico temporário no ambiente de plataforma: `insets.top=20`, fonte 11pt de altura 13,
+cor `120,120,120`, **143 pixels alterados na faixa**. O subtítulo pintava. O que falhava era o
+desenho: o default "vazio até nomear" — um dos três que assumi à falta de resposta — tornava o
+recurso invisível, e o item agia sobre a pane **em foco** sem que nada na tela dissesse qual era.
+Conserto: rótulo automático por pane ao dividir, e o menu renomeado de "Dividir" para **"Sessões"**
+(fecha Q-34, que estava aberta esperando exatamente este roteiro).
+
+**DEF-12 — e aqui eu quase consertei o culpado errado de novo.** Com as panes rotuladas, ficou
+visível que selecionar a pane 2 e pedir rename abria o diálogo com o nome da **pane 1**. A
+hipótese — `preferredFocusableComponent` preso à pane original, e o popup devolvendo o foco para
+lá — era mecanicamente consistente, **e era só hipótese**. O que a sustentou antes de virar código
+foi uma assimetria observada: o `/usage` **funciona** na pane em foco (T-3.66, aprovado na v1.10),
+e ele é **botão**, não item de menu popup.
+
+Então instrumentei em vez de confiar. Depois do conserto, o log registrou:
+
+```
+DEF-12 renameSelectedPane alvo=Sessão 2
+DEF-12 sessionFocused: pane=Sessão 2
+DEF-12 sessionFocused: pane=Sessão 2 xyz   ← o foco volta ao fechar o diálogo
+```
+
+A terceira linha é a prova de que **o retorno de foco existe** — era ele que reescrevia o alvo — e
+de que agora aterrissa na pane certa. **Sem ela, o conserto teria sido aceito por efeito**, que é
+exatamente como a v1.10.1 consertou o mecanismo errado (Achado 36). As duas linhas temporárias
+foram removidas.
+
+**O defeito é anterior ao rename, e maior que ele.** "Fechar esta sessão" (RF-41), "Trocar de
+lado" e "Girar divisão" (RF-43) passam pelo mesmo `selectedWidget()` e carregam o erro desde a
+v1.7/v1.8. Ninguém notou porque um *swap* de duas panes é simétrico, e "fechar" acertando a pane 1
+parece intencional para quem acabou de clicar nela. Conserto único: `pointTabAt`, que move as duas
+referências juntas, com o invariante fixado em T-1.76.
+
+**Uma lição sobre o SDD, e ela é a mais cara da rodada.** Três perguntas ficaram sem resposta na
+especificação e eu segui com o default nas três. **Duas se sustentaram; a terceira produziu o
+DEF-11 no primeiro minuto de uso real.** Default assumido não é decisão tomada — é dívida com
+prazo até alguém abrir a IDE. E o roteiro manual não é burocracia: os dois defeitos desta rodada
+estavam fora do alcance dos 184 testes, e o segundo estava escondido havia cinco versões.
+
+**Também aprendi a não rodar `runIde` por cima de um sandbox aberto** — o `prepareSandbox`
+reescreve o jar debaixo da instância viva, o hot-reload falha, e a sessão de teste do usuário morre
+com exit 2. Registrado nas armadilhas, junto do `Memory leak detected: 'ClaudeDockTab'` que esse
+acidente revelou (dívida anterior, ligada ao T-3.6).
+
+### 2026-08-17 (tarde) — v1.12 F1 e F2: o rename existe, e a plataforma fez metade
+
+**181 testes verdes** (eram 163). `clean test buildPlugin --rerun-tasks` em 44 s.
+
+**A previsão do SDD se confirmou onde mais importava.** `ToolWindowTabRenameActionBase` era mesmo
+subclassável: dois `override` e um `<add-to-group group-id="ToolWindowContextMenu">`, e o rename
+in-place da aba passou a existir sem uma linha de UI nossa. O `javap` não mentiu sobre `open` —
+compilou de primeira.
+
+**O único erro de implementação foi meu, e foi de memória.** Importei
+`com.intellij.openapi.wm.impl.ToolWindowHeadlessManagerImpl` de cabeça; o pacote certo é
+`com.intellij.toolWindow.` — e estava escrito no `ClaudeDockIntegrationTest`, a três linhas de
+distância. Custou um ciclo de compilação. **Regra que já vale para o jar e agora vale para o
+import: conferir onde o projeto já usa, em vez de lembrar.**
+
+**A suíte foi verificada por mutação, e é isso que dá valor aos 18 casos novos.** Duas mutações
+deliberadas, rodadas juntas:
+
+| Mutação                                              | Testes que caíram |
+| ---------------------------------------------------- | ----------------- |
+| `display` ignora `ended` (o Achado 43 de volta)      | **5**             |
+| some a guarda `metrics.height > insets.top` (CB-69)  | **1**             |
+
+Os dois pontos que o SDD apontou como centrais são exatamente os que a suíte protege. Sem essa
+checagem eu teria 18 testes verdes sem saber se algum deles reprova alguma coisa.
+
+**Uma decisão de implementação contrariou um RNF que eu mesmo escrevi.** RNF-38 dizia "não alocar
+por frame"; o desenho do subtítulo usa `g.create()` + `dispose()`, que aloca um `Graphics`
+derivado por frame — e só quando há subtítulo. O motivo é que `Border.paintBorder` **não possui** o
+`Graphics` que recebe: mudar fonte, cor e recorte nele deixaria o objeto sujo para quem pintasse
+depois. As saídas sem alocação eram piores (restaurar o `clip` devolve um `Shape`; truncar a
+string aloca a substring). **O RNF foi corrigido, não o código** — contorcer a implementação para
+satisfazer a letra de um requisito de performance que ninguém mediu seria trocar correção por
+conformidade.
+
+**Um fato que eu havia repetido sem medir caiu.** "163 testes verdes, **zero warnings**" atravessou
+a v1.11 e eu o copiei para o SPEC v1.12. Os testes eu conferi; os warnings, não. A compilação emite
+`Unnecessary safe call on a non-null receiver of type 'File'` em
+`settings/ClaudeDockConfigurable.kt:136`, **idêntico no commit anterior**. Não é regressão desta
+rodada, e o conserto é de um caractere — mas o número no documento estava errado desde antes, e
+agora está corrigido nos dois arquivos. **Herdar um número não é o mesmo que verificá-lo.**
+
+**Q-34 ficou mais afiada, não resolvida.** O menu "Dividir" agora tem oito itens, e **cinco** não
+dividem nada: renomear a aba, renomear a sessão, fechar a divisão, fechar todas, além dos dois de
+reposicionar. O nome do menu está pior do que estava quando a pergunta foi aberta. Segue para
+decidir depois de F3, como planejado — mas o argumento a favor de "Sessões" cresceu.
+
+**O que falta:** F3, os roteiros T-3.80 a T-3.86 no IDE real. **T-3.82** (aba única, que exerce o
+fallback `SELECTED_CONTENT_TAB_LABEL`) e **T-3.84** (respiro em 0, que exerce a degradação) são os
+dois que o headless não alcança — se algum desenho desta rodada estiver errado, é num deles que
+aparece.
+
+### 2026-08-17 — SDD v1.12: renomear a aba e nomear o split
+
+**Entregável desta sessão: dois documentos. Zero linha de `src/`.**
+
+O pedido chegou em `plans/20260817-rename-tab.md`: renomear abas ou splits, "talvez até uma
+subtitle para os splits, já que uma tab pode ter N splits". Parece um pedido; são dois problemas
+sem nada em comum, e foi essa separação que organizou a rodada inteira.
+
+**A descoberta veio de procurar antes de escrever.** A primeira ideia era um `Messages.showInputDialog`
+e pronto. Antes disso, a pergunta "como o Terminal faz?" — e o Terminal faz com
+`ToolWindowTabRenameActionBase`, classe pública da plataforma que entrega a edição in-place inteira.
+Sobrescrever dois métodos e registrar num grupo é todo o nosso lado. **É a terceira vez neste
+projeto que a resposta certa era "já existe"** (D-33 no split, Achado 33 no colar imagem, agora
+esta), e o padrão já é teimoso o bastante para virar hábito: antes de escrever UI de plataforma,
+procurar a classe no jar com `javap`.
+
+**A busca quase deu falso negativo, pela terceira vez.** O laço
+`for j in $IDE/lib/*.jar; do unzip -l | grep; done` não achou nada e por um momento a conclusão foi
+"não existe". A varredura que funcionou foi `zipfile` em Python sobre **todos** os jars. É a mesma
+família de erro do `grep` sem `-a` de 2026-08-01 — registrada de novo em Fatos verificados, porque
+registrar uma vez claramente não bastou.
+
+**A metade da pane esbarrou em nós mesmos.** Não há onde pendurar um rótulo: a pane é um
+`JComponent` numa árvore de `Splitter`, sem aba e sem menu próprio, e a superfície inteira dela é
+terminal. **Q-28 já tinha recusado barra de título por pane**, em v1.8, por custo de altura.
+
+A tentação era revogar Q-28 — "agora o caso é outro". Não foi isso. A pergunta certa era **qual era
+o critério dela**, e o critério era altura. Aí apareceu que a faixa de respiro de RF-28 já é
+espaço reservado e repintado a cada frame (`ClaudeSessionPadding.kt:52-65`): escrever nela custa
+**zero altura**, então a objeção não alcança este desenho e Q-28 continua de pé para o caso que ela
+realmente julgava. D-54 registra; Achado 42 registra a lição, que é sobre como reabrir decisão
+antiga sem transformá-la em gosto.
+
+**A armadilha só apareceu porque o código foi lido até o fim.** `markEndedWhenLast` monta
+`"$title (encerrado)"` a partir de `TAB_TITLE`, e a KDoc dessa chave diz por quê: evitar
+`"(encerrado) (encerrado)"`. Ou seja, **o rótulo da aba nunca foi o nome da aba** — é composição
+com estado. Um rename que escreva só `displayName` quebra nas duas ordens (renomear depois de
+encerrar apaga o sufixo; encerrar depois de renomear apaga o nome) e **passa em qualquer roteiro
+feliz**. É a classe de defeito que aparece dias depois como "às vezes ele esquece o nome". Conserto:
+`ClaudeTabTitle.display(base, ended)` no objeto puro que já existe, com exatamente dois chamadores.
+Achado 43, RF-59, T-1.67 a T-1.71 e T-3.83.
+
+**Um defeito pré-existente caiu no colo.** `nextTabTitle` monta o conjunto de nomes usados lendo
+`displayName` — então uma aba em `"Claude (encerrado)"` libera o literal `"Claude"` e a próxima aba
+nasce com nome idêntico ao de uma que está na tela. Nunca foi relatado, não ganhou DEF, e some com
+a mesma linha que a v1.12 muda de qualquer forma (T-1.70).
+
+**Três perguntas foram feitas ao usuário e não foram respondidas.** O SPEC seguiu com o default e
+registrou a alternativa descartada em cada uma, para a decisão poder ser revista sem arqueologia:
+
+| Pergunta                              | Default assumido                                   | Alternativa registrada em |
+| ------------------------------------- | -------------------------------------------------- | ------------------------- |
+| Onde renderizar o subtítulo           | pintado na faixa de respiro (altura zero)          | D-54, Q-28                |
+| Quantas entradas o rename da aba tem  | in-place na aba **+** diálogo no cabeçalho         | D-55, Achado 44           |
+| Pane nasce nomeada?                   | não — vazia até o usuário nomear                   | RF-60                     |
+
+**O terceiro achado é sobre régua, não sobre código.** Aceitar duas entradas para o rename depois
+de ter recusado o RF-30 por "segundo caminho para a mesma ação" exigia dizer o que mudou, sob pena
+de o critério virar gosto. O que muda é o **alcance do primeiro caminho**: em v1.5.1 ele era o menu
+"Áudio" do nosso cabeçalho, visível e já usado; aqui é o menu de contexto da aba, onde o plugin
+nunca pôs nada em onze versões. Critério escrito no Achado 44, com o teste que ele impõe ao próximo
+pedido: "o usuário descobriria isto sozinho?".
+
+**Uma quebra de forma, deliberada.** As 11 versões anteriores do SPEC usam blocos ASCII e nenhum
+`mermaid`. A v1.12 introduz dois diagramas `mermaid` — e só dois — porque o roteiro de SDD pede o
+nó que quebra em destaque, e destaque é exatamente o que o ASCII não faz. Os blocos ASCII
+existentes ficam onde estão.
+
+**Estado ao fim da sessão:** `SPEC.md` em v1.12 (3.9k linhas), `HANDOFF.md` neste ponto, `src/`
+intocado, suíte não executada porque não há o que testar ainda. **Próximo passo é aprovação do
+SPEC**, e depois F1 → F2 → F3 conforme a tabela em Próximos passos.
 
 ### 2026-08-10 (noite/2) — o IDE real, e um WARN que era só cancelamento
 

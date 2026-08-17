@@ -313,6 +313,41 @@ class ClaudeSessionSplitterTest {
         assertFalse(ClaudeSessionSplitter.split(pane(), pane(), stacked = false))
     }
 
+    /**
+     * T-1.73 — trocar de lado e girar não mexem no nome de ninguém (CB-74).
+     *
+     * Fixa a razão de RNF-37: o nome vive numa `clientProperty` do próprio componente e o splitter
+     * apenas reparenta, então não existe estado paralelo a sincronizar. Se algum dia a divisão
+     * passar a **copiar** componentes em vez de movê-los, é este teste que cai.
+     */
+    @Test
+    fun `subtitulo acompanha a pane em swap e rotate`() {
+        val first = pane().also { ClaudeSessionPadding.setSubtitle(it, "backend") }
+        val second = pane().also { ClaudeSessionPadding.setSubtitle(it, "frontend") }
+        ClaudeSessionSplitter.root(first)
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+
+        ClaudeSessionSplitter.swap(first)
+        ClaudeSessionSplitter.rotate(first)
+
+        assertEquals("backend", ClaudeSessionPadding.subtitleOf(first))
+        assertEquals("frontend", ClaudeSessionPadding.subtitleOf(second))
+    }
+
+    /** T-1.74 — fechar uma pane não transfere o nome dela para a irmã. */
+    @Test
+    fun `a pane sobrevivente mantem o proprio subtitulo`() {
+        val first = pane().also { ClaudeSessionPadding.setSubtitle(it, "backend") }
+        val second = pane().also { ClaudeSessionPadding.setSubtitle(it, "frontend") }
+        ClaudeSessionSplitter.root(first)
+        ClaudeSessionSplitter.split(first, second, stacked = false)
+
+        val survivor = ClaudeSessionSplitter.close(first)
+
+        assertSame(second, survivor)
+        assertEquals("frontend", ClaudeSessionPadding.subtitleOf(second))
+    }
+
     private fun assertEqualsGeometry(expected: Int, actual: Int) =
         assertTrue("esperado $expected, obtido $actual", expected == actual)
 }
