@@ -9,7 +9,14 @@ import com.intellij.openapi.project.DumbAware
 import dev.reginaldomorais.claudedock.ClaudeDockSessions
 
 /**
- * Menu "Dividir" no cabeçalho da tool window (RF-36).
+ * Menu "Sessões" no cabeçalho da tool window (RF-36).
+ *
+ * _(v1.12)_ **Chamava-se "Dividir" e o nome mentia** — dos oito itens, cinco não dividem nada:
+ * renomear a aba, renomear a sessão, fechar a divisão, fechar todas e os dois de reposicionar.
+ * Q-34 previa decidir isto depois dos roteiros manuais, e o F3 decidiu: o usuário não achou o
+ * rename, porque ninguém procura "renomear" dentro de "Dividir". É o mesmo defeito do DEF-06, em
+ * que "Fechar divisão" foi lido como "fechar as divisões" — nome de menu que descreve um item em
+ * vez do conjunto.
  *
  * O menu de contexto do próprio terminal já oferece "Split Right"/"Split Down" desde que o
  * listener esteja instalado (D-33), então este menu é um **segundo caminho** para a mesma ação —
@@ -18,11 +25,12 @@ import dev.reginaldomorais.claudedock.ClaudeDockSessions
  * mouse"), e o menu de contexto do terminal é tão invisível quanto. Decisão do usuário, com o
  * conflito registrado em D-35.
  */
-class SplitSessionMenuAction : DefaultActionGroup("Dividir", true), DumbAware {
+class SplitSessionMenuAction : DefaultActionGroup("Sessões", true), DumbAware {
 
     init {
         templatePresentation.icon = AllIcons.Actions.SplitVertically
-        templatePresentation.description = "Divide a aba em duas sessões do Claude Code"
+        templatePresentation.description =
+            "Divide, reposiciona, renomeia e fecha as sessões do Claude Code"
 
         addAll(
             SplitSessionAction(
@@ -50,6 +58,14 @@ class SplitSessionMenuAction : DefaultActionGroup("Dividir", true), DumbAware {
                 "Alterna entre lado a lado e empilhado",
                 AllIcons.Actions.SynchronizeScrolling,
             ) { it.rotateSelectedSplit() },
+        )
+        addSeparator()
+        // _(v1.12)_ Renomear entra aqui, e não num ícone novo do cabeçalho: o menu já é o lugar
+        // onde "esta sessão" e "a aba" são coisas distintas, que é a distinção que o rename faz.
+        // O nome "Dividir" fica sob medida errada com isso — registrado em Q-34.
+        addAll(
+            RenameTabMenuAction(),
+            RenamePaneMenuAction(),
         )
         addSeparator()
         add(CloseSplitAction())

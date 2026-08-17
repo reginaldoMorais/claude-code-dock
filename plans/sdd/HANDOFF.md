@@ -10,13 +10,43 @@
 
 ## Estado atual
 
-**Fase: v1.12 — SDD escrito, implementação não iniciada.** Renomear a aba e nomear a sessão
-dividida (RF-58 a RF-62). **Nenhuma linha de `src/` foi tocada nesta rodada**; a linha de base a
-não regredir continua sendo os **163 testes verdes, zero warnings** da v1.11.
+**Fase: v1.12 — F1 e F2 implementados; falta rodar F3 no IDE real.** Renomear a aba e nomear a
+sessão dividida (RF-58 a RF-62). **181 testes verdes** (eram 163; 18 casos novos), medidos em
+2026-08-17 com `clean test buildPlugin --rerun-tasks`.
 
 ```
-SDD ✅ → F1 (rename da aba) ⬜ → F2 (subtítulo da pane) ⬜ → F3 (roteiros manuais T-3.80–86) ⬜
+SDD ✅ → F1 ✅ → F2 ✅ → F3 🔄 aprovado no essencial; DEF-11 e DEF-12 achados e corrigidos
 ```
+
+**184 testes verdes.** O F3 aprovou no IDE real: rename da aba, rename de pane **em aba dividida**,
+nomes distintos entre abas e em divisão empilhada. **Pendem T-3.82 (aba única) e T-3.84 (respiro
+em 0)** — os dois que o headless não alcança.
+
+**O F3 pagou duas vezes.** Achou **DEF-11** (o subtítulo nascia vazio, então o recurso era
+invisível e o alvo do menu não tinha marca na tela) e, depois de corrigido, **DEF-12** — que
+estava embaixo e é **anterior ao rename**: todo item de **menu popup** agia sobre a pane errada,
+porque `preferredFocusableComponent` ficava preso à pane original e a plataforma devolvia o foco
+para lá ao abrir o popup, reescrevendo `SESSION_WIDGET` antes de a ação rodar. Atinge também
+**"Fechar esta sessão" (RF-41)** e **"Trocar de lado"/"Girar divisão" (RF-43)**, desde a v1.7/v1.8.
+
+**O F3 pagou por si na primeira tentativa.** O rename da aba funcionou — a aba virou "Aba 1" — e o
+subtítulo da pane **não apareceu**. Não por bug de pintura: um diagnóstico no ambiente de
+plataforma mediu `insets.top=20`, fonte 11pt de altura 13, cor `120,120,120` e **143 pixels
+alterados na faixa**. O subtítulo pinta. O que falhou foi o **desenho**: o default "vazio até
+nomear" tornou o recurso invisível, e o item age sobre a pane **em foco** sem que nada na tela
+diga qual é — daí "o segundo split não tem como renomear". **DEF-11**, corrigido com rótulo
+automático por pane e o menu renomeado de "Dividir" para **"Sessões"** (fecha Q-34). **183 testes.**
+
+**As duas lógicas centrais reprovam sob mutação**, e isso foi medido, não presumido: fazer
+`display` ignorar o estado derruba **5** testes; tirar a guarda de altura da faixa derruba **1**.
+Sem essa checagem, os 18 casos novos seriam decoração.
+
+⚠️ **"Zero warnings" deixou de valer, e não por causa desta rodada.** A compilação emite
+`w: settings/ClaudeDockConfigurable.kt:136 Unnecessary safe call on a non-null receiver of type
+'File'` — `it?.let` sobre um `File` que não é nulo. A linha é **idêntica no commit anterior** e o
+arquivo não foi tocado aqui. Eu repeti "zero warnings" no SPEC v1.12 sem ter medido; o número que
+eu havia conferido era o de testes. Conserto é de um caractere, e ficou de fora por ser escopo
+alheio — decidir se entra nesta branch ou numa de limpeza.
 
 **O achado que define a rodada: metade do pedido já estava pronta na plataforma.**
 `com.intellij.ide.actions.ToolWindowTabRenameActionBase` existe em
@@ -87,8 +117,10 @@ v1.9.2 (T-2.\*) em `462e425`. 136 testes verdes, zero warnings — medidos em 20
 | `HANDOFF.md`                                                     | ✅ Este arquivo, com RF-49, a receita do cache do Gradle e o inventário de roteiros                                                              |
 | [../../CHANGELOG.md](../../CHANGELOG.md)                         | ✅ Keep a Changelog + SemVer; última entrada **0.10.0** (2026-08-10)                                                                             |
 | Código do plugin                                                 | ✅ **163 testes, 0 falhas, 0 erros**; **zero warnings**. A v1.11 acrescentou 21 testes                                                           |
-| **RF-58 a RF-62 (nomes de aba e sessão)**                        | ⬜ **Especificados, sem código.** Aguardam aprovação do SPEC v1.12                                                                              |
-| **Roteiros T-3.80 a T-3.86**                                     | ⬜ Escritos. **T-3.82 (aba única) e T-3.84 (respiro em 0)** são os que decidem — nenhum dos dois é alcançável pelo headless                     |
+| **RF-58/RF-59/RF-62 (nome da aba, F1)**                          | ✅ **Implementados.** `ClaudeTabTitle.display`, `TAB_ENDED`, `applyTabName`, `RenameTabAction` + registro em `ToolWindowContextMenu`             |
+| **RF-60/RF-61 (subtítulo da pane, F2)**                          | ✅ **Implementados.** `PANE_SUBTITLE` + `drawSubtitle` na faixa que já era pintada                                                              |
+| **Roteiros T-3.80 a T-3.86**                                     | ⬜ **Pendentes — é o que falta.** **T-3.82 (aba única) e T-3.84 (respiro em 0)** decidem; nenhum dos dois é alcançável pelo headless            |
+| Código do plugin _(v1.12)_                                       | ✅ **181 testes, 0 falhas, 0 erros**; 1 warning **pré-existente** e alheio (`ClaudeDockConfigurable.kt:136`)                                    |
 | **T-4 (bloqueante)**                                             | ✅ **APROVADO** — premissa central validada empiricamente                                                                                        |
 | RF-17 (`Esc`), RF-18 (estado vazio), RF-19 (`CLAUDE_CONFIG_DIR`) | ✅ Implementados **e validados no IDE** (T-3.7 a T-3.9)                                                                                          |
 | T-3.1 e T-3.2 (diff ponta a ponta)                               | ✅ **APROVADOS** — a integração com o oficial funciona                                                                                           |
@@ -140,6 +172,16 @@ T-3.18-3.20 (tema, partida sem eco, diretório não confiável). Split, Piper, d
 `currentProcess`. A auditoria achou uma segunda promessa inerte no mesmo campo: o cancelamento de
 **RNF-23** ("novo play interrompe o anterior") nunca alcançou o piper. T-1.55 e T-1.56 provam as
 duas por efeito, e reprovam sob mutação.
+
+**Dívida conhecida (descarga dinâmica) — achada em 2026-08-17, e é anterior a esta rodada.** O
+plugin **não sobrevive a um unload a quente**: ao descarregar, o `ClaudeDockTab` criado em
+`ClaudeDockSessions.addSession` (`Disposer.newDisposable`, hoje na linha 86) segue pendurado em
+`ROOT_DISPOSABLE` sem ser disposto, e a plataforma registra `SEVERE — Memory leak detected`. A
+linha é **idêntica no commit anterior** (`git show HEAD:` confirma), então não é regressão do
+rename — apareceu agora só porque o hot-reload acidental exercitou o caminho pela primeira vez.
+**É exatamente o que o T-3.6 (desinstalação) mediria**, e o T-3.6 é um dos oito roteiros herdados
+nunca executados. Conserto provável: descartar as abas quando o plugin é descarregado, ou declarar
+`require-restart`. Não foi feito aqui por ser escopo alheio ao rename.
 
 **Dívida conhecida (código morto):** ~~`ClaudeTerminalSessionFactory.readText`~~ removido em
 2026-08-08 — sem chamadores desde que RF-24 substituiu RF-21.
@@ -427,6 +469,15 @@ The contents of the immutable workspace '~/.gradle/caches/9.2.0/transforms/<hash
 - **Consequência para a leitura de resultados:** com o build travado, `./gradlew test` não roda e os
   XMLs em `build/test-results` ficam **velhos**. Contar teste a partir deles nesse estado dá um
   número que parece atual e não é — conferir a data do arquivo antes de citar o total.
+
+**Rodar `runIde` com um sandbox já aberto derruba o que está aberto (2026-08-17).** O segundo
+`runIde` não abre janela nenhuma: vê a instância viva, entrega o pedido a ela e sai em 2 s com
+`BUILD SUCCESSFUL`. Pior, o `prepareSandbox` reescreve o jar do plugin **debaixo** da instância em
+execução, e como o sandbox roda com `-Didea.auto.reload.plugins=true` a IDE tenta descarregar o
+plugin a quente — falha, registra `Memory leak detected: 'ClaudeDockTab'` e morre com exit 2. O
+`runIde` do Gradle então reporta falha. **Nada disso é defeito do código sob teste.** Receita:
+**fechar o sandbox antes de subir outro**, e conferir com
+`pgrep -af "Didea.plugin.in.sandbox.mode=true"`.
 
 **E o `prepareSandbox` apaga o diretório de plugins quando roda de verdade.** Ele fica
 `UP-TO-DATE` enquanto nenhum fonte muda, o que dá a falsa impressão de que a cópia manual do
@@ -871,6 +922,111 @@ suíte roda ao fim de cada fase, e cada código novo ou alterado leva teste junt
 ---
 
 ## Log
+
+### 2026-08-17 (noite) — F3: dois defeitos, e o segundo era mais velho que a rodada
+
+**184 testes verdes. O rename está aprovado no IDE real** — aba, pane em aba dividida, nomes
+distintos entre abas e em divisão empilhada. Faltam T-3.82 e T-3.84.
+
+**O F3 se pagou duas vezes, e nenhuma das duas era alcançável por teste automatizado.**
+
+**DEF-11 — o recurso nasceu invisível.** Primeiro uso: nenhum subtítulo apareceu, e o relato foi
+"o segundo split não tem como renomear". **Antes de mexer em qualquer linha, medi a pintura** com
+um diagnóstico temporário no ambiente de plataforma: `insets.top=20`, fonte 11pt de altura 13,
+cor `120,120,120`, **143 pixels alterados na faixa**. O subtítulo pintava. O que falhava era o
+desenho: o default "vazio até nomear" — um dos três que assumi à falta de resposta — tornava o
+recurso invisível, e o item agia sobre a pane **em foco** sem que nada na tela dissesse qual era.
+Conserto: rótulo automático por pane ao dividir, e o menu renomeado de "Dividir" para **"Sessões"**
+(fecha Q-34, que estava aberta esperando exatamente este roteiro).
+
+**DEF-12 — e aqui eu quase consertei o culpado errado de novo.** Com as panes rotuladas, ficou
+visível que selecionar a pane 2 e pedir rename abria o diálogo com o nome da **pane 1**. A
+hipótese — `preferredFocusableComponent` preso à pane original, e o popup devolvendo o foco para
+lá — era mecanicamente consistente, **e era só hipótese**. O que a sustentou antes de virar código
+foi uma assimetria observada: o `/usage` **funciona** na pane em foco (T-3.66, aprovado na v1.10),
+e ele é **botão**, não item de menu popup.
+
+Então instrumentei em vez de confiar. Depois do conserto, o log registrou:
+
+```
+DEF-12 renameSelectedPane alvo=Sessão 2
+DEF-12 sessionFocused: pane=Sessão 2
+DEF-12 sessionFocused: pane=Sessão 2 xyz   ← o foco volta ao fechar o diálogo
+```
+
+A terceira linha é a prova de que **o retorno de foco existe** — era ele que reescrevia o alvo — e
+de que agora aterrissa na pane certa. **Sem ela, o conserto teria sido aceito por efeito**, que é
+exatamente como a v1.10.1 consertou o mecanismo errado (Achado 36). As duas linhas temporárias
+foram removidas.
+
+**O defeito é anterior ao rename, e maior que ele.** "Fechar esta sessão" (RF-41), "Trocar de
+lado" e "Girar divisão" (RF-43) passam pelo mesmo `selectedWidget()` e carregam o erro desde a
+v1.7/v1.8. Ninguém notou porque um *swap* de duas panes é simétrico, e "fechar" acertando a pane 1
+parece intencional para quem acabou de clicar nela. Conserto único: `pointTabAt`, que move as duas
+referências juntas, com o invariante fixado em T-1.76.
+
+**Uma lição sobre o SDD, e ela é a mais cara da rodada.** Três perguntas ficaram sem resposta na
+especificação e eu segui com o default nas três. **Duas se sustentaram; a terceira produziu o
+DEF-11 no primeiro minuto de uso real.** Default assumido não é decisão tomada — é dívida com
+prazo até alguém abrir a IDE. E o roteiro manual não é burocracia: os dois defeitos desta rodada
+estavam fora do alcance dos 184 testes, e o segundo estava escondido havia cinco versões.
+
+**Também aprendi a não rodar `runIde` por cima de um sandbox aberto** — o `prepareSandbox`
+reescreve o jar debaixo da instância viva, o hot-reload falha, e a sessão de teste do usuário morre
+com exit 2. Registrado nas armadilhas, junto do `Memory leak detected: 'ClaudeDockTab'` que esse
+acidente revelou (dívida anterior, ligada ao T-3.6).
+
+### 2026-08-17 (tarde) — v1.12 F1 e F2: o rename existe, e a plataforma fez metade
+
+**181 testes verdes** (eram 163). `clean test buildPlugin --rerun-tasks` em 44 s.
+
+**A previsão do SDD se confirmou onde mais importava.** `ToolWindowTabRenameActionBase` era mesmo
+subclassável: dois `override` e um `<add-to-group group-id="ToolWindowContextMenu">`, e o rename
+in-place da aba passou a existir sem uma linha de UI nossa. O `javap` não mentiu sobre `open` —
+compilou de primeira.
+
+**O único erro de implementação foi meu, e foi de memória.** Importei
+`com.intellij.openapi.wm.impl.ToolWindowHeadlessManagerImpl` de cabeça; o pacote certo é
+`com.intellij.toolWindow.` — e estava escrito no `ClaudeDockIntegrationTest`, a três linhas de
+distância. Custou um ciclo de compilação. **Regra que já vale para o jar e agora vale para o
+import: conferir onde o projeto já usa, em vez de lembrar.**
+
+**A suíte foi verificada por mutação, e é isso que dá valor aos 18 casos novos.** Duas mutações
+deliberadas, rodadas juntas:
+
+| Mutação                                              | Testes que caíram |
+| ---------------------------------------------------- | ----------------- |
+| `display` ignora `ended` (o Achado 43 de volta)      | **5**             |
+| some a guarda `metrics.height > insets.top` (CB-69)  | **1**             |
+
+Os dois pontos que o SDD apontou como centrais são exatamente os que a suíte protege. Sem essa
+checagem eu teria 18 testes verdes sem saber se algum deles reprova alguma coisa.
+
+**Uma decisão de implementação contrariou um RNF que eu mesmo escrevi.** RNF-38 dizia "não alocar
+por frame"; o desenho do subtítulo usa `g.create()` + `dispose()`, que aloca um `Graphics`
+derivado por frame — e só quando há subtítulo. O motivo é que `Border.paintBorder` **não possui** o
+`Graphics` que recebe: mudar fonte, cor e recorte nele deixaria o objeto sujo para quem pintasse
+depois. As saídas sem alocação eram piores (restaurar o `clip` devolve um `Shape`; truncar a
+string aloca a substring). **O RNF foi corrigido, não o código** — contorcer a implementação para
+satisfazer a letra de um requisito de performance que ninguém mediu seria trocar correção por
+conformidade.
+
+**Um fato que eu havia repetido sem medir caiu.** "163 testes verdes, **zero warnings**" atravessou
+a v1.11 e eu o copiei para o SPEC v1.12. Os testes eu conferi; os warnings, não. A compilação emite
+`Unnecessary safe call on a non-null receiver of type 'File'` em
+`settings/ClaudeDockConfigurable.kt:136`, **idêntico no commit anterior**. Não é regressão desta
+rodada, e o conserto é de um caractere — mas o número no documento estava errado desde antes, e
+agora está corrigido nos dois arquivos. **Herdar um número não é o mesmo que verificá-lo.**
+
+**Q-34 ficou mais afiada, não resolvida.** O menu "Dividir" agora tem oito itens, e **cinco** não
+dividem nada: renomear a aba, renomear a sessão, fechar a divisão, fechar todas, além dos dois de
+reposicionar. O nome do menu está pior do que estava quando a pergunta foi aberta. Segue para
+decidir depois de F3, como planejado — mas o argumento a favor de "Sessões" cresceu.
+
+**O que falta:** F3, os roteiros T-3.80 a T-3.86 no IDE real. **T-3.82** (aba única, que exerce o
+fallback `SELECTED_CONTENT_TAB_LABEL`) e **T-3.84** (respiro em 0, que exerce a degradação) são os
+dois que o headless não alcança — se algum desenho desta rodada estiver errado, é num deles que
+aparece.
 
 ### 2026-08-17 — SDD v1.12: renomear a aba e nomear o split
 

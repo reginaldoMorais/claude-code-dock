@@ -26,5 +26,17 @@
                 icon="/icons/claudeDuckMono.svg">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
+
+        <!--
+          _(v1.12)_ Rename in-place da aba, pelo menu de contexto dela (RF-58, D-53).
+          `ToolWindowContextMenu` é o grupo que a plataforma usa para o menu de contexto de aba de
+          qualquer tool window, e é onde o próprio Terminal registra o "Rename Session" dele.
+        -->
+        <action id="dev.reginaldomorais.claudedock.RenameTab"
+                class="dev.reginaldomorais.claudedock.actions.RenameTabAction"
+                text="Renomear a Aba"
+                description="Dá um nome a esta aba do Claude Code">
+            <add-to-group group-id="ToolWindowContextMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>

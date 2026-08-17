@@ -2,9 +2,20 @@
 
 - **Versão:** 1.12
 - **Data:** 2026-08-17
-- **Status:** **v1.12 — RF-58 a RF-62 (renomear a aba, nomear a sessão dividida) especificados e
-  aguardando aprovação. Nenhuma linha de código nesta rodada.** A linha de base a não regredir são
-  os **163 testes verdes, zero warnings** da v1.11.
+- **Status:** **v1.12 — RF-58 a RF-62 implementados e validados no IDE real; 184 testes verdes.**
+  **O F3 encontrou dois defeitos, os dois corrigidos e reverificados:** DEF-11 (o subtítulo nascia
+  invisível e sem alvo visível) e **DEF-12** (todo item de menu popup agia sobre a pane errada —
+  anterior ao rename, e que também atingia RF-41 e RF-43). Aprovados no IDE: rename da aba, rename
+  de pane em aba dividida, nomes distintos entre abas e em divisão empilhada. **Pendentes: T-3.82
+  (aba única) e T-3.84 (respiro em 0).** _Texto anterior:_ RF-58 a RF-62 implementados (F1 e F2). Os dois
+  caminhos do rename e o subtítulo na faixa estão em código; **falta F3**, os roteiros manuais
+  T-3.80 a T-3.86 no IDE real — e dentro deles **T-3.82 e T-3.84 são os que decidem**, porque
+  nenhum é alcançável pelo ambiente headless. A suíte subiu de 163 para **181** (18 casos novos),
+  e as duas lógicas centrais **reprovam sob mutação**: tirar a composição nome+estado derruba 5
+  testes, tirar a guarda de altura da faixa derruba 1.
+  ⚠️ **Correção de fato:** o "zero warnings" repetido desde a v1.11 **não vale mais** — a
+  compilação emite um aviso **pré-existente** em `settings/ClaudeDockConfigurable.kt:136`
+  (`it?.let` sobre um `File` não-nulo), idêntico no commit anterior e alheio a esta rodada.
 - **Status _(herdado da v1.11)_:** **RF-54 a RF-57 e DEF-10 implementados; 163 testes verdes, zero warnings.**
   Validado no IDE real: **T-3.79 aprovado**, **T-3.70, T-3.71 e T-3.74 aprovados em parte** —
   duas sessões sem nenhuma exceção. **Seguem pendentes: T-3.72, T-3.73, T-3.75, T-3.76, T-3.77 e
@@ -660,6 +671,86 @@ flowchart TD
 > **Nota de forma.** Este é o primeiro diagrama `mermaid` do documento — as 11 versões anteriores
 > usaram blocos ASCII, e eles continuam onde estão. A troca aqui é deliberada e local: o roteiro
 > de SDD pede **o nó que quebra em destaque**, e destaque é o que o ASCII não faz.
+
+### DEF-12 — todo item de menu popup agia sobre a pane errada _(v1.12, achado no F3)_
+
+Com o DEF-11 corrigido e as panes rotuladas, o segundo roteiro expôs o defeito que estava embaixo:
+**selecionar a pane 2 e pedir "Renomear Esta Sessão…" abria o diálogo preenchido com o nome da
+pane 1.** O alvo nunca era o escolhido.
+
+**Duas referências diziam coisas diferentes.** A aba guarda `SESSION_WIDGET` ("sobre qual sessão
+agir", reescrito a cada foco desde D-34) e `preferredFocusableComponent` ("para onde o foco volta
+quando a janela o reassume", fixado na pane original em `addSession` e **nunca** atualizado, exceto
+ao fechar uma divisão em `handOverTo`). A sequência:
+
+```
+1. clique na pane 2      → focusGained(pane2) → SESSION_WIDGET = pane 2   ✅
+2. abre o menu popup     → o popup tira o foco do terminal
+3. popup abre/fecha      → a plataforma devolve o foco ao preferredFocusableComponent = pane 1
+                         → focusGained(pane1) → SESSION_WIDGET = pane 1   ❌
+4. a ação roda           → age sobre a pane 1
+```
+
+**O que explica cinco versões de silêncio.** Só ações dentro de **menu popup** passam pelo passo 2.
+Botão simples do cabeçalho não tira o foco — e é exatamente por isso que o **T-3.66 aprovou** o
+`/usage` "na pane em foco" na v1.10: `UsageSessionAction` é botão, não item de menu. A assimetria
+entre os dois era o sintoma, e foi ela que apontou a causa.
+
+**O defeito é anterior ao rename e maior que ele.** Todos os itens do mesmo menu passam por
+`selectedWidget()`: **"Fechar esta sessão" (RF-41), "Trocar de lado" e "Girar divisão" (RF-43)**
+carregam o mesmo erro desde a v1.7/v1.8. Passou despercebido porque com duas panes um *swap* é
+simétrico — fica igual acionado de qualquer lado — e "fechar" acertando sempre a pane 1 parece
+intencional para quem acabou de clicar nela.
+
+**Conserto: `pointTabAt(content, widget)`**, o único ponto que aponta a aba para uma sessão, e que
+move **as duas** referências juntas. Os três lugares que apontavam a aba — `addSession`,
+`sessionFocused` e `handOverTo` — passam a chamá-lo. O invariante fica fixado em T-1.76.
+
+**Confirmado no mecanismo, e não só no efeito** (2026-08-17). Instrumentação temporária nos dois
+pontos registrou, depois do conserto:
+
+```
+DEF-12 renameSelectedPane alvo=Sessão 2
+DEF-12 sessionFocused: pane=Sessão 2
+DEF-12 sessionFocused: pane=Sessão 2 xyz   ← o foco volta ao fechar o diálogo, e volta à pane certa
+```
+
+A terceira linha é a prova: **o retorno de foco existe** — era ele que reescrevia o alvo —, e agora
+aterrissa na pane que o usuário escolheu. Sem esta medição o conserto teria sido aceito por efeito,
+que é precisamente como a v1.10.1 consertou o culpado errado (Achado 36).
+
+### DEF-11 — o subtítulo nasceu invisível, e sem alvo visível _(v1.12, achado no F3)_
+
+Primeiro uso real do rename, com a aba dividida em duas panes: **nenhum subtítulo apareceu, e o
+usuário relatou que "o segundo split não tem como renomear"**.
+
+**A pintura não era o problema, e isso foi medido antes de mexer em qualquer coisa.** Um
+diagnóstico no ambiente de plataforma devolveu: `insets.top = 20`, fonte `JBFont Dialog bold 11`,
+`metrics.height = 13` — a guarda de altura **não** rejeita —, cor
+`JBColor[r=120,g=120,b=120]`, e **143 pixels alterados na faixa**. O subtítulo pinta. Nenhuma
+exceção nossa no log da sessão.
+
+**O defeito é de desenho, e são duas causas somadas:**
+
+1. **O subtítulo nasce vazio** (era o default assumido em v1.12, à falta de resposta do usuário).
+   Nada aparece, então nada sugere que dá para nomear. É o Achado 29 outra vez.
+2. **O item age sobre a pane em foco, e nada na tela diz qual é.** Com duas panes idênticas e
+   nenhuma marca, não há como saber qual o menu vai atingir — daí "o segundo não tem como
+   renomear": o alvo era invisível, não ausente.
+
+**E o item estava escondido num menu chamado "Dividir"** (Q-34). Ninguém procura "renomear" dentro
+de "dividir" — é a mesma família do DEF-06, em que "Fechar divisão" foi lido como "fechar as
+divisões": nome de menu que descreve um item em vez do conjunto.
+
+**Conserto, em três linhas de produção:** ao dividir, cada pane recebe um rótulo automático
+(`Sessão 1`, `Sessão 2`, …) — visível, distinto, e substituível por um rename comum ou apagável em
+branco (RF-62). O menu passa a se chamar **"Sessões"**, o que fecha Q-34 com evidência de uso em
+vez de gosto.
+
+**A lição, e ela é sobre o próprio SDD:** três perguntas ficaram sem resposta na especificação e eu
+segui com o default em todas. Duas se sustentaram; **esta não** — e o roteiro manual encontrou o
+erro na primeira tentativa, que é exatamente para isso que o F3 existe. Default assumido não é
+decisão tomada: é dívida com prazo até o primeiro uso real.
 
 ### DEF-03 — "encerrado" dizia respeito à sessão errada _(v1.8.1)_
 
@@ -1453,7 +1544,7 @@ reimplementação frágil.**
 | **RF-57**     | _(v1.11)_ A fala DEVE começar assim que o **primeiro pedaço** de áudio existir, e não ao fim da síntese — vale para os **dois** motores. O tempo até a primeira palavra DEVE ser praticamente constante no tamanho do trecho.                                                                                                                                                                                                                                                                                              |
 | **RF-58**     | _(v1.12)_ O plugin DEVE permitir **renomear a aba**, por dois caminhos ligados ao mesmo escritor: edição **in-place** no rótulo, pelo menu de contexto da aba, e um item no menu do cabeçalho que abre um diálogo. O nome dado substitui o automático de RF-16 e vale enquanto a aba existir.                                                                                                                                                       |
 | **RF-59**     | _(v1.12)_ O nome dado pelo usuário DEVE **conviver com o sufixo "(encerrado)"** de RF-11/RF-44, nas duas ordens: renomear uma aba já encerrada preserva o sufixo, e uma sessão que encerra depois do rename preserva o nome. A composição `nome + sufixo` DEVE existir em **um só lugar**, e não ser remontada por chamador.                                                                                                                       |
-| **RF-60**     | _(v1.12)_ O plugin DEVE permitir **nomear a sessão em foco** — o subtítulo da pane —, pelo menu do cabeçalho, sobre a mesma pane que as demais ações do cabeçalho já operam (RF-38, D-34). O subtítulo é por pane, e uma aba com N panes tem até N subtítulos distintos.                                                                                                                                                                            |
+| **RF-60**     | _(v1.12; **revisto no F3 por DEF-11**)_ Ao **dividir**, cada pane DEVE receber um rótulo automático distinto (`Sessão 1`, `Sessão 2`, …), substituível por rename e apagável em branco. O default original — nascer vazia — tornou o recurso invisível e deixou o alvo do menu sem marca na tela. O plugin DEVE permitir **nomear a sessão em foco** — o subtítulo da pane —, pelo menu do cabeçalho, sobre a mesma pane que as demais ações do cabeçalho já operam (RF-38, D-34). O subtítulo é por pane, e uma aba com N panes tem até N subtítulos distintos.                                                                                                                                                                            |
 | **RF-61**     | _(v1.12)_ O subtítulo DEVE ser desenhado **na faixa de respiro da própria pane** (RF-28), sem criar barra de título e **sem roubar altura** do terminal — a objeção que sustenta Q-28. Quando a faixa não comporta a linha de texto, o subtítulo DEVE ser omitido, nunca desenhado por cima do conteúdo nem forçando o respiro a crescer.                                                                                                            |
 | **RF-62**     | _(v1.12)_ Nome em branco DEVE ser tratado como **"volte ao padrão"**, e não como erro: na aba devolve o nome automático de RF-16; na pane apaga o subtítulo. Cancelar o diálogo ou a edição in-place NÃO DEVE alterar nada — cancelar e apagar são intenções diferentes.                                                                                                                                                                            |
 | ~~**RF-52**~~ | _(v1.10; **ARQUIVADO em 2026-08-09, sem código**)_ Interceptar `Ctrl+V` para colar imagem. **A condição que o autorizaria nunca se cumpriu:** T-3.62 rodou depois de `sudo apt install wl-clipboard` e a imagem **foi anexada** — o `Ctrl+V` chega ao CLI dentro da janela dedicada (Q-32 respondida). A causa era o pacote ausente, não o plugin (Achado 33).                                                                                                                                                    |
@@ -1631,10 +1722,17 @@ reimplementação frágil.**
   referência morre junto com o objeto, sem código de limpeza e sem risco de apontar para pane
   fechada. Em particular, `swap`, `rotate` e `close` (RF-43, RF-39) NÃO DEVEM precisar de linha
   nova — eles reparentam componentes, e a propriedade viaja junto.
-- **RNF-38** _(v1.12, novo)_ — O desenho do subtítulo DEVE ser O(1) por repintura e não alocar por
-  frame. A faixa **já** era repintada a cada `paintBorder` (`ClaudeSessionPadding.kt:52-65`); o
-  acréscimo é um `drawString` sobre texto já resolvido. Nenhum listener novo, nenhum timer novo —
-  a mesma razão pela qual a cor do respiro é lida a cada pintura em vez de copiada uma vez.
+- **RNF-38** _(v1.12, novo; **revisto na implementação**)_ — O desenho do subtítulo DEVE ser O(1)
+  por repintura, sem listener e sem timer. A faixa **já** era repintada a cada `paintBorder`; o
+  acréscimo é um `drawString` sobre texto já resolvido — a mesma razão pela qual a cor do respiro
+  é lida a cada pintura em vez de copiada uma vez.
+  **O "não alocar por frame" da redação original caiu, e o motivo vale registrar.** Mudar fonte,
+  cor e recorte no `Graphics` recebido deixaria o objeto sujo para quem pintasse depois, porque
+  `Border.paintBorder` não o possui. O conserto idiomático é `g.create()` + `dispose()`, que aloca
+  **um** `Graphics` derivado por frame — e só quando existe subtítulo. As alternativas sem
+  alocação eram piores: salvar e restaurar o `clip` à mão devolve um `Shape` de qualquer forma, e
+  truncar a string no lugar do recorte aloca a substring. Contorcer o código para satisfazer a
+  letra de um RNF que eu mesmo escrevi seria trocar correção por conformidade.
 
 ---
 
@@ -2757,6 +2855,7 @@ Base: `BasePlatformTestCase` (IntelliJ Test Framework), executados por `./gradle
 | **T-1.72**     | `ClaudeSessionPadding`            | _(v1.12)_ Com subtítulo e faixa suficiente, o `paintBorder` desenha o texto; sem subtítulo, ou com faixa menor que a linha, **não** desenha. Verificado sobre um `Graphics` de `BufferedImage`, contando a chamada — não a aparência (RF-61, CB-69)                                             |
 | **T-1.73**     | `ClaudeSessionSplitter`           | _(v1.12)_ Depois de `swap` e de `rotate`, a `clientProperty` do subtítulo continua no mesmo componente. Fixa a razão de RNF-37: quem reparenta não copia estado, então não há o que sincronizar (CB-74)                                                                                          |
 | **T-1.74**     | `ClaudeSessionSplitter`           | _(v1.12)_ Depois de `close`, a pane sobrevivente mantém o **seu** subtítulo, e não herda o da fechada                                                                                                                                                                                           |
+| **T-1.76**     | `ClaudeDockSessions`              | _(v1.12)_ `pointTabAt` move `SESSION_WIDGET` **e** `preferredFocusableComponent` juntos. Fixa o invariante de DEF-12: enquanto só o primeiro seguia o foco, o segundo devolvia o alvo à pane original a cada menu popup                                              |
 | **T-1.75**     | `ClaudeDockSessions`              | _(v1.12)_ `renameSelectedTab()` e `renameSelectedPane()` sem aba aberta **notificam** e não escrevem nada — mesmo molde de T-1.65 para `openUsage` (Fluxo de erro M)                                                                                                                            |
 
 Conforme `CLAUDE.md`, novos testes acompanham cada funcionalidade nova ou alterada, e a suíte é
@@ -3254,7 +3353,7 @@ Sem telemetria, por decisão de privacidade. O acompanhamento é local:
 | **Q-31** | _(v1.9.4)_ Por que uma pane às vezes **não conecta** ao servidor MCP, ficando sem o indicador `In <arquivo>` e sem receber o `Ctrl+Alt+K`?                                                                                                                                                                                                    | Em aberto. Observado em T-3.60: das duas panes, só a segunda estava conectada. Hipóteses não medidas: corrida entre a partida da sessão e o servidor do plugin oficial, ou sessão criada antes de o servidor subir. **Afeta RF-37**, que assume integração em todas as panes — e T-3.36 já mostrou as duas conectadas, então não é impossível, é intermitente · 🔍 **Mecanismo identificado em 2026-08-08 (Achado 32)**: `CLAUDE_CODE_SSE_PORT` cai em `0` por `getOrDefault`, e a mitigação de corrida do oficial só alcança a tool window `"Terminal"`. **Falta medir** — T-3.61 · ⚠️ **T-3.61 não reproduziu** (2026-08-08): duas panes integradas, mesma porta real `33471`. Controle passou; a hipótese continua **sem medição** · ⚰️ **ARQUIVADA em 2026-08-08** após **duas** não-reproduções, a segunda com a condição específica. Causa do caso de T-3.60 desconhecida; `deferSessionStartUntilUiShown` é a explicação provável de por que não nos atinge |
 | **Q-28** | _(v1.8)_ Vale arrastar panes com o mouse para reorganizá-las, como o editor faz com as abas?                                                                                                                                                                                                                                                  | **Avaliado e adiado, com o levantamento feito.** Mecanismo existe (`DnDSupport`; `DockManager`/`DockContainer`). O que falta é **onde agarrar**: o editor arrasta o rótulo da aba, e as nossas panes não têm aba — a superfície delas é do terminal, onde arrastar é selecionar texto (RF-26). Exigiria barra de título por pane, UI permanente para ação ocasional. RF-43 cobre o uso de 2–4 panes por ações. Reabrir se o uso mostrar aninhamento profundo, onde trocar/girar não bastam                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Q-27** | _(v1.7)_ As degradações graciosas de engine (CB-26, CB-36, CB-47, R-15) deveriam ser removidas agora que o Achado 27 provou que a sessão é sempre CLASSIC?                                                                                                                                                                                    | Não. Custam uma linha (`?: return`) e protegem contra a plataforma mudar o retorno de `createTerminalWidget` num upgrade. O que mudou foi a **probabilidade** de R-15, não a decisão                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **Q-34** | _(v1.12)_ O menu "Dividir" do cabeçalho ainda se chama pelo que faz? Ele já hospeda "Fechar esta sessão", "Fechar todas as sessões" e, agora, os dois itens de renomear — quatro dos oito itens não dividem nada. Renomear o menu para "Sessões" descreveria melhor, ao custo de mover um menu que o usuário já achou. | **Em aberto, e deliberadamente adiada para depois do uso.** O nome errado de menu foi exatamente o que produziu DEF-06 ("Fechar divisão" lido como "fechar as divisões"), então o risco é conhecido e não é hipotético. O que segura a decisão é que renomear agora mistura duas mudanças no mesmo passo: quem não achar mais o "Dividir" não saberá se o problema é o menu novo ou o recurso novo. Decidir depois de T-3.80 a T-3.86 |
+| ~~**Q-34**~~ ✅ **RESOLVIDA em 2026-08-17 pelo F3: o menu virou "Sessões".** O uso real cobrou o preço do nome errado — o usuário não achou o rename, porque ninguém o procura dentro de "Dividir" (DEF-11). A dúvida de "mover um menu que o usuário já achou" era menor que o custo medido de escondê-lo. | _(v1.12)_ O menu "Dividir" do cabeçalho ainda se chama pelo que faz? Ele já hospeda "Fechar esta sessão", "Fechar todas as sessões" e, agora, os dois itens de renomear — quatro dos oito itens não dividem nada. Renomear o menu para "Sessões" descreveria melhor, ao custo de mover um menu que o usuário já achou. | **Em aberto, e deliberadamente adiada para depois do uso.** O nome errado de menu foi exatamente o que produziu DEF-06 ("Fechar divisão" lido como "fechar as divisões"), então o risco é conhecido e não é hipotético. O que segura a decisão é que renomear agora mistura duas mudanças no mesmo passo: quem não achar mais o "Dividir" não saberá se o problema é o menu novo ou o recurso novo. Decidir depois de T-3.80 a T-3.86 |
 | **Q-35** | _(v1.12)_ O nome dado à aba deveria alimentar o `claude --resume` de RF-08, de modo que retomar uma conversa traga de volta o nome que ela tinha?                                                                                                                                                              | **Não, e o motivo é de dono.** O nome vive no `Content` e morre com a janela (Fora de Escopo, v1.12); o histórico de conversas vive no CLI e é ele quem nomeia o que lista (D-02). Ligar os dois exigiria persistir um mapa sessão↔nome do nosso lado e casá-lo com identificadores que o CLI não promete manter. Reabrir só se Q-07 reabrir                                                                                        |
 
 ---

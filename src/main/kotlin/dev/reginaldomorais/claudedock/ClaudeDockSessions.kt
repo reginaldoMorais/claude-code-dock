@@ -10,6 +10,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.wm.ToolWindow
@@ -94,10 +95,9 @@ class ClaudeDockSessions(private val project: Project) :
             .createContent(ClaudeSessionSplitter.root(pane.component), title, false)
         content.isCloseable = true
         content.setDisposer(tabDisposable)
-        // O foco vai para o terminal, e não para o painel que o cobre.
-        content.preferredFocusableComponent = pane.widget.component
-        // A referência vive junto com a aba: fechar a aba a leva embora, sem mapa para limpar.
-        content.putUserData(SESSION_WIDGET, pane.widget)
+        // O foco vai para o terminal, e não para o painel que o cobre. A referência vive junto com
+        // a aba: fechar a aba a leva embora, sem mapa para limpar.
+        pointTabAt(content, pane.widget)
 
         content.putUserData(TAB_TITLE, title)
 
@@ -130,10 +130,80 @@ class ClaudeDockSessions(private val project: Project) :
                 }
                 if (ClaudeSessionSplitter.countPanes(content.component) > 1) return@invokeLater
 
-                val title = content.getUserData(TAB_TITLE) ?: return@invokeLater
-                content.displayName = "$title (encerrado)"
+                // O estado vira dado da aba, e não string interpolada: é ele que permite ao rename
+                // recompor o rótulo sem perder o sufixo, e ao sufixo não apagar o nome (RF-59).
+                content.putUserData(TAB_ENDED, true)
+                content.displayName = ClaudeTabTitle.display(baseTitleOf(content), ended = true)
             }
         }, pane.disposable)
+    }
+
+    /**
+     * Único escritor do nome da aba (D-55).
+     *
+     * As duas entradas — a edição in-place do menu de contexto e o diálogo do cabeçalho — passam
+     * por aqui, para não existirem duas regras de composição que divergem com o tempo.
+     */
+    fun applyTabName(content: Content, name: String) {
+        val fallback = content.manager?.let { nextTabTitle(it, exclude = content) }
+            ?: ClaudeTabTitle.BASE
+        // Em branco significa "volte ao padrão", e não erro (RF-62).
+        val base = name.trim().ifEmpty { fallback }
+
+        content.putUserData(TAB_TITLE, base)
+        content.displayName =
+            ClaudeTabTitle.display(base, ended = content.getUserData(TAB_ENDED) == true)
+    }
+
+    /**
+     * Renomeia a aba selecionada pelo diálogo do cabeçalho (RF-58).
+     *
+     * É o segundo caminho do rename; o primeiro é a edição in-place no rótulo, que a plataforma
+     * entrega pronta. Existe porque o plugin nunca pôs nada no menu de contexto da aba, e ninguém
+     * clica ali procurando função nova (Achado 29, Achado 44).
+     */
+    fun renameSelectedTab() {
+        val content = findToolWindow()?.contentManager?.selectedContent
+            ?: return notify("Nenhuma aba aberta para renomear.", NotificationType.WARNING)
+
+        // Cancelar devolve `null` e não altera nada; em branco é intenção de apagar (RF-62).
+        val name = Messages.showInputDialog(
+            project,
+            RENAME_TAB_LABEL,
+            "Renomear Aba",
+            null,
+            baseTitleOf(content),
+            null,
+        ) ?: return
+
+        applyTabName(content, name)
+    }
+
+    /**
+     * Dá nome à sessão em foco — o subtítulo da pane (RF-60).
+     *
+     * Resolve a pane pelo mesmo caminho de "Fechar esta sessão", então respeita o foco sem saber
+     * que o split existe (RF-38, D-34).
+     */
+    fun renameSelectedPane() {
+        val widget = selectedWidget()
+            ?: return notify("Nenhuma sessão aberta para renomear.", NotificationType.WARNING)
+        val content = contentOf(widget) ?: return
+
+        val name = Messages.showInputDialog(
+            project,
+            "Nome desta sessão:",
+            "Renomear Sessão",
+            null,
+            ClaudeSessionPadding.subtitleOf(widget.component).orEmpty(),
+            null,
+        ) ?: return
+
+        // A pane pode ter sido fechada enquanto o diálogo estava aberto: escrever nela gravaria
+        // num componente que ninguém mais pinta (CB-72).
+        if (ClaudeSessionSplitter.paneOf(widget.component, content.component) == null) return
+
+        ClaudeSessionPadding.setSubtitle(widget.component, name)
     }
 
 
@@ -161,6 +231,17 @@ class ClaudeDockSessions(private val project: Project) :
 
         // A pane nova também marca a aba quando for a última a sobrar (RF-44).
         markEndedWhenLast(content, incoming)
+
+        // Divisão sem rótulo nenhum deixa o usuário sem saber qual pane o menu atinge, e esconde
+        // que dá para nomeá-las (DEF-11). O nome automático é ponto de partida: sobrescrever é um
+        // rename, apagar é um rename em branco (RF-62).
+        if (ClaudeSessionPadding.subtitleOf(widget.component) == null) {
+            ClaudeSessionPadding.setSubtitle(widget.component, ClaudeSessionPadding.autoLabel(1))
+        }
+        ClaudeSessionPadding.setSubtitle(
+            incoming.widget.component,
+            ClaudeSessionPadding.autoLabel(ClaudeSessionSplitter.countPanes(content.component)),
+        )
 
         // A divisão nasce com o foco: quem dividiu quer digitar na sessão nova.
         incoming.widget.requestFocus()
@@ -263,8 +344,7 @@ class ClaudeDockSessions(private val project: Project) :
         val pane = ClaudeSessionSplitter.firstPane(sibling) ?: return
         val survivor = pane.getClientProperty(PANE_WIDGET) as? TerminalWidget ?: return
 
-        content.putUserData(SESSION_WIDGET, survivor)
-        content.preferredFocusableComponent = survivor.component
+        pointTabAt(content, survivor)
         survivor.requestFocus()
     }
 
@@ -299,7 +379,7 @@ class ClaudeDockSessions(private val project: Project) :
      * aba" em vez de "a única sessão da aba", e por isso `selectedWidget()` não mudou.
      */
     override fun sessionFocused(widget: TerminalWidget) {
-        contentOf(widget)?.putUserData(SESSION_WIDGET, widget)
+        contentOf(widget)?.let { pointTabAt(it, widget) }
     }
 
     /**
@@ -494,8 +574,24 @@ class ClaudeDockSessions(private val project: Project) :
     private fun findToolWindow(): ToolWindow? =
         ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID)
 
-    private fun nextTabTitle(contentManager: ContentManager): String =
-        ClaudeTabTitle.next(contentManager.contents.mapNotNull { it.displayName }.toSet())
+    /**
+     * Próximo nome automático livre (RF-16).
+     *
+     * Lê o **nome base**, e não o `displayName`. Com uma aba mostrando `"Claude (encerrado)"`, o
+     * literal `"Claude"` não estaria no conjunto e a próxima aba nasceria com nome idêntico ao de
+     * uma que está na tela — defeito anterior à v1.12, corrigido de passagem porque esta linha
+     * mudava de qualquer forma (T-1.70).
+     *
+     * [exclude] é a aba que está sendo renomeada: sem tirá-la do conjunto, apagar o nome dela
+     * devolveria `"Claude (2)"` em vez de `"Claude"` (RF-62).
+     */
+    private fun nextTabTitle(contentManager: ContentManager, exclude: Content? = null): String =
+        ClaudeTabTitle.next(
+            contentManager.contents
+                .filter { it !== exclude }
+                .map { baseTitleOf(it) }
+                .toSet(),
+        )
 
     private fun notifyExecutableMissing(executable: String) {
         NotificationGroupManager.getInstance()
@@ -549,6 +645,55 @@ class ClaudeDockSessions(private val project: Project) :
 
         /** Título base da aba, sem o sufixo de encerrada — evita "(encerrado) (encerrado)". */
         private val TAB_TITLE = Key.create<String>("ClaudeDockTabTitle")
+
+        /**
+         * _(v1.12)_ Se a aba já ficou sem sessão viva (RF-44).
+         *
+         * Guardar o **estado** em vez de inferi-lo do `displayName` é o que permite ao rename
+         * recompor o rótulo em qualquer ordem (Achado 43).
+         *
+         * `internal` porque no headless nenhuma sessão chega a ter PTY, então o callback de
+         * término nunca dispara: sem alcançar a chave, a ordem "encerra e depois renomeia" ficaria
+         * sem teste, e ela é metade do defeito (T-1.71).
+         */
+        internal val TAB_ENDED = Key.create<Boolean>("ClaudeDockTabEnded")
+
+        /** _(v1.12)_ Mesmo rótulo nos dois caminhos do rename — in-place e diálogo (D-55). */
+        internal const val RENAME_TAB_LABEL = "Novo nome da aba:"
+
+        /**
+         * Nome base da aba, sem o sufixo de estado (RF-59).
+         *
+         * `internal` porque a ação de rename in-place precisa dele para preencher o campo de
+         * edição: quem edita edita o **nome**, não o estado. Sem isso, renomear uma aba encerrada
+         * abriria o campo com "(encerrado)" dentro, e confirmar sem mexer gravaria o sufixo como
+         * parte do nome.
+         */
+        /**
+         * Faz a aba apontar para [widget]: é a sessão que as ações do cabeçalho vão atingir
+         * (RF-38, DEF-12).
+         *
+         * **As duas atribuições andam juntas, e é isso que o DEF-12 mostrou.** `SESSION_WIDGET`
+         * responde "sobre qual sessão agir"; `preferredFocusableComponent` responde "para onde o
+         * foco volta quando a janela o reassume". Enquanto só a primeira acompanhava o foco, a
+         * segunda ficava presa à pane original desde a criação da aba — e qualquer item de **menu
+         * popup** devolvia o foco para lá ao abrir, reescrevendo `SESSION_WIDGET` de volta para a
+         * pane 1 antes de a ação rodar. Botões simples do cabeçalho (como "Uso", T-3.66) não
+         * passavam por isso, e foi por isso que o defeito atravessou v1.7 a v1.11 sem aparecer.
+         */
+        internal fun pointTabAt(content: Content, widget: TerminalWidget) {
+            content.putUserData(SESSION_WIDGET, widget)
+            content.preferredFocusableComponent = widget.component
+        }
+
+        /** A sessão para a qual [content] aponta — `internal` para o teste do invariante acima. */
+        internal fun selectedWidgetOf(content: Content): TerminalWidget? =
+            content.getUserData(SESSION_WIDGET)
+
+        internal fun baseTitleOf(content: Content): String =
+            content.getUserData(TAB_TITLE)
+                ?: content.displayName?.let { ClaudeTabTitle.display(it, ended = false) }
+                ?: ClaudeTabTitle.BASE
 
         private val LOG = Logger.getInstance(ClaudeDockSessions::class.java)
 
