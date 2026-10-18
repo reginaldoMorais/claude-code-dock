@@ -1,27 +1,46 @@
-# Publica uma release a cada tag `vX.Y.Z`.
+# Cria a tag de versão pelo GitHub (Actions → Release → Run workflow) e dispara o build do plugin
+# para ela.
 #
-# A tag é a única fonte da versão: `pluginVersion` chega por `-P`, que tem precedência sobre o
-# `gradle.properties`. O arquivo no repositório continua sendo só o valor de desenvolvimento.
+# A tag criada aqui usa o GITHUB_TOKEN, e tag empurrada por esse token não dispara outros
+# workflows — é a regra do GitHub contra laço de workflows. Por isso o `release-plugin.yml` é
+# chamado explicitamente no último passo, em vez de depender do `push` da tag e de um token pessoal
+# só para isso.
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão (ex: 1.2.3, ou 1.2.3-rc.1 para pré-lançamento) — vira a tag v1.2.3"
+        required: true
+        type: string
 
-# Necessário para o `gh release create` escrever no repositório.
 permissions:
   contents: write
+  actions: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
-
+    env:
+      TAG: v${{ inputs.version }}
+      VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
-          # O `--generate-notes` precisa do histórico para montar o changelog desde a tag anterior.
           fetch-depth: 0
+
+      # A regra de versão tem teste próprio: roda antes de confiar nela.
+      - name: Test release rules
+        run: scripts/release-version.test.sh
+
+      # Formato (X.Y.Z ou X.Y.Z-rc.N), tag repetida, versão que não sobe e branch de origem saem
+      # de `scripts/release-version.sh`, a mesma regra que o `release-plugin.yml` usa na tag.
+      # Final só sai da main; rc sai de qualquer branch, para provar uma `feature/*` antes do
+      # merge. A comparação é numérica, não pelo `sort -V`, que punha `0.3.0-rc.1` depois de
+      # `0.3.0`. A versão passa por variável de ambiente, não interpolada no script do shell.
+      - name: Validate version
+        run: git tag --list 'v*' | scripts/release-version.sh check "$VERSION" "$GITHUB_REF"
 
       - uses: actions/setup-java@v5
         with:
@@ -29,23 +48,22 @@ jobs:
           # Mesmo toolchain declarado no build.gradle.kts.
           java-version: 21
 
-      # Cacheia ~/.gradle: sem isso, cada release rebaixa o download da plataforma (~1,5 GB).
+      # Cacheia ~/.gradle: sem isso, cada execução rebaixa a plataforma (~1,5 GB).
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Build
-        env:
-          TAG: ${{ github.ref_name }}
-        run: ./gradlew "-PpluginVersion=${TAG#v}" test buildPlugin
+      # Tag de código quebrado não nasce: o `release-plugin.yml` roda os mesmos testes, mas falhar
+      # lá deixaria a tag criada para apagar à mão.
+      - name: Test and build
+        run: ./gradlew "-PpluginVersion=$VERSION" test buildPlugin
 
-      - name: Release
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG"
+          git push origin "$TAG"
+
+      - name: Build the plugin for the tag
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          # Tag com hífen (v1.0.0-rc1) vira pré-release; vazio some na expansão sem aspas.
-          PRERELEASE: ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
-        run: |
-          gh release create "$TAG" \
-            "build/distributions/claude-code-dock-${TAG#v}.zip" \
-            --title "$TAG" \
-            --generate-notes \
-            $PRERELEASE
+        run: gh workflow run release-plugin.yml --ref "$TAG"

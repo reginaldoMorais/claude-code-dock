@@ -9,6 +9,14 @@ segue [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Alterado
+
+- **A tag de release passa a ser criada pelo próprio GitHub.** Em _Actions → Release → Run
+  workflow_ informa-se a versão; o workflow valida formato, ordem e branch, roda os testes, cria a
+  tag e dispara a publicação. Empurrar uma tag à mão continua publicando, agora também validada.
+- **Pré-lançamento passa a ser `X.Y.Z-rc.N`.** As tags antigas `vX.Y.Z-rc`, sem número, continuam
+  onde estão e só ficam de fora da comparação de versões.
+
 ### Corrigido
 
 - **O ícone do plugin aparecia colado ao texto nos menus**, em vez de ficar na coluna de ícones
