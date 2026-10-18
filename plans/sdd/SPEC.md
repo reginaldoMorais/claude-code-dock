@@ -1,8 +1,9 @@
 # SPEC — Claude Code Dock: tool window dedicada para JetBrains
 
-- **Versão:** 1.12
-- **Data:** 2026-08-17
-- **Status:** **v1.12 — RF-58 a RF-62 implementados e validados no IDE real; 184 testes verdes.**
+- **Versão:** 1.12.1
+- **Data:** 2026-10-18
+- **Status:** **v1.12.1 — DEF-13 corrigido: o ícone das ações (RF-09, RF-49) saía do gutter do menu
+  e era desenhado junto do texto. 187 testes verdes. T-3.87 aprovado no IDE real.** _Status anterior:_ **v1.12 — RF-58 a RF-62 implementados e validados no IDE real; 184 testes verdes.**
   **O F3 encontrou dois defeitos, os dois corrigidos e reverificados:** DEF-11 (o subtítulo nascia
   invisível e sem alvo visível) e **DEF-12** (todo item de menu popup agia sobre a pane errada —
   anterior ao rename, e que também atingia RF-41 e RF-43). Aprovados no IDE: rename da aba, rename
@@ -52,6 +53,7 @@
 > | 1.9.4  | 2026-08-08 | **RF-49** — ação própria de enviar a seleção do editor para a pane **em foco**, fechando DEF-08 sem tocar no protocolo privado. D-41. T-1.57 a T-1.61                                                                                                                                                                                                                                                                                  |
 > | 1.11   | 2026-08-10 | **Kokoro-ONNX como motor de voz (RF-54/RF-55), seletor de voz também para o Piper (RF-56) e reprodução em streaming (RF-57).** O `Clip` era o gargalo, não o motor: os dois motores sempre emitiram PCM incrementalmente (Achado 39). **DEF-10** — 40 das 173 vozes do Piper tocavam 38% aceleradas, por sample rate fixo no código. Daemon, modelo int8, CLI próprio e cache de grafo **medidos e recusados** (D-48, D-50 a D-52)                                                                                                          |
 > | 1.12   | 2026-08-17 | **Renomear a aba e nomear a sessão dividida (RF-58 a RF-62).** A metade da aba é reuso puro: `ToolWindowTabRenameActionBase` já existe na plataforma e o Terminal a registra em `ToolWindowContextMenu` (D-53) — zero linha de UI nossa. A metade da pane esbarra em **Q-28**, e é resolvida sem revogá-la: o subtítulo é pintado na faixa de respiro que `ClaudeSessionPadding` já desenha, custando **zero altura** (D-54). O `(encerrado)` era o ponto de falha (Achado 43) |
+> | 1.12.1 | 2026-10-18 | **DEF-13** — o ícone de 20 px das ações caía na coluna do texto do menu: `BegMenuItemUI` só põe no gutter ícones de até 18 px. Ações passam a usar `claudeDuckAction.svg` (16 px); a tool window segue em 20 px (D-56, Achado 45) |
 > | 1.10.2 | 2026-08-09 | **DEF-09 resolvido, e não era o que a v1.10.1 dizia.** A barra da seleção deixa de ser `JBPopup` e vira filho do `JLayeredPane` em `POPUP_LAYER` (**RF-53**): quem a derrubava era o `IdePopupManager.closeAllPopups`, medido com instrumentação. Funciona com e sem `Shift` — exigir `Shift` foi proposto e recusado. **Achado 36**: mecanismo confirmado ≠ causa observada                                                           |
 > | 1.10.1 | 2026-08-09 | **DEF-09, primeira tentativa — não resolveu.** Atribuiu o sintoma ao `TerminalPanel.scrollArea`, que chama `updateSelection(null)` incondicionalmente. O mecanismo é real e verificado no bytecode, mas não era a causa. Sobraram duas mudanças que se sustentam sozinhas: não ouvir `TerminalSelectionChangesListener` e agir sobre o trecho capturado ([snapshot]). Ícone de RF-51 para o cinza neutro (`AllIcons.Actions.Profile`)  |
 > | 1.10   | 2026-08-08 | Três pedidos avaliados. **RF-50** — play do trecho no popup da seleção, **revogando o teto de dois botões de R-23** com critério novo (Achado 34). **RF-51** — `/usage` no cabeçalho, entregue como envio à sessão e **não** como popup, porque o popup exigiria o token do usuário (Achado 35). **Colar print screen recusado como RF**: o CLI já implementa o caminho e o que falta é um pacote do sistema (Achado 33, Q-32, T-3.62) |
@@ -671,6 +673,31 @@ flowchart TD
 > **Nota de forma.** Este é o primeiro diagrama `mermaid` do documento — as 11 versões anteriores
 > usaram blocos ASCII, e eles continuam onde estão. A troca aqui é deliberada e local: o roteiro
 > de SDD pede **o nó que quebra em destaque**, e destaque é o que o ASCII não faz.
+
+### DEF-13 — o ícone das ações era desenhado junto do texto do menu _(v1.12.1)_
+
+No menu de contexto do editor, "Enviar Seleção para o Claude Code" (RF-49) mostrava o pato **na
+coluna do rótulo**, colado ao texto, e não na coluna de ícones onde ficam os dos vizinhos. O mesmo
+vale para "Abrir Claude Code Dock" (RF-09) no menu _Tools_.
+
+**Causa, verificada no bytecode de `com.intellij.ui.plaf.beg.BegMenuItemUI` (2026.2):** o
+construtor fixa `myMaxGutterIconWidth = 18`; `getCheckIcon()` só devolve o ícone do item se
+`getIconWidth() <= myMaxGutterIconWidth`, e quando não devolve, `getIcon()` entrega o ícone ao
+`SwingUtilities.layoutCompoundLabel` — ele passa a fazer parte do rótulo. As duas ações usavam
+`claudeDuckMono.svg`, de **20×20**, o tamanho escolhido para a barra lateral da tool window.
+
+**Correção (D-56):** um segundo par de SVGs, `claudeDuckAction.svg`/`_dark.svg`, com a mesma arte e
+o mesmo `viewBox`, declarando **16×16** — o tamanho que `ActionMenuItem` assume (`EmptyIcon.ICON_16`,
+`PoppedIcon(icon, 16, 16)`). As ações apontam para ele no `plugin-terminal.xml`; a tool window
+continua no de 20 px. O `AllIcons.Actions.MoveTo2` do construtor de `SendSelectionAction` saiu: o
+`icon=` do XML sempre o sobrescreveu.
+
+**Guarda de regressão:** `ClaudeIconTest` separa o ícone da `<toolWindow>` do das `<action>` e
+reprova qualquer ícone de ação com largura declarada acima de 16 px.
+
+**T-3.87 aprovado (2026-10-18):** em `runIde`, o pato aparece no gutter do menu, alinhado aos
+ícones vizinhos. Não foi verificado se o limite de 18 é escalado em HiDPI; a aprovação vale para a
+escala em uso.
 
 ### DEF-12 — todo item de menu popup agia sobre a pane errada _(v1.12, achado no F3)_
 
@@ -3021,6 +3048,7 @@ abre no visualizador do IDE de ponta a ponta.
 | **T-3.84**     | _(v1.12)_ **Mede RF-61 e o teto de R-32.** Dividir a aba, nomear as duas panes, conferir que os nomes aparecem na faixa de cima de cada uma. Depois, em Settings > Tools > Claude Code Dock, zerar o respiro: os nomes **somem sem quebrar nada**, e voltam ao restaurar 20px. É o roteiro que mede a degradação, e o segundo que o headless não alcança                                                        |
 | **T-3.85**     | _(v1.12)_ **Mede CB-74 no IDE real.** Com duas panes nomeadas, acionar "Trocar de lado" e depois "Girar divisão": cada nome viaja com a sua pane, sem trocar de dono. Em seguida "Fechar esta sessão" na de cima: a sobrevivente mantém o **próprio** nome                                                                                                                                                     |
 | **T-3.86**     | _(v1.12)_ **Mede RF-62.** Renomear a aba para vazio: volta o nome automático (`Claude`, `Claude (2)`…). Apagar o subtítulo de uma pane: a faixa volta a ser só cor. Nos dois casos, **cancelar** em vez de apagar não muda nada — é a distinção que o RF-62 exige                                                                                                                                              |
+| **T-3.87**     | _(v1.12.1, ✅ aprovado em 2026-10-18)_ **Mede DEF-13.** Em `runIde`, temas claro e escuro: o pato de "Enviar Seleção para o Claude Code" (menu de contexto do editor e _Tools_) e de "Abrir Claude Code Dock" (_Tools_) aparece na coluna de ícones, alinhado aos vizinhos, e não colado ao texto. O ícone da barra lateral continua em 20 px |
 
 ### Testes de regressão
 
@@ -3901,6 +3929,15 @@ entregue"), não a do RF-30.
 descobriria isto sozinho?" é a pergunta, e ela tem resposta observável. Pelo mesmo critério, se o
 menu de contexto da aba virar lugar habitual do plugin em rodadas futuras, o item do cabeçalho
 passa a ser candidato a remoção — e não a patrimônio.
+
+### Achado 45 — um ícone não tem um tamanho, tem um tamanho por lugar _(v1.12.1)_
+
+O `claudeDuckMono.svg` foi dimensionado para a barra lateral, e o teste que o travou em 20 px
+protegia exatamente isso. O erro foi reaproveitá-lo nas ações sem perguntar onde elas são
+desenhadas: o menu tem um limite que a barra lateral não tem, e o excesso não dá erro nem aviso —
+o ícone só muda de coluna. O teste de tamanho estava certo e não ajudava, porque verificava o
+arquivo e não o uso. **A guarda nova verifica a regra do lugar** (ícone de ação ≤ 16 px), e não
+o nome do arquivo.
 
 ---
 

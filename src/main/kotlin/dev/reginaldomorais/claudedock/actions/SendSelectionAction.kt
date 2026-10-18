@@ -1,6 +1,5 @@
 package dev.reginaldomorais.claudedock.actions
 
-import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -15,11 +14,13 @@ import dev.reginaldomorais.claudedock.ClaudeEditorReference
  * Contraparte do `Ctrl+Alt+K` do plugin oficial, que não alcança esta janela (DEF-08). Sem atalho
  * padrão de propósito: definir um mexeria no keymap do usuário, o que RF-13 proíbe — e o único
  * atalho "natural" já é do oficial. Quem quiser liga um em _Settings > Keymap_.
+ *
+ * O ícone vem só do `icon=` do `plugin-terminal.xml`, que sobrescreveria qualquer um passado aqui.
  */
 class SendSelectionAction : AnAction(
     "Enviar Seleção para o Claude Code",
     "Envia o trecho selecionado no editor para a sessão em foco da janela dedicada",
-    AllIcons.Actions.MoveTo2,
+    null,
 ), DumbAware {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
