@@ -4,11 +4,17 @@
 > Atualize-o ao fim de cada sessão significativa.
 
 - **Projeto:** Claude Code Dock — tool window dedicada para o Claude Code em IDEs JetBrains
-- **Última atualização:** 2026-08-17
+- **Última atualização:** 2026-10-18
 
 ---
 
 ## Estado atual
+
+**v1.12.1 — DEF-13 corrigido e aprovado no IDE real (T-3.87); 187 testes verdes.** O ícone das
+ações (RF-09, RF-49) era desenhado junto do texto do menu: tinha 20 px, e o gutter do menu
+(`BegMenuItemUI`) só aceita ícones de até 18 px. As ações passaram a usar `claudeDuckAction.svg`
+(16 px); a tool window segue em 20 px. Detalhes em SPEC (DEF-13, D-56, Achado 45) e no plano
+`plans/20261018-action-icon-gutter.md`. O estado da v1.12, abaixo, segue valendo.
 
 **Fase: v1.12 — F1 e F2 implementados; falta rodar F3 no IDE real.** Renomear a aba e nomear a
 sessão dividida (RF-58 a RF-62). **181 testes verdes** (eram 163; 18 casos novos), medidos em
@@ -922,6 +928,20 @@ suíte roda ao fim de cada fase, e cada código novo ou alterado leva teste junt
 ---
 
 ## Log
+
+### 2026-10-18 — DEF-13: o ícone das ações saía do gutter do menu
+
+**187 testes verdes (eram 184). T-3.87 aprovado no IDE real.** O pato de "Enviar Seleção para o
+Claude Code" aparecia colado ao texto no menu de contexto do editor. A causa foi lida no bytecode
+de `BegMenuItemUI` antes de mexer em código: `getCheckIcon()` descarta do gutter qualquer ícone
+mais largo que `myMaxGutterIconWidth = 18`, e `getIcon()` o devolve ao rótulo. O SVG das ações era
+o da tool window, de 20 px. Conserto: par novo `claudeDuckAction.svg`/`_dark.svg` em 16 px, usado
+pelas duas ações; o `AllIcons.Actions.MoveTo2` morto saiu do construtor de `SendSelectionAction`.
+`ClaudeIconTest` agora separa tool window de ações e reprova ícone de ação acima de 16 px —
+**verificado por mutação**: devolver o ícone de 20 px às ações derruba 2 testes.
+
+Em aberto: não verifiquei se o limite de 18 é escalado em HiDPI; a aprovação vale para a escala
+em uso.
 
 ### 2026-08-17 (noite) — F3: dois defeitos, e o segundo era mais velho que a rodada
 

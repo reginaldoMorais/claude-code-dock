@@ -9,12 +9,17 @@
     </extensions>
 
     <actions>
+        <!--
+          Ações usam o ícone de 16 px: o menu só põe no gutter ícones de até 18 px de largura, e o
+          de 20 px da tool window seria desenhado junto do texto.
+        -->
+
         <!-- Sem atalho padrão: o "natural" é do plugin oficial, e mexer no keymap viola RF-13. -->
         <action id="dev.reginaldomorais.claudedock.SendSelection"
                 class="dev.reginaldomorais.claudedock.actions.SendSelectionAction"
                 text="Enviar Seleção para o Claude Code"
                 description="Envia o trecho selecionado para a sessão em foco da janela dedicada"
-                icon="/icons/claudeDuckMono.svg">
+                icon="/icons/claudeDuckAction.svg">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
@@ -23,7 +28,7 @@
                 class="dev.reginaldomorais.claudedock.actions.OpenClaudeDockAction"
                 text="Abrir Claude Code Dock"
                 description="Abre a tool window dedicada do Claude Code"
-                icon="/icons/claudeDuckMono.svg">
+                icon="/icons/claudeDuckAction.svg">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
 
