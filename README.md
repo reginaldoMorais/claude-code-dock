@@ -48,6 +48,27 @@ JUnit 4 + `TestFrameworkType.Platform`. Relatórios em `build/reports/tests/test
 
 Roda o IntelliJ Plugin Verifier contra as IDEs recomendadas.
 
+## Release
+
+Pelo GitHub: _Actions → Release → Run workflow_, informando a versão (`0.12.0`, ou `0.12.0-rc.1`
+para pré-lançamento). Dois workflows dividem o trabalho:
+
+- `release.yml` valida a versão, roda os testes, cria a tag `v0.12.0` e dispara o próximo.
+- `release-plugin.yml` confere a tag, gera o `.zip` e publica a release (rc sai como
+  pré-lançamento). Também roda quando uma tag `v*` é empurrada à mão.
+
+Regras, em `scripts/release-version.sh`:
+
+- formato `X.Y.Z` ou `X.Y.Z-rc.N` — as tags antigas `vX.Y.Z-rc`, sem número, ficam fora da
+  comparação;
+- a versão precisa ser maior que a última tag, e a tag não pode existir ainda;
+- versão final só sai da `main`; rc sai de qualquer branch, para testar antes do merge;
+- a versão vem da tag, não do `pluginVersion` do `gradle.properties`.
+
+```bash
+scripts/release-version.test.sh
+```
+
 ## Configuração do build
 
 Parâmetros ficam em [gradle.properties](gradle.properties):

@@ -1,0 +1,68 @@
+# Publica uma release a cada tag `vX.Y.Z` ou `vX.Y.Z-rc.N` (pré-lançamento):
+#
+#   git tag v1.2.3 && git push origin v1.2.3
+#
+# Ou pelo GitHub, com o workflow `Release` (release.yml), que cria a tag e dispara este aqui via
+# `workflow_dispatch` na ref da tag.
+#
+# A tag é a única fonte da versão: `pluginVersion` chega por `-P`, que tem precedência sobre o
+# `gradle.properties`. O arquivo no repositório continua sendo só o valor de desenvolvimento.
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+# Necessário para o `gh release create` escrever no repositório.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Disparado à mão numa branch, não há versão de onde tirar o zip.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # O `--generate-notes` precisa do histórico para montar o changelog desde a tag anterior.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          # Mesmo toolchain declarado no build.gradle.kts.
+          java-version: 21
+
+      # Cacheia ~/.gradle: sem isso, cada release rebaixa o download da plataforma (~1,5 GB).
+      - uses: gradle/actions/setup-gradle@v6
+
+      # Mesma regra do `release.yml`, também para tag empurrada à mão: formato errado não vira
+      # release, e a rc sai como pré-lançamento.
+      - name: Validate tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/release-version.sh tag "$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: ./gradlew "-PpluginVersion=${TAG#v}" test buildPlugin
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          # rc sai como pré-lançamento: não vira o "Latest" do repositório. Vazio some na expansão
+          # sem aspas.
+          PRERELEASE: ${{ steps.tag.outputs.prerelease == 'true' && '--prerelease' || '' }}
+        run: |
+          gh release create "$TAG" \
+            "build/distributions/claude-code-dock-${TAG#v}.zip" \
+            --title "$TAG" \
+            --generate-notes \
+            $PRERELEASE
