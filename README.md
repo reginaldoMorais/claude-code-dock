@@ -2,6 +2,13 @@
   <img src="src/main/resources/icons/claudeDuck.svg" alt="Claude Code Dock" width="128">
 </p>
 
+<p align="center">
+  <a href="https://github.com/reginaldoMorais/claude-code-dock/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/reginaldoMorais/claude-code-dock?sort=semver&label=release"></a>
+  <a href="https://github.com/reginaldoMorais/claude-code-dock/actions/workflows/ci.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/reginaldoMorais/claude-code-dock/ci.yml?branch=main&label=tests"></a>
+  <img alt="IntelliJ Platform 252+" src="https://img.shields.io/badge/IntelliJ%20Platform-252%2B-000000?logo=jetbrains">
+  <img alt="JDK 21" src="https://img.shields.io/badge/JDK-21-orange?logo=openjdk">
+</p>
+
 # Claude Code Dock - JetBrains Plugin
 
 Plugin pessoal para JetBrains que abre uma janela separada dentro do IDE, onde possamos interagir com o Claude Code de forma mais fluida, com cópia de texto, histórico de conversas, e talvez até integração com o código do projeto.
@@ -39,6 +46,8 @@ em `.intellijPlatform/` (ignorado pelo git).
 ```
 
 JUnit 4 + `TestFrameworkType.Platform`. Relatórios em `build/reports/tests/test/index.html`.
+No GitHub, o workflow `CI` roda os testes a cada push na `main` e em cada PR — é ele que alimenta
+o badge "tests".
 
 ## Verificação de compatibilidade
 
@@ -76,7 +85,7 @@ Parâmetros ficam em [gradle.properties](gradle.properties):
 | Propriedade        | Valor                            | Descrição                         |
 | ------------------ | -------------------------------- | --------------------------------- |
 | `pluginGroup`      | `dev.reginaldomorais.claudedock` | groupId do artefato               |
-| `pluginVersion`    | `0.9.0`                          | versão do plugin                  |
+| `pluginVersion`    | `0.11.1`                         | versão do plugin                  |
 | `platformVersion`  | `2026.2`                         | IntelliJ IDEA usado na compilação |
 | `pluginSinceBuild` | `252`                            | build mínima suportada            |
 

@@ -7,7 +7,10 @@ segue [SemVer](https://semver.org/lang/pt-BR/).
 
 ---
 
-## [Não lançado]
+## [0.11.1] — 2026-10-18
+
+Versão de **acabamento**: o ícone do plugin volta para o lugar certo nos menus, e a release deixa
+de depender de tag criada à mão — esta é a primeira publicada pelo botão do GitHub.
 
 ### Alterado
 
@@ -386,6 +389,7 @@ As versões `0.5.x` e anteriores são anteriores a este arquivo e não estão de
 histórico completo, com as decisões de projeto e as descobertas de cada rodada, está em
 [`plans/sdd/HANDOFF.md`](plans/sdd/HANDOFF.md).
 
+[0.11.1]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/reginaldoMorais/claude-code-dock/compare/v0.8.1...v0.9.0

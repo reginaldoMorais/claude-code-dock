@@ -1,0 +1,40 @@
+# Roda os testes a cada push na main e em cada PR. É também a fonte do badge "tests" do README:
+# os workflows de release só testam quando há release, e não dizem nada sobre a main no dia a dia.
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+# Um push novo no mesmo PR torna o anterior irrelevante: cancela em vez de enfileirar.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # A regra de versão do release tem teste próprio, e custa um segundo.
+      - name: Test release rules
+        run: scripts/release-version.test.sh
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          # Mesmo toolchain declarado no build.gradle.kts.
+          java-version: 21
+
+      # Cacheia ~/.gradle: sem isso, cada execução rebaixa a plataforma (~1,5 GB).
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Test
+        run: ./gradlew test
