@@ -7,6 +7,23 @@ segue [SemVer](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [Não lançado]
+
+### Corrigido
+
+- **O ícone do plugin aparecia colado ao texto nos menus**, em vez de ficar na coluna de ícones
+  junto dos outros itens. Atingia "Enviar Seleção para o Claude Code" (menu de contexto do editor
+  e _Tools_) e "Abrir Claude Code Dock" (_Tools_). O ícone tinha 20 px, e o menu só põe na coluna
+  de ícones os de até 18 px; as ações agora usam uma versão de 16 px do mesmo desenho. O ícone da
+  barra lateral não mudou.
+
+### Testes
+
+187 testes automatizados (eram 184 na 0.11.0), todos passando. Um deles reprova qualquer ícone de
+ação com mais de 16 px de largura.
+
+---
+
 ## [0.11.0] — 2026-08-17
 
 Versão de **dar nome ao que se está fazendo**. Com quatro abas abertas, cada uma dividida em duas
